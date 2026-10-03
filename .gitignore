@@ -48,3 +48,6 @@ logs/
 # LLM cache
 .llm_cache/
 screenshot.png
+
+# Tileset assets are fetched by tools/fetch-tilesets.sh, not committed (licensing/size)
+csim/tilesets/*.png

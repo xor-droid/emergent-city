@@ -57,19 +57,23 @@ cell a dark tile-tinted background with a brighter CP437 glyph: `,` grass,
 
 **Image tilesets** (`--tileset NAME`, or a path to a `.png`): replace the font
 glyphs with a tileset image (implies ASCII/tile view). Assets are **not
-bundled** (licensing) — each name resolves to a file under the tileset dir
-(`CSIM_TILESET_DIR`, default `./tilesets`); if the file is missing, the game
-prints where to get it and falls back to font glyphs. Sheet geometry is per-set
-— cell px (default 16), inter-tile spacing, and outer margin — overridable with
-`CSIM_TILESET_CELL` / `CSIM_TILESET_SPACE` / `CSIM_TILESET_MARGIN` (so spaced
-sheets like Kenney's line up).
+bundled** (licensing) — fetch the CC0 ones with `tools/fetch-tilesets.sh` (into
+`csim/tilesets/`, gitignored); each name resolves to a file under the tileset
+dir (`CSIM_TILESET_DIR`, default `./tilesets`), and a missing file prints where
+to get it and falls back to font glyphs.
 - **CC0, CP437 grid:** `camashu` — [DorfFortressTileSet](https://github.com/Camashu/DorfFortressTileSet)
 - **DF-wiki CP437 (verify each license):** `curses` `phoebus` `anikki` — [tileset repository](https://dwarffortresswiki.org/Tileset_repository)
 - **CC0, semantic sprites:** `kenney` `kenney-indoor` `kenney-caves` `kenney-1bit` — [Kenney via OpenGameArt](https://opengameart.org/content/roguelikerpg-pack-1700-tiles)
 
-CP437 sheets map each tile to its code-page-437 glyph (tinted). Semantic packs
-map each tile *type* to a sprite cell (placeholder layout — adjust the indices
-per sheet).
+**Cell geometry is native/automatic.** CP437 sheets are always a 16×16 grid, so
+the cell size (even non-square, e.g. Camashu's 20×24) is derived from the image.
+Semantic sheets use their per-set cell + 1px spacing. Override anything with
+`CSIM_TILESET_CELL` / `CSIM_TILESET_SPACE` / `CSIM_TILESET_MARGIN`.
+
+CP437 sheets map each tile to its code-page-437 glyph (tinted) — the authentic
+DF look, **recommended** (`camashu`). Semantic (Kenney) sheets are *environment*
+tilesets with no canonical per-type tile and no person sprite, so the
+tile-type→sprite mapping is approximate/representative.
 
 Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
 `CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·

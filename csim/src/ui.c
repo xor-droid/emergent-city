@@ -83,13 +83,23 @@ static int cp437_for(TileType t){
         case T_SHOP:return '$'; case T_WORK:return 'O'; case T_BAR:return 'B';
         case T_CHURCH:return '+'; case T_POLICE:return 'P'; default:return '.'; }
 }
-/* semantic sprite cell (col,row); PLACEHOLDER layout — adjust per sheet. col<0 = skip. */
+/* Semantic sprite cell (col,row). Best-effort for the Kenney *roguelike* sheet;
+ * other semantic sheets have different layouts, so this is approximate. These
+ * environment sheets have no canonical per-building-type tile (or any person
+ * sprite), so picks are representative, not exact. col<0 = skip (bg only). */
 static void semantic_cell(TileType t, int *col, int *row){
-    *row=0;
-    switch(t){ case T_HOME:*col=0;break; case T_SHOP:*col=1;break; case T_WORK:*col=2;break;
-        case T_BAR:*col=3;break; case T_CHURCH:*col=4;break; case T_POLICE:*col=5;break;
-        case T_PARK:*col=6;break; case T_WATER:*col=7;break; case T_ROAD:*col=8;break;
-        default:*col=-1;break; /* grass: leave as tinted background */ }
+    switch(t){
+        case T_HOME:  *col=13; *row=2; break;   /* door */
+        case T_SHOP:  *col=20; *row=1; break;
+        case T_WORK:  *col=41; *row=1; break;   /* windowed facade */
+        case T_BAR:   *col=24; *row=2; break;
+        case T_CHURCH:*col=46; *row=1; break;   /* spire */
+        case T_POLICE:*col=30; *row=2; break;
+        case T_PARK:  *col=13; *row=8; break;   /* tree */
+        case T_WATER: *col=3;  *row=0; break;
+        case T_ROAD:  *col=2;  *row=2; break;
+        default:      *col=-1; *row=0; break;   /* grass -> tinted background only */
+    }
 }
 
 static const char *faction_name(World *w,int fid){ return (fid<0||fid>=w->n_factions)?"-":w->factions[fid].name; }
@@ -125,7 +135,8 @@ int run_ui(World *w){
     int selected=-1, list_scroll=0;
 
     /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
-    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_space=0, ts_margin=0, ts_cols=16;
+    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_space=0, ts_margin=0;
+    int ts_cols=16, ts_cw=16, ts_ch=16;   /* cols + cell width/height, derived from the image */
     { const char *tsname=getenv("CSIM_TILESET");
       if(tsname && tsname[0] && G->load_tex){
         char path[600]; const TsEntry *ent=NULL; int direct=0;
@@ -143,10 +154,19 @@ int run_ui(World *w){
             fprintf(stderr,"  (or a path to a .png)\n");
         } else {
             int tw=0,th=0; ts_tex=G->load_tex(path,&tw,&th);
-            if(ts_tex){ int stride=ts_cell+ts_space;
-                ts_cols = stride>0 ? (tw - ts_margin + ts_space)/stride : 16; if(ts_cols<1) ts_cols=1; ascii=1;
-                fprintf(stderr,"[tileset] %s  %dx%d  %dpx cells  space %d  margin %d  %d cols  (%s)\n",
-                        path,tw,th,ts_cell,ts_space,ts_margin,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
+            if(ts_tex){ ascii=1;
+                if(ts_kind==TSK_CP437){
+                    /* CP437 is always a 16x16 grid — derive the (possibly non-square) native cell. */
+                    ts_cols=16;
+                    ts_cw=(tw - 2*ts_margin - 15*ts_space)/16; if(ts_cw<1) ts_cw=1;
+                    ts_ch=(th - 2*ts_margin - 15*ts_space)/16; if(ts_ch<1) ts_ch=1;
+                } else {
+                    ts_cw=ts_ch=ts_cell;
+                    int stride=ts_cell+ts_space;
+                    ts_cols = stride>0 ? (tw - 2*ts_margin + ts_space)/stride : 16; if(ts_cols<1) ts_cols=1;
+                }
+                fprintf(stderr,"[tileset] %s  img %dx%d  cell %dx%d  space %d  margin %d  cols %d  (%s)\n",
+                        path,tw,th,ts_cw,ts_ch,ts_space,ts_margin,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
             } else {
                 fprintf(stderr,"[tileset] not found: %s — using font glyphs.\n", path);
                 if(ent) fprintf(stderr,"          get it (%s): %s\n", ent->license, ent->url);
@@ -293,17 +313,17 @@ int run_ui(World *w){
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=cp437_for(t2); col=code%ts_cols; row=code/ts_cols; tint=shade(tile_col(t2),70); }
                     else { semantic_cell(t2,&col,&row); if(col<0) continue; tint=COL_WHITE; }
-                    int stride=ts_cell+ts_space, srcx=ts_margin+col*stride, srcy=ts_margin+row*stride;
+                    int srcx=ts_margin+col*(ts_cw+ts_space), srcy=ts_margin+row*(ts_ch+ts_space);
                     float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
-                    G->draw_tex(ts_tex, srcx,srcy,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, (int)sx,(int)sy,iw,iw, tint);
                 }
                 for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=a->is_police?2:1; col=code%ts_cols; row=code/ts_cols; tint=gfx_rgb(a->r,a->g,a->b); }
-                    else { col=9; row=0; tint=COL_WHITE; }   /* a 'person' cell (placeholder) */
-                    int stride=ts_cell+ts_space, srcx=ts_margin+col*stride, srcy=ts_margin+row*stride;
+                    else { col=23; row=8; tint=COL_WHITE; }  /* no person sprite on env sheets — a small marker */
+                    int srcx=ts_margin+col*(ts_cw+ts_space), srcy=ts_margin+row*(ts_ch+ts_space);
                     float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
-                    G->draw_tex(ts_tex, srcx,srcy,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, (int)sx,(int)sy,iw,iw, tint);
                 }
             } else {
                 for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
