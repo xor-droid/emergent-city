@@ -264,6 +264,7 @@ static void set_target(World *w, Agent *a) {
         case A_WORK:  b = a->workplace_id; break;
         case A_DRINK: b = building_nearest(w, (int)a->x, (int)a->y, T_BAR); break;
         case A_PRAY:  b = building_nearest(w, (int)a->x, (int)a->y, T_CHURCH); break;
+        case A_TREAT: b = building_nearest(w, (int)a->x, (int)a->y, T_SHOP); break;  /* pharmacy/clinic */
         case A_CRIME: {
             Agent *tgt = NULL;
             if (a->crime_role == CR_KINGPIN) { a->tx = -1; a->ty = -1; return; }  /* stay put, deal wholesale */
@@ -393,6 +394,11 @@ static void execute_action(World *w, Agent *a) {
             crime_attempt(w, a, target, choose_crime_kind(w, a, target));
             break; }
         case A_FLEE:    n->safety = clampd(n->safety + 0.05, 0, 1); break;
+        case A_TREAT:
+            if (n->money >= TREAT_COST) { n->money -= TREAT_COST; a->injury = (float)clampd(a->injury - 0.6, 0, 2); }
+            else a->injury = (float)clampd(a->injury - 0.2, 0, 2);   /* self-care if you can't pay */
+            n->safety = clampd(n->safety + 0.1, 0, 1);
+            break;
         default: break;
     }
 }
@@ -449,7 +455,7 @@ void world_tick(World *w, double dt_seconds) {
         if (!a->alive) continue;
 
         if (a->arrested_ticks > 0) {
-            if (--a->arrested_ticks == 0) { a->jailed_for[0] = '\0'; a->sentence_total = 0; }
+            if (--a->arrested_ticks == 0) { a->jailed_for[0] = '\0'; a->sentence_total = 0; a->jail_gang = 0; }
             set_mood_color(a);
             continue;
         }
@@ -503,7 +509,7 @@ void world_tick(World *w, double dt_seconds) {
 
     crime_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

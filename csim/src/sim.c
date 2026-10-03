@@ -197,6 +197,10 @@ Action utility_best_action(const Agent *a, const World *w) {
     if (n->safety < 0.3) flee = (0.3 - n->safety) * 4.0;
     s[A_FLEE] = flee;
 
+    double treat = 0.0;   /* get patched up after an assault */
+    if (a->injury > 0.15) { treat = a->injury * 2.5; if (a->injury > 0.6) treat += 2.0; }
+    s[A_TREAT] = treat;
+
     s[A_WANDER] = 0.05;
 
     Action best = A_WANDER; double bestv = -1.0;
@@ -207,7 +211,7 @@ Action utility_best_action(const Agent *a, const World *w) {
 const char *action_name(Action a) {
     static const char *names[A_COUNT] = {
         "eat","sleep","work","socialize","drink","pray","shop",
-        "go_home","crime","flee","patrol","wander"
+        "go_home","crime","flee","patrol","treat","wander"
     };
     return (a >= 0 && a < A_COUNT) ? names[a] : "?";
 }

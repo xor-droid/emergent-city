@@ -468,8 +468,8 @@ int run_ui(World *w){
                 int tot=a->sentence_total>0?a->sentence_total:1, served=tot-a->arrested_ticks; if(served<0)served=0;
                 snprintf(buf,sizeof(buf),"%.24s",a->name); G->text(buf,px+US(12),yy,US(12),COL_WHITE);
                 G->text(a->jailed_for[0]?a->jailed_for:"-",px+US(210),yy,US(12),COL_WHITE);
-                snprintf(buf,sizeof(buf),"%.22s",faction_name(w,a->faction_id));
-                G->text(buf,px+US(300),yy,US(12),a->faction_id>=0?COL_PURPLE:COL_GRAY);
+                if(a->jail_gang){ snprintf(buf,sizeof(buf),"%.22s",jail_gang_name(a->jail_gang)); G->text(buf,px+US(300),yy,US(12),COL_RED); }
+                else { snprintf(buf,sizeof(buf),"%.22s",faction_name(w,a->faction_id)); G->text(buf,px+US(300),yy,US(12),a->faction_id>=0?COL_PURPLE:COL_GRAY); }
                 snprintf(buf,sizeof(buf),"%d/%d (%d%%)",served,tot,served*100/tot);
                 G->text(buf,px+US(480),yy,US(12),served*100/tot>=66?COL_GREEN:COL_WHITE);
                 yy+=US(20); shown++; }
@@ -531,7 +531,7 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(348), ph=US(384);
+                int pw=US(348), ph=US(416);
                 G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
                 G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
                 int yy=hudH+US(10);
@@ -552,6 +552,8 @@ int run_ui(World *w){
                 if(a->crimes_committed>0){ snprintf(buf,sizeof(buf),"Rap sheet: %d  (skill %d%%)",a->crimes_committed,(int)(a->crime_skill*100)); G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(18); }
                 if(a->drug_stock>0){ snprintf(buf,sizeof(buf),"Drug stock: %d units",a->drug_stock); G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(18); }
                 if(a->addiction>0.05f){ snprintf(buf,sizeof(buf),"Addiction: %d%%",(int)(a->addiction*100)); G->text(buf,US(12),yy,US(12),gfx_rgb(224,150,120)); yy+=US(18); }
+                if(a->injury>0.05f){ snprintf(buf,sizeof(buf),"Injury: %d%%",(int)(a->injury*100)); G->text(buf,US(12),yy,US(12),COL_RED); yy+=US(18); }
+                if(a->arrested_ticks>0 && a->jail_gang){ snprintf(buf,sizeof(buf),"Jail gang: %s",jail_gang_name(a->jail_gang)); G->text(buf,US(12),yy,US(12),gfx_rgb(220,120,220)); yy+=US(18); }
                 yy+=US(4);
                 const char *lbl[6]={"Hunger","Energy","Safety","Social","Meaning","Belong"};
                 double v[6]={a->needs.hunger,a->needs.energy,a->needs.safety,a->needs.social,a->needs.meaning,a->needs.belonging};

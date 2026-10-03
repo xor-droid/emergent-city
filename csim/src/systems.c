@@ -225,6 +225,19 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
     }
 }
 
+/* add injury to a victim; may be fatal (shared by street assaults + jail brawls) */
+static void apply_injury(World *w, Agent *v, double amt, const char *cause, Agent *by) {
+    if (!v || !v->alive) return;
+    v->injury = (float)clampd(v->injury + amt, 0, 2);
+    if (v->injury >= INJURY_FATAL) {
+        v->alive = 0; w->deaths++;
+        char t[96];
+        if (by) snprintf(t, sizeof(t), "%.26s died of injuries from %.26s (%s)", v->name, by->name, cause);
+        else    snprintf(t, sizeof(t), "%.30s died of their injuries (%s)", v->name, cause);
+        events_post(w, EV_DEATH, v->id, by ? by->id : -1, (int)v->x, (int)v->y, 0.9, t);
+    }
+}
+
 void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     if (!strcmp(kind, "dealing"))     { do_deal(w, perp);          return; }
     if (!strcmp(kind, "trafficking")) { do_traffic(w, perp);       return; }
@@ -252,6 +265,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         if (target) {
             if (loot > 0) target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
             target->needs.safety = clampd(target->needs.safety - (!strcmp(kind,"assault")?0.5:0.3), 0, 1);
+            if (!strcmp(kind, "assault")) apply_injury(w, target, ASSAULT_INJURY, "assault", perp);
         } else if (loot > 0) {
             /* (D) no direct target (e.g. burglary) — take it from the nearest resident
              * so stolen money is transferred, not injected into the economy */
@@ -502,6 +516,46 @@ int factions_raise(World *w, int is_cult, int cx, int cy) {
     return f->id;
 }
 
+/* ── Jail: gangs form behind bars and settle scores ─────────────────────────── */
+static const char *JAIL_GANG_NAMES[JAIL_GANGS] = { "the Yard Kings", "Cellblock Crew", "the Lifers" };
+const char *jail_gang_name(int g) { return (g >= 1 && g <= JAIL_GANGS) ? JAIL_GANG_NAMES[g-1] : "-"; }
+
+void jail_tick(World *w) {
+    /* recruit inmates with a criminal bent into a jail gang */
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->arrested_ticks <= 0 || a->jail_gang) continue;
+        double bent = pers_crime_propensity(&a->pers) + (a->crime_role != CR_CITIZEN ? 0.4 : 0.0);
+        if (bent > 0.5 && rng_double(&w->rng) < 0.6) a->jail_gang = (unsigned char)(1 + rng_int(&w->rng, JAIL_GANGS));
+    }
+    /* brawls: a gang member shanks/beats a rival-gang (or any) inmate */
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->arrested_ticks <= 0 || !a->jail_gang) continue;
+        if (rng_double(&w->rng) > JAIL_VIOLENCE_P) continue;
+        Agent *vic = NULL;
+        for (int pass = 0; pass < 2 && !vic; pass++)
+            for (int j = 0; j < w->n_agents; j++) {
+                Agent *o = &w->agents[j];
+                if (!o->alive || o->arrested_ticks <= 0 || o->id == a->id) continue;
+                if (pass == 0 ? (o->jail_gang && o->jail_gang != a->jail_gang) : (o->jail_gang != a->jail_gang)) { vic = o; break; }
+            }
+        if (!vic) continue;
+        a->crimes_committed++;
+        int lethal = vic->injury > 0.5 || rng_double(&w->rng) < 0.18 + a->crime_skill * 0.2;
+        if (lethal) {
+            apply_injury(w, vic, 1.0, "a prison brawl", a);   /* fatal; posts the death */
+        } else {
+            apply_injury(w, vic, JAIL_BEATING, "a jail beating", a);
+            if (vic->alive) {
+                char t[96]; snprintf(t, sizeof(t), "%.22s (%s) beat %.22s in a jail brawl",
+                                     a->name, jail_gang_name(a->jail_gang), vic->name);
+                events_post(w, EV_CRIME, a->id, vic->id, (int)vic->x, (int)vic->y, 0.5, t);
+            }
+        }
+    }
+}
+
 /* ── Economy ─────────────────────────────────────────────────────────────── */
 void economy_daily(World *w) {
     for (int i = 0; i < w->n_agents; i++) {
@@ -510,6 +564,7 @@ void economy_daily(World *w) {
         double cost = RENT_PER_DAY + a->needs.money * UPKEEP_FRACTION;
         a->needs.money = clampd(a->needs.money - cost, 0.0, 1e9);
         if (a->addiction > 0.0f) a->addiction = (float)clampd(a->addiction - 0.015, 0, 1);  /* habit fades without use */
+        if (a->injury > 0.0f) a->injury = (float)clampd(a->injury - 0.08, 0, 2);            /* wounds slowly heal */
         /* ambient: becoming destitute (can't afford a meal) */
         if (a->needs.money < MEAL_PRICE && !a->broke_flagged) {
             a->broke_flagged = 1;

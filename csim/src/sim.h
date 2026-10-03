@@ -73,6 +73,14 @@ enum { CR_CITIZEN, CR_CAREER, CR_DEALER, CR_KINGPIN, CR_KILLER };  /* Agent.crim
 /* crime kinds, for the per-kind tally (World.crime_kind) */
 enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
        CK_ASSAULT, CK_RIOT, CK_DEALING, CK_TRAFFICKING, CK_MURDER, CK_COUNT };
+
+/* ── Injury / treatment / jail violence ──────────────────────────────────── */
+#define ASSAULT_INJURY   0.35    /* injury added by a street assault */
+#define JAIL_BEATING     0.45    /* harsher inside */
+#define INJURY_FATAL     1.0     /* injury >= this -> dies of wounds */
+#define TREAT_COST       20.0    /* paying to get patched up */
+#define JAIL_GANGS       3       /* number of distinct jail gangs */
+#define JAIL_VIOLENCE_P  0.45    /* chance a jail-gang member picks a fight (per game day) */
 #define CAREER_FRACTION   0.07    /* of high-propensity agents who turn pro */
 #define USER_FRACTION     0.12    /* share of citizens who become drug users */
 #define DRUG_STREET_PRICE 14.0    /* dealer -> user, per unit (scaled by addiction) */
@@ -106,7 +114,7 @@ typedef enum {
 
 typedef enum {
     A_EAT, A_SLEEP, A_WORK, A_SOCIALIZE, A_DRINK, A_PRAY, A_SHOP,
-    A_GO_HOME, A_CRIME, A_FLEE, A_PATROL, A_WANDER, A_COUNT
+    A_GO_HOME, A_CRIME, A_FLEE, A_PATROL, A_TREAT, A_WANDER, A_COUNT
 } Action;
 
 /* World event kinds (drive the event feed). */
@@ -180,6 +188,8 @@ typedef struct {
     int   drug_stock;           /* dealer/kingpin inventory, units */
     int   dealer_id;            /* a user's regular dealer (-1 none) */
     int   turf_x, turf_y;       /* a dealer's territory centre */
+    float injury;               /* 0=healthy .. 1=fatal (from assaults) */
+    unsigned char jail_gang;    /* 0=none, else jail-gang id (while incarcerated) */
 
     int wanted;
     int wanted_ticks;
@@ -291,6 +301,8 @@ const char *crime_role_name(int role);
 const char *crime_kind_name(int i);
 void assign_crime_roles(World *w);   /* post-populate: pick career/dealer/kingpin/killer/users */
 void crime_daily(World *w);          /* role mobility (emergence) + immigration, on day change */
+void jail_tick(World *w);            /* jail gangs + shankings, on day change */
+const char *jail_gang_name(int g);
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);
