@@ -71,6 +71,10 @@ int main(void) {
     for (int i = 0; i < EV_KIND_COUNT; i++)
         if (ehist[i]) printf(" %s=%d", event_kind_name((EventKind)i), ehist[i]);
     printf("\n");
+    printf("crimes by kind:");
+    for (int i = 0; i < CK_COUNT; i++)
+        if (w.crime_kind[i]) printf(" %s=%d", crime_kind_name(i), w.crime_kind[i]);
+    printf("\n");
     llm_shutdown();
     return 0;
 }

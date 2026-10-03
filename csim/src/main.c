@@ -23,7 +23,7 @@ static void usage(const char *argv0) {
     printf("       CC0 sprites (approx mapping): kenney, kenney-indoor, kenney-caves, kenney-1bit\n");
     printf("     dir=CSIM_TILESET_DIR (default ./tilesets); cell px=CSIM_TILESET_CELL (default 16).\n");
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
-    printf("            j jail, f factions, l legend, a ASCII(Dwarf-Fortress) mode,\n");
+    printf("            j jail, f factions, c crime-watch, l legend, a ASCII mode,\n");
     printf("            Tab feed, Space pause, 1/2/3 speed, q/Esc quit.\n");
     printf("  Env: CSIM_UI=N ui scale (default: from monitor), CSIM_ZOOM=N zoom,\n");
     printf("       CSIM_ASCII=1 start in ASCII mode, CSIM_DEMO=1 panels,\n");

@@ -70,6 +70,9 @@
 /* ── Crime roles & the drug trade ────────────────────────────────────────── */
 enum { CR_CITIZEN, CR_CAREER, CR_DEALER, CR_KINGPIN, CR_KILLER };  /* Agent.crime_role */
 #define KILLER_CHANCE 0.006   /* tiny chance a spawned agent is a latent serial killer */
+/* crime kinds, for the per-kind tally (World.crime_kind) */
+enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
+       CK_ASSAULT, CK_RIOT, CK_DEALING, CK_TRAFFICKING, CK_MURDER, CK_COUNT };
 #define CAREER_FRACTION   0.07    /* of high-propensity agents who turn pro */
 #define USER_FRACTION     0.12    /* share of citizens who become drug users */
 #define DRUG_STREET_PRICE 14.0    /* dealer -> user, per unit (scaled by addiction) */
@@ -241,6 +244,7 @@ typedef struct {
 
     /* stats for HUD / headless */
     int deaths, crimes;
+    int crime_kind[CK_COUNT];   /* per-kind crime tally */
 } World;
 
 /* ── Personality ─────────────────────────────────────────────────────────── */
@@ -282,8 +286,11 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind);
 void crime_tick(World *w);        /* police hunting + lie-low cooldown */
 int  crime_jailed_count(const World *w);
 int  crime_wanted_count(const World *w);
+double crime_cooldown_frac(const Agent *a);
 const char *crime_role_name(int role);
+const char *crime_kind_name(int i);
 void assign_crime_roles(World *w);   /* post-populate: pick career/dealer/kingpin/killer/users */
+void crime_daily(World *w);          /* role mobility (emergence) + immigration, on day change */
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

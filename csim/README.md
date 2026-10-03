@@ -47,7 +47,7 @@ re-added just by providing a `GfxBackend` vtable.)
 ./build/csim --help     # controls + env vars
 ```
 Controls: drag (right-mouse) pan · wheel zoom · click a citizen to inspect ·
-`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `l` legend · `a` ASCII
+`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `c` crime-watch · `l` legend · `a` ASCII
 (Dwarf-Fortress) mode · `Tab` feed · arrows/PgUp/PgDn browse list · Space pause ·
 `1`/`2`/`3` speed · `q` or Esc to quit. Zoom in and buildings show a type glyph: `H` home,
 `$` shop, `O` office, `B` bar, `+` church, `P` police. Small UI text uses an

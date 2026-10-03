@@ -221,6 +221,38 @@ Agent *world_agent_at(World *w, int tx, int ty, double radius) {
 }
 
 /* ── Per-agent helpers ───────────────────────────────────────────────────── */
+/* crime seeking: head toward the right other agent so the trade/violence connects */
+static Agent *seek_customer(World *w, Agent *d) {
+    Agent *best = NULL; double bd = 1e18;
+    for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+        if (!o->alive || o->id == d->id || o->is_police || o->arrested_ticks > 0) continue;
+        if (o->crime_role == CR_DEALER || o->crime_role == CR_KINGPIN) continue;
+        double dx = o->x - d->x, dy = o->y - d->y;
+        double dd = dx*dx + dy*dy + (o->addiction > 0.1f ? 0.0 : 2000.0);  /* prefer addicts */
+        if (dd < bd) { bd = dd; best = o; }
+    }
+    return best;
+}
+static Agent *seek_kingpin(World *w, Agent *d) {
+    Agent *best = NULL; double bd = 1e18;
+    for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+        if (!o->alive || o->crime_role != CR_KINGPIN || o->drug_stock <= 0 || o->arrested_ticks > 0) continue;
+        double dx = o->x - d->x, dy = o->y - d->y, dd = dx*dx + dy*dy;
+        if (dd < bd) { bd = dd; best = o; }
+    }
+    return best;
+}
+static Agent *seek_victim(World *w, Agent *a, int rival_faction_only) {
+    Agent *best = NULL; double bd = 1e18;
+    for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+        if (!o->alive || o->id == a->id || o->is_police || o->arrested_ticks > 0) continue;
+        if (rival_faction_only && !(o->faction_id >= 0 && o->faction_id != a->faction_id)) continue;
+        double dx = o->x - a->x, dy = o->y - a->y, dd = dx*dx + dy*dy;
+        if (dd < bd) { bd = dd; best = o; }
+    }
+    return best;
+}
+
 static void set_target(World *w, Agent *a) {
     int b = -1;
     switch (a->action) {
@@ -232,6 +264,17 @@ static void set_target(World *w, Agent *a) {
         case A_WORK:  b = a->workplace_id; break;
         case A_DRINK: b = building_nearest(w, (int)a->x, (int)a->y, T_BAR); break;
         case A_PRAY:  b = building_nearest(w, (int)a->x, (int)a->y, T_CHURCH); break;
+        case A_CRIME: {
+            Agent *tgt = NULL;
+            if (a->crime_role == CR_KINGPIN) { a->tx = -1; a->ty = -1; return; }  /* stay put, deal wholesale */
+            else if (a->crime_role == CR_DEALER) tgt = a->drug_stock > 0 ? seek_customer(w, a) : seek_kingpin(w, a);
+            else if (a->crime_role == CR_KILLER) tgt = seek_victim(w, a, 0);
+            else if (a->faction_id >= 0) { tgt = seek_victim(w, a, 1); if (!tgt) tgt = seek_victim(w, a, 0); }
+            else tgt = seek_victim(w, a, 0);
+            if (tgt) { a->tx = (int)tgt->x; a->ty = (int)tgt->y; return; }
+            if (a->crime_role == CR_CAREER) b = building_nearest(w, (int)a->x, (int)a->y, T_HOME);  /* go burgle */
+            break;
+        }
         default: break;
     }
     if (b >= 0) { a->tx = w->buildings[b].x; a->ty = w->buildings[b].y; return; }
@@ -460,7 +503,7 @@ void world_tick(World *w, double dt_seconds) {
 
     crime_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

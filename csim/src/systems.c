@@ -35,6 +35,18 @@ const char *crime_role_name(int r) {
     }
 }
 
+static const char *CK_NAMES[CK_COUNT] = {
+    "theft","burglary","robbery","extortion","vandalism","arson",
+    "assault","riot","dealing","trafficking","murder"
+};
+const char *crime_kind_name(int i) { return (i >= 0 && i < CK_COUNT) ? CK_NAMES[i] : "?"; }
+static int ck_index(const char *k) {
+    for (int i = 0; i < CK_COUNT; i++) if (!strcmp(k, CK_NAMES[i])) return i;
+    return CK_THEFT;
+}
+/* record one committed crime of this kind */
+static void tally(World *w, const char *kind) { w->crimes++; w->crime_kind[ck_index(kind)]++; }
+
 static void mark_wanted(World *w, Agent *a, const char *kind) {
     int heat = (int)(WANTED_DURATION * crime_severity(kind));
     if (a->wanted) { if (heat > a->wanted_ticks) { a->wanted_ticks = heat; strncpy(a->wanted_for, kind, 15); } return; }
@@ -45,6 +57,12 @@ static void mark_wanted(World *w, Agent *a, const char *kind) {
     events_post(w, EV_WANTED, a->id, -1, (int)a->x, (int)a->y, 0.5, t);
 }
 static void clear_wanted(Agent *a) { a->wanted = 0; a->wanted_ticks = 0; a->wanted_for[0] = '\0'; }
+/* fraction of the lie-low window still remaining (1=just wanted, 0=about to cool off) */
+double crime_cooldown_frac(const Agent *a) {
+    if (!a->wanted) return 0;
+    double full = WANTED_DURATION * crime_severity(a->wanted_for[0] ? a->wanted_for : "theft");
+    return full > 0 ? (double)a->wanted_ticks / full : 0;
+}
 static void jail(Agent *a, const char *kind) {
     int sentence = (int)(ARREST_DURATION * crime_severity(kind));
     a->arrested_ticks = sentence; a->sentence_total = sentence;
@@ -142,7 +160,7 @@ static void do_deal(World *w, Agent *d) {
     cust->addiction = (float)clampd(cust->addiction + 0.07, 0, 1);
     cust->needs.social = clampd(cust->needs.social + 0.15, 0, 1);  /* the high */
     cust->dealer_id = d->id;
-    d->crimes_committed++; w->crimes++;
+    d->crimes_committed++; tally(w, "dealing");
     char t[96]; snprintf(t, sizeof(t), "%s sold drugs to %s ($%.0f)", d->name, cust->name, price);
     events_post(w, EV_CRIME, d->id, cust->id, (int)d->x, (int)d->y, 0.45, t);
     if (civ && rng_double(&w->rng) < 0.3) mark_wanted(w, d, "dealing");
@@ -152,6 +170,7 @@ static void do_deal(World *w, Agent *d) {
 static void do_traffic(World *w, Agent *p) {
     char t[96];
     if (p->crime_role == CR_KINGPIN) {
+        if (p->drug_stock >= DRUG_BATCH) return;   /* only import when the stash runs low */
         int civ, pol; witnesses_at(w, p, &civ, &pol); (void)civ;
         if (pol && rng_double(&w->rng) < 0.35 - p->crime_skill * 0.25) {
             jail(p, "trafficking");
@@ -159,7 +178,7 @@ static void do_traffic(World *w, Agent *p) {
             events_post(w, EV_ARREST, p->id, -1, (int)p->x, (int)p->y, 0.9, t);
             return;
         }
-        p->drug_stock += DRUG_BATCH; p->crimes_committed++;
+        p->drug_stock += DRUG_BATCH; p->crimes_committed++; tally(w, "trafficking");
         snprintf(t, sizeof(t), "%s brought in a drug shipment (%d units)", p->name, DRUG_BATCH);
         events_post(w, EV_CRIME, p->id, -1, (int)p->x, (int)p->y, 0.5, t);
     } else {  /* dealer buys wholesale */
@@ -187,7 +206,7 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
         return;
     }
     if (rng_double(&w->rng) < chance) {
-        victim->alive = 0; w->deaths++; w->crimes++; k->crimes_committed++;
+        victim->alive = 0; w->deaths++; tally(w, "murder"); k->crimes_committed++;
         k->needs.meaning = clampd(k->needs.meaning + 0.3, 0, 1);  /* the thrill */
         k->needs.safety  = clampd(k->needs.safety  + 0.2, 0, 1);
         for (int i = 0; i < w->n_agents; i++) {   /* terror nearby */
@@ -233,6 +252,16 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         if (target) {
             if (loot > 0) target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
             target->needs.safety = clampd(target->needs.safety - (!strcmp(kind,"assault")?0.5:0.3), 0, 1);
+        } else if (loot > 0) {
+            /* (D) no direct target (e.g. burglary) — take it from the nearest resident
+             * so stolen money is transferred, not injected into the economy */
+            Agent *v = NULL; int bd = 0;
+            for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+                if (!o->alive || o->id == perp->id || o->needs.money < loot) continue;
+                int d = abs((int)o->x - x) + abs((int)o->y - y);
+                if (d <= WITNESS_RADIUS*4 && (!v || d < bd)) { v = o; bd = d; }
+            }
+            if (v) v->needs.money = clampd(v->needs.money - loot, 0, 1e9);
         }
         if (!strcmp(kind, "extortion") && perp->faction_id >= 0)
             w->factions[perp->faction_id].treasury += loot * 0.5;
@@ -246,7 +275,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         perp->crimes_committed++;
         if ((perp->crime_role == CR_CAREER || perp->crime_role == CR_DEALER) && perp->crime_skill < 0.95)
             perp->crime_skill += 0.02f;
-        w->crimes++;
+        tally(w, kind);
         if (loot > 0) snprintf(t, sizeof(t), "%s committed %s%s ($%.0f)", perp->name, kind, vs, loot);
         else          snprintf(t, sizeof(t), "%s committed %s%s", perp->name, kind, vs);
         events_post(w, EV_CRIME, perp->id, target ? target->id : -1, x, y, importance, t);
@@ -309,6 +338,51 @@ void assign_crime_roles(World *w) {
         if(a->addiction>0.0f)nu++; }
     fprintf(stderr,"[roles] career=%d dealer=%d kingpin=%d killer=%d  users=%d  police=%d\n",
             nc,nd,nk,nkill,nu,police);
+}
+
+/* Daily: (B) role mobility/emergence + (C) a trickle of newcomers. */
+void crime_daily(World *w) {
+    int dealers = 0, kingpins = 0;
+    for (int i = 0; i < w->n_agents; i++) {
+        if (w->agents[i].crime_role == CR_DEALER) dealers++;
+        else if (w->agents[i].crime_role == CR_KINGPIN) kingpins++;
+    }
+    int maxDeal = 2 + w->n_agents / 40, maxKing = 1 + w->n_agents / 90;
+
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->is_police || a->arrested_ticks > 0) continue;
+        char t[96];
+        if (a->crime_role == CR_CITIZEN && a->crimes_committed >= 5) {
+            a->crime_role = CR_CAREER; if (a->crime_skill < 0.3f) a->crime_skill = 0.3f;
+            snprintf(t, sizeof(t), "%s has turned to a life of crime", a->name);
+            events_post(w, EV_FACTION, a->id, -1, (int)a->x, (int)a->y, 0.5, t);
+        } else if (a->crime_role == CR_CAREER && a->crimes_committed >= 25 && kingpins < maxKing && rng_double(&w->rng) < 0.3) {
+            a->crime_role = CR_KINGPIN; a->drug_stock += DRUG_BATCH * 2; kingpins++;
+            snprintf(t, sizeof(t), "%s rose to run a drug operation", a->name);
+            events_post(w, EV_FACTION, a->id, -1, (int)a->x, (int)a->y, 0.75, t);
+        } else if (a->crime_role == CR_CAREER && a->crimes_committed >= 15 && dealers < maxDeal && rng_double(&w->rng) < 0.3) {
+            a->crime_role = CR_DEALER; a->turf_x = (int)a->x; a->turf_y = (int)a->y; a->drug_stock += DRUG_BATCH; dealers++;
+            snprintf(t, sizeof(t), "%s started dealing on the corner", a->name);
+            events_post(w, EV_FACTION, a->id, -1, (int)a->x, (int)a->y, 0.55, t);
+        }
+    }
+
+    if (w->n_agents < 200 && rng_double(&w->rng) < 0.4) {   /* soft population cap */
+        int id = world_spawn_agent(w, -1, -1);
+        if (id >= 0) {
+            Agent *a = world_agent_by_id(w, id);
+            if (a) {
+                a->dealer_id = -1;
+                if (rng_double(&w->rng) < KILLER_CHANCE * 4) { a->crime_role = CR_KILLER; a->crime_skill = 0.4f; }
+                else {
+                    if (rng_double(&w->rng) < USER_FRACTION) a->addiction = (float)rng_range(&w->rng, 0.25, 0.75);
+                    double prop = pers_crime_propensity(&a->pers);
+                    if (prop > 0.5 && rng_double(&w->rng) < 0.22) { a->crime_role = CR_CAREER; a->crime_skill = 0.25f + (float)prop * 0.4f; }
+                }
+            }
+        }
+    }
 }
 
 /* Police hunt wanted agents; uncaught heat cools off ("lying low"). */

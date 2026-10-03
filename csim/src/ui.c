@@ -144,7 +144,7 @@ int run_ui(World *w){
 
     int paused=0; float speed=1.0f;
     int god=0, tool=G_SMITE;
-    int show_right=1, show_jail=0, show_factions=0, show_legend=1;
+    int show_right=1, show_jail=0, show_factions=0, show_legend=1, show_crime=0;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
 
@@ -242,6 +242,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_TAB)) show_right=!show_right;
         if(G->key_pressed(GFX_KEY_J)) show_jail=!show_jail;
         if(G->key_pressed(GFX_KEY_F)) show_factions=!show_factions;
+        if(G->key_pressed(GFX_KEY_C)) show_crime=!show_crime;
         if(G->key_pressed(GFX_KEY_L)) show_legend=!show_legend;
         if(G->key_pressed(GFX_KEY_A)) ascii=!ascii;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
@@ -491,6 +492,39 @@ int run_ui(World *w){
                 snprintf(buf,sizeof(buf),"%d",f->members); G->text(buf,px+US(360),yy,US(12),COL_WHITE);
                 if(ldr) snprintf(buf,sizeof(buf),"%.16s",ldr->name); else snprintf(buf,sizeof(buf),"-");
                 G->text(buf,px+US(450),yy,US(12),COL_GRAY); yy+=US(22); }
+        }
+
+        /* ── crime watch: live crimes + who's on the run (with lie-low cooldown) ── */
+        if(show_crime){
+            int nwanted=0; for(int i=0;i<w->n_agents;i++) if(w->agents[i].alive && w->agents[i].wanted) nwanted++;
+            int actLines=10, runRows=nwanted>16?16:nwanted;
+            int pw=US(720), ph=US(40)+US(18)+actLines*US(16)+US(10)+US(18)+US(16)+(runRows+1)*US(17);
+            int px=W/2-pw/2, py=hudH+US(6);
+            G->fill_rect(px,py,pw,ph,COL_PANEL); G->rect_lines(px,py,pw,ph,COL_RED);
+            G->text("CRIME WATCH  [c]",px+US(12),py+US(10),US(15),COL_RED);
+            int yy=py+US(36);
+            G->text("CRIMES IN ACTION",px+US(12),yy,US(11),COL_GOLD); yy+=US(18);
+            int shown=0;
+            for(int i=0;i<w->ev_count && shown<actLines;i++){ const WorldEvent *e=events_recent(w,i); if(!e) break;
+                if(e->kind!=EV_CRIME && e->kind!=EV_CRIME_FAILED && e->kind!=EV_ARREST) continue;
+                GfxColor c = e->kind==EV_ARREST?COL_GREEN : e->kind==EV_CRIME_FAILED?COL_GRAY : gfx_rgb(232,200,200);
+                snprintf(buf,sizeof(buf),"%.92s",e->text); G->text(buf,px+US(16),yy,US(12),c); yy+=US(16); shown++; }
+            if(!shown){ G->text("(quiet for now)",px+US(16),yy,US(12),COL_GRAY); yy+=US(16); }
+            yy+=US(10);
+            snprintf(buf,sizeof(buf),"ON THE RUN (%d)",nwanted); G->text(buf,px+US(12),yy,US(11),COL_GOLD); yy+=US(18);
+            G->text("NAME",px+US(16),yy,US(10),COL_GRAY); G->text("WANTED FOR",px+US(250),yy,US(10),COL_GRAY);
+            G->text("LIE-LOW COOLDOWN",px+US(440),yy,US(10),COL_GRAY); yy+=US(16);
+            if(!nwanted){ G->text("No one is on the run.",px+US(16),yy,US(12),COL_GRAY); }
+            int rshown=0;
+            for(int i=0;i<w->n_agents && rshown<runRows;i++){ Agent *a=&w->agents[i];
+                if(!a->alive || !a->wanted) continue;
+                snprintf(buf,sizeof(buf),"%.30s",a->name); G->text(buf,px+US(16),yy,US(12),COL_WHITE);
+                G->text(a->wanted_for[0]?a->wanted_for:"-",px+US(250),yy,US(12),COL_RED);
+                double f=crime_cooldown_frac(a); if(f<0)f=0; if(f>1)f=1;
+                int bw=US(210), bx=px+US(440);
+                G->fill_rect(bx,yy+US(2),bw,US(9),gfx_rgb(50,46,54));
+                G->fill_rect(bx,yy+US(2),(int)(bw*f),US(9),COL_AMBER);
+                yy+=US(17); rshown++; }
         }
 
         /* ── inspector (left) ── */
