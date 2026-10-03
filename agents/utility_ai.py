@@ -56,11 +56,15 @@ class UtilityAI:
         scores.append(ActionScore("eat", eat, "hunger"))
 
         # ── Sleep
-        sleep = (1.0 - n.energy) ** 2 * 1.8
+        sleep = (1.0 - n.energy) ** 2 * 2.5
         if is_night:
             sleep *= 1.5
         if hour < 6 or hour > 23:
             sleep *= 1.3
+        # When genuinely exhausted, sleep must dominate everything (incl. work)
+        # so agents recover instead of collapsing from exhaustion.
+        if n.energy < config.NEED_CRITICAL_THRESHOLD:
+            sleep += 2.0
         scores.append(ActionScore("sleep", sleep, "tired"))
 
         # ── Work

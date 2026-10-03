@@ -94,7 +94,8 @@ class Agent:
             id=aid, name=name, age=age,
             home_id=home.id, workplace_id=-1,
             personality=pers,
-            needs=Needs(money=rng.uniform(0, 80)),
+            needs=Needs(money=max(0.0, rng.gauss(config.STARTING_MONEY_MEAN,
+                                                 config.STARTING_MONEY_STDDEV))),
             relationships=RelationshipBook(),
             memory=AgentMemory(),
             x=x, y=y, color=col,
@@ -131,6 +132,11 @@ class Agent:
             self.needs.energy = min(1.0, self.needs.energy + 0.20 * game_hours * 4)
             self.sleep_ticks -= 1
             return
+
+        # Resting at home restores energy slowly (half the sleep rate) — so
+        # "go_home" is a real recovery action, not just standing around.
+        if self.current_action == "go_home" and self.interior_building == self.home_id:
+            self.needs.energy = min(1.0, self.needs.energy + 0.20 * game_hours * 2)
 
         # Pick a new action when current one expires
         if self.action_progress <= 0.0:
@@ -285,6 +291,10 @@ class Agent:
             self.sleep_ticks = config.SLEEP_TICKS
             self.interior_building = self.home_id
 
+        elif self.current_action == "go_home":
+            # Mark as home so the per-tick resting restore kicks in.
+            self.interior_building = self.home_id
+
         elif self.current_action == "work":
             self.needs.money += config.WAGE_PER_SHIFT
             self.needs.energy = max(0.0, self.needs.energy - 0.1)
@@ -337,21 +347,30 @@ class Agent:
         # Compatibility nudge
         compat = 1.0 - abs(self.personality.agreeableness - other.personality.agreeableness)
         delta += (compat - 0.5) * 0.10
+        was_friend = self.relationships.likes(other.id)
         self.relationships.adjust(other.id, delta)
         other.relationships.adjust(self.id, delta * 0.8)
         self.needs.social = min(1.0, self.needs.social + 0.15)
         other.needs.social = min(1.0, other.needs.social + 0.10)
         self.needs.belonging = min(1.0, self.needs.belonging + 0.05)
 
-        if delta > 0.20:
+        if self.relationships.likes(other.id) and not was_friend:
+            # Affinity crossed the friendship threshold for the first time — a
+            # genuinely new friendship, worth a city event (not every good chat).
             self.memory.remember(MemoryEntry(
-                kind="positive_social", text=f"Had a good talk with {other.name}",
-                importance=0.4, other_id=other.id,
+                kind="positive_social", text=f"Became friends with {other.name}",
+                importance=0.5, other_id=other.id,
             ))
             world.events.post(WorldEvent(
                 kind="positive_social", actor_id=self.id, target_id=other.id,
                 location=(self.x, self.y), importance=0.25,
                 text=f"{self.name} and {other.name} became friends",
+            ))
+        elif delta > 0.20:
+            # A pleasant chat — a private memory, not a city-wide announcement.
+            self.memory.remember(MemoryEntry(
+                kind="positive_social", text=f"Had a good talk with {other.name}",
+                importance=0.3, other_id=other.id,
             ))
         elif delta < -0.05:
             self.memory.remember(MemoryEntry(
