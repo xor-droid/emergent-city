@@ -520,9 +520,26 @@ int run_ui(World *w){
             G->text("LEGEND  [L]",lx+US(8),ly+US(5),US(11),COL_GOLD);
             for(int i=0;i<LEGEND_N;i++){ int col=i%2, row=i/2;
                 int ex=lx+US(8)+col*US(80), ey=ly+US(22)+row*rh;
-                G->fill_rect(ex,ey,US(10),US(10),tile_col(LEGEND[i].type));
-                G->rect_lines(ex,ey,US(10),US(10),gfx_rgba(10,8,14,180));
-                G->text(LEGEND[i].label,ex+US(14),ey-US(1),US(11),gfx_rgb(225,220,210)); }
+                TileType lt=LEGEND[i].type; int sw=US(12), sh=US(12);
+                /* legend swatch matches the current render: block colors, or in ASCII
+                 * mode the tileset tile (if loaded) / the ASCII glyph. */
+                if(ascii && ts_tex){
+                    int tc,tr; GfxColor tint;
+                    if(ts_kind==TSK_CP437){ int code=cp437_for(lt); tc=code%ts_cols; tr=code/ts_cols; tint=shade(tile_col(lt),70); }
+                    else { semantic_cell(ts_sem,lt,&tc,&tr); if(tc<0){tc=0;tr=0;} tint=COL_WHITE; }
+                    G->fill_rect(ex,ey,sw,sh,gfx_rgb(20,18,24));
+                    int srcx=ts_margin+tc*(ts_cw+ts_space), srcy=ts_margin+tr*(ts_ch+ts_space);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, ex,ey,sw,sh, tint);
+                } else if(ascii){
+                    const char *g=ascii_glyph(lt);
+                    G->fill_rect(ex,ey,sw,sh,gfx_rgb(20,18,24));
+                    if(g&&g[0]){ int gs=US(11), tw=G->text_w(g,gs);
+                        G->text(g, ex+(sw-tw)/2, ey+(sh-gs)/2, gs, shade(tile_col(lt),70)); }
+                } else {
+                    G->fill_rect(ex,ey,US(10),US(10),tile_col(lt));
+                    G->rect_lines(ex,ey,US(10),US(10),gfx_rgba(10,8,14,180));
+                }
+                G->text(LEGEND[i].label,ex+US(16),ey-US(1),US(11),gfx_rgb(225,220,210)); }
         }
 
         G->present();
