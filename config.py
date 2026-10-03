@@ -216,8 +216,10 @@ LLM_MODELS = ("Qwen/Qwen3-8B-GGUF:Q4_K_M",)
 # Only call the LLM when an event of this importance or higher occurs
 LLM_IMPORTANCE_THRESHOLD = 0.7
 
-# Hard cap on LLM calls per real-world minute (budget / throughput guard)
-LLM_RATE_LIMIT_PER_MINUTE = 30
+# Hard cap on LLM calls per real-world minute (budget / throughput guard).
+# Ramping up slowly while watching the local Qwen container's load:
+# 30 -> 90 (2026-10-02). Raise further only after confirming headroom.
+LLM_RATE_LIMIT_PER_MINUTE = 90
 LLM_MAX_CALLS_PER_MINUTE = LLM_RATE_LIMIT_PER_MINUTE  # name used by DecisionRouter
 
 # Ceiling on the per-agent "consult the LLM" probability each decision.

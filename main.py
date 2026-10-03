@@ -33,6 +33,12 @@ from llm.decision_router import DecisionRouter
 from utils.logger import setup_logging
 
 
+# Minimum window-size change (px) to honor as a real resize. Kept just above the
+# WSLg decoration echo (~6-7px) so manual dragging updates smoothly without
+# triggering a set_mode feedback loop.
+RESIZE_EPS = 12
+
+
 def main() -> int:
     load_dotenv()
     setup_logging()
@@ -139,11 +145,11 @@ def main() -> int:
             elif event.type == pygame.VIDEORESIZE:
                 w, h = event.size
                 cw, ch = screen.get_size()
-                # Ignore tiny OS decoration drift: WSLg nudges the size by a few
-                # pixels each frame, which otherwise becomes a resize feedback
-                # loop. Honor only real (user) resizes, then rebuild the display
-                # and repoint every widget at the new surface so drawing follows.
-                if abs(w - cw) > 24 or abs(h - ch) > 24:
+                # Ignore only the tiny OS decoration echo (WSLg reports the
+                # surface back a few px off after each set_mode, which would
+                # otherwise become a resize feedback loop). RESIZE_EPS is kept
+                # just above that echo (~6-7px) so real drags update smoothly.
+                if abs(w - cw) > RESIZE_EPS or abs(h - ch) > RESIZE_EPS:
                     apply_resize(w, h)
 
             elif event.type == pygame.KEYDOWN:
