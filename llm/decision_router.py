@@ -33,7 +33,7 @@ class DecisionRouter:
 
     # ── Gating ────────────────────────────────────────────────────────────────
     def should_consult(self, agent: "Agent", world: "World") -> bool:
-        if not self.client.enabled or not self._under_budget():
+        if self.client is None or not self.client.enabled or not self._under_budget():
             return False
 
         # Interestingness heuristic
@@ -75,7 +75,7 @@ class DecisionRouter:
         return word if word in valid else None
 
     def dialogue(self, agent: "Agent", other: "Agent", context: str = "") -> str:
-        if not self.client.enabled or not self._under_budget():
+        if self.client is None or not self.client.enabled or not self._under_budget():
             return ""
         self.calls_this_minute += 1
         prompt = build_dialogue_prompt(agent, other, context)
@@ -87,7 +87,7 @@ class DecisionRouter:
         return "" if resp.error else resp.text
 
     def thought(self, agent: "Agent", world: "World") -> str:
-        if not self.client.enabled or not self._under_budget():
+        if self.client is None or not self.client.enabled or not self._under_budget():
             return ""
         self.calls_this_minute += 1
         prompt = build_thought_prompt(agent, world)

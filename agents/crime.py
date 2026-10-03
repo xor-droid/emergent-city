@@ -55,7 +55,7 @@ class CrimeSystem:
                 target_id=target.id if target else -1,
                 location=(x, y),
                 importance=importance,
-                text=f"Преступление ({kind}) удалось",
+                text=f"Crime ({kind}) succeeded",
                 payload={"kind": kind, "loot": loot, "witnesses": len(witnesses)},
             ))
         else:
@@ -67,7 +67,7 @@ class CrimeSystem:
                 target_id=target.id if target else -1,
                 location=(x, y),
                 importance=importance + 0.1,
-                text=f"Преступление ({kind}) провалилось",
+                text=f"Crime ({kind}) failed",
                 payload={"kind": kind, "police": police_nearby},
             ))
             if police_nearby:

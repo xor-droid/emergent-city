@@ -41,30 +41,30 @@ class Inspector:
         p, n = a.personality, a.needs
         lines = [
             (f"{a.name} ({a.age})", True),
-            (f"Действие: {a.current_action}", False),
-            (f"Позиция: ({a.x},{a.y})", False),
-            ("Характер", True),
+            (f"Action: {a.current_action}", False),
+            (f"Position: ({a.x},{a.y})", False),
+            ("Personality", True),
             (f"O {p.openness:.2f}  C {p.conscientiousness:.2f}", False),
             (f"E {p.extraversion:.2f}  A {p.agreeableness:.2f}", False),
             (f"N {p.neuroticism:.2f}", False),
         ]
         if p.unique_traits:
-            lines.append((f"Черты: {', '.join(p.unique_traits[:3])}", False))
+            lines.append((f"Traits: {', '.join(p.unique_traits[:3])}", False))
         lines += [
-            ("Потребности", True),
-            (f"Голод   {n.hunger:.2f}", False),
-            (f"Силы    {n.energy:.2f}", False),
-            (f"Безоп.  {n.safety:.2f}", False),
-            (f"Соц.    {n.social:.2f}", False),
-            (f"Прин.   {n.belonging:.2f}", False),
-            (f"Смысл   {n.meaning:.2f}", False),
-            (f"Деньги  {n.money:.0f}", False),
+            ("Needs", True),
+            (f"Hunger     {n.hunger:.2f}", False),
+            (f"Energy     {n.energy:.2f}", False),
+            (f"Safety     {n.safety:.2f}", False),
+            (f"Social     {n.social:.2f}", False),
+            (f"Belonging  {n.belonging:.2f}", False),
+            (f"Meaning    {n.meaning:.2f}", False),
+            (f"Money      {n.money:.0f}", False),
         ]
 
         # Top relationships
         top_rels = a.relationships.top_friends(3)
         if top_rels:
-            lines.append(("Связи", True))
+            lines.append(("Relationships", True))
             for other_id, rel in top_rels:
                 other = next((o for o in world.agents if o.id == other_id), None)
                 if other is None:
@@ -74,12 +74,12 @@ class Inspector:
         # Recent memories
         mems = a.memory.top_memories(3)
         if mems:
-            lines.append(("Память", True))
+            lines.append(("Memory", True))
             for m in mems:
                 lines.append((f"• {m.text[:34]}", False))
 
         if a.last_thought:
-            lines.append(("Мысль", True))
+            lines.append(("Thought", True))
             lines.append((a.last_thought[:38], False))
 
         return lines

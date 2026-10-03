@@ -50,10 +50,10 @@ class Faction:
 class FactionSystem:
     """All factions in the world."""
 
-    GANG_NAMES = ("Алые Псы", "Чёрный Залив", "Иглы", "Северные Волки",
-                  "Тени Завода", "Двадцать Третьи")
-    CULT_NAMES = ("Дети Зари", "Молчание Луны", "Орден Девятого Часа",
-                  "Круг Пепла", "Сёстры Воды")
+    GANG_NAMES = ("Scarlet Hounds", "Black Bay", "The Needles", "Northern Wolves",
+                  "Factory Shadows", "The Twenty-Thirds")
+    CULT_NAMES = ("Children of the Dawn", "Silence of the Moon", "Order of the Ninth Hour",
+                  "Circle of Ash", "Sisters of the Water")
     GANG_COLORS = ((200, 50, 50), (40, 40, 40), (170, 80, 200),
                    (100, 100, 220), (160, 110, 50), (220, 180, 60))
     CULT_COLORS = ((230, 200, 70), (180, 180, 240), (120, 60, 160),
@@ -68,9 +68,9 @@ class FactionSystem:
         if self._seeded:
             return
         for name, color in zip(self.GANG_NAMES, self.GANG_COLORS):
-            self._create("gang", name, color, ideology="власть на улицах")
+            self._create("gang", name, color, ideology="power in the streets")
         for name, color in zip(self.CULT_NAMES, self.CULT_COLORS):
-            self._create("cult", name, color, ideology="откровение")
+            self._create("cult", name, color, ideology="revelation")
         # Mutual rivalries between same-kind factions
         gangs = [f for f in self.factions.values() if f.kind == "gang"]
         for f in gangs:

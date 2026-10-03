@@ -1,6 +1,6 @@
 """
 prompts.py — Builds system+user prompts for LLM calls.
-All system prompts are in Russian to keep generated text in-style.
+All prompts are in English.
 """
 
 from __future__ import annotations
@@ -12,19 +12,19 @@ if TYPE_CHECKING:
 
 
 SYSTEM_ROLEPLAY = (
-    "Ты — житель эмерджентного города. Отвечай коротко, на русском языке, "
-    "от первого лица. Реплика — одно-два предложения, не более 25 слов. "
-    "Соответствуй характеру и текущему состоянию персонажа."
+    "You are a resident of an emergent city. Reply briefly, in English, "
+    "in the first person. One or two sentences, no more than 25 words. "
+    "Stay true to the character's personality and current state."
 )
 
 SYSTEM_THOUGHT = (
-    "Ты — внутренний монолог жителя города. Одна короткая мысль "
-    "(до 12 слов) на русском языке, без кавычек."
+    "You are the inner monologue of a city resident. One short thought "
+    "(up to 12 words) in English, without quotation marks."
 )
 
 SYSTEM_DECISION = (
-    "Ты подсказываешь действие персонажу. Ответ — одно слово из списка: "
-    "{actions}. Никаких пояснений."
+    "You suggest an action for a character. Answer with a single word from "
+    "this list: {actions}. No explanations."
 )
 
 
@@ -33,13 +33,13 @@ def _agent_brief(a: "Agent") -> str:
     n = a.needs
     traits = ", ".join(pers.unique_traits) or "—"
     return (
-        f"Имя: {a.name}, возраст {a.age}.\n"
-        f"Характер: O={pers.openness:.2f} C={pers.conscientiousness:.2f} "
+        f"Name: {a.name}, age {a.age}.\n"
+        f"Personality: O={pers.openness:.2f} C={pers.conscientiousness:.2f} "
         f"E={pers.extraversion:.2f} A={pers.agreeableness:.2f} N={pers.neuroticism:.2f}. "
-        f"Черты: {traits}.\n"
-        f"Состояние: голод={n.hunger:.2f}, силы={n.energy:.2f}, "
-        f"безопасность={n.safety:.2f}, общение={n.social:.2f}, "
-        f"смысл={n.meaning:.2f}, деньги={n.money:.0f}."
+        f"Traits: {traits}.\n"
+        f"State: hunger={n.hunger:.2f}, energy={n.energy:.2f}, "
+        f"safety={n.safety:.2f}, social={n.social:.2f}, "
+        f"meaning={n.meaning:.2f}, money={n.money:.0f}."
     )
 
 
@@ -48,9 +48,9 @@ def build_dialogue_prompt(a: "Agent", other: "Agent", context: str = "") -> List
         {"role": "system", "content": SYSTEM_ROLEPLAY},
         {"role": "user", "content": (
             f"{_agent_brief(a)}\n"
-            f"Ты разговариваешь с человеком по имени {other.name}.\n"
-            f"Контекст: {context or 'случайная встреча на улице'}.\n"
-            "Что ты ему скажешь?"
+            f"You are talking to a person named {other.name}.\n"
+            f"Context: {context or 'a chance meeting on the street'}.\n"
+            "What do you say to them?"
         )},
     ]
 
@@ -61,8 +61,8 @@ def build_thought_prompt(a: "Agent", world: "World") -> List[Dict[str, str]]:
         {"role": "system", "content": SYSTEM_THOUGHT},
         {"role": "user", "content": (
             f"{_agent_brief(a)}\n"
-            f"Сейчас {hour:02d}:00. Ты делаешь: {a.current_action}.\n"
-            "Какая мысль у тебя в голове прямо сейчас?"
+            f"It is now {int(hour):02d}:00. You are doing: {a.current_action}.\n"
+            "What thought is going through your head right now?"
         )},
     ]
 
@@ -72,6 +72,6 @@ def build_decision_prompt(a: "Agent", world: "World", actions: List[str]) -> Lis
         {"role": "system", "content": SYSTEM_DECISION.format(actions=", ".join(actions))},
         {"role": "user", "content": (
             f"{_agent_brief(a)}\n"
-            f"Час: {world.time_system.hour}. Что разумно делать сейчас?"
+            f"Hour: {world.time_system.hour}. What is the sensible thing to do now?"
         )},
     ]

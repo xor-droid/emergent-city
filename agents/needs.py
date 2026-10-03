@@ -38,6 +38,12 @@ class Needs:
         }
         return min(candidates, key=candidates.get)
 
+    def is_critical(self) -> bool:
+        """True if any 0..1 need has fallen below the critical threshold."""
+        t = config.NEED_CRITICAL_THRESHOLD
+        return (self.hunger < t or self.energy < t or self.safety < t
+                or self.social < t or self.meaning < t or self.belonging < t)
+
     def is_dying(self) -> bool:
         return self.hunger <= 0.01 or self.energy <= 0.01
 

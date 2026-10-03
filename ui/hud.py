@@ -41,7 +41,7 @@ class HUD:
             hour = getattr(ts, "hour", 0)
             minute = getattr(ts, "minute", 0)
             season = getattr(ts, "season_name", "")
-            time_str = f"День {day}  {hour:02d}:{minute:02d}  Сезон: {season}  "
+            time_str = f"Day {int(day)}  {int(hour):02d}:{int(minute):02d}  Season: {season}  "
         else:
             time_str = ""
 
@@ -58,12 +58,12 @@ class HUD:
 
         line = (
             f"{time_str}"
-            f"Население: {alive}  Смерти: {dead}  Розыск: {wanted}  "
-            f"Группировки: {n_factions}  "
+            f"Population: {alive}  Deaths: {dead}  Wanted: {wanted}  "
+            f"Factions: {n_factions}  "
             f"LLM: {self.llm_calls}"
         )
         if paused:
-            line = "[ПАУЗА]  " + line
+            line = "[PAUSED]  " + line
         elif speed != 1.0:
             line = f"[x{speed:.1f}]  " + line
 

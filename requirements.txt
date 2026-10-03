@@ -1,6 +1,6 @@
-pygame==2.5.2
-numpy==1.26.4
-httpx==0.27.0
+# Python 3.14-compatible pins.
+# pygame-ce is a drop-in replacement for pygame (imports as `pygame`);
+# stock pygame has no cp314 wheels yet.
+pygame-ce==2.5.8
+requests==2.32.3
 python-dotenv==1.0.1
-pyyaml==6.0.1
-noise==1.2.2

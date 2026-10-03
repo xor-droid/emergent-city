@@ -69,6 +69,9 @@ ACTION_BASE_DURATION_SECONDS = 6.0
 # Ticks an agent sleeps per sleep action (each tick = one World.tick call).
 SLEEP_TICKS = 400
 
+# How many recent events an agent remembers (bounded deque).
+AGENT_MEMORY_SIZE = 20
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Agents — Needs decay rates (per in-game hour)
@@ -111,6 +114,9 @@ UNIQUE_TRAITS = [
 
 STARTING_MONEY_MEAN = 100.0
 STARTING_MONEY_STDDEV = 50.0
+
+# Below this balance an agent is considered poor (drives work/crime decisions).
+LOW_MONEY_THRESHOLD = 20.0
 
 GOOD_BASE_PRICES = {
 "food": 5.0,
@@ -174,19 +180,47 @@ RELATIONSHIP_DECAY = 0.005
 # Affinity gain per pleasant interaction
 INTERACTION_AFFINITY_DELTA = 0.04
 
+# Affinity (roughly -1..1) at/above which two agents count as friends,
+# and at/below which they count as rivals.
+FRIENDSHIP_AFFINITY_THRESHOLD = 0.30
+RIVALRY_AFFINITY_THRESHOLD = -0.30
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# LLM (OpenRouter)
+# LLM (OpenAI-compatible: OpenRouter cloud OR a local llama.cpp server)
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Master switch for LLM-driven decisions (off by default to avoid API costs).
-LLM_ENABLED = False
+# Master switch for LLM-driven decisions.
+# A local llama.cpp server (e.g. Qwen3-8B) has no per-token cost, so this is on.
+LLM_ENABLED = True
+
+# Chat-completions endpoint. Leave empty to use the OPENROUTER_BASE_URL env var,
+# and if that is also empty the client falls back to OpenRouter's cloud URL.
+# For the local Qwen server, set OPENROUTER_BASE_URL in .env instead of here.
+LLM_BASE_URL = ""
+
+# Qwen3 (and similar) default to a verbose "thinking" mode that leaves the
+# answer empty when the token budget is small. Append the `/no_think` soft
+# switch so replies land in `content` and stay short. Set False for cloud
+# models that don't understand it (it's harmless, just unnecessary).
+LLM_DISABLE_THINKING = True
+
+# Threads available for concurrent, non-blocking LLM calls from the game loop.
+LLM_POOL_SIZE = 4
+
+# Fallback model list, tried in order, when no per-call/instance model is set.
+# Normally the model comes from OPENROUTER_MODEL (.env); this is a safety net.
+LLM_MODELS = ("Qwen/Qwen3-8B-GGUF:Q4_K_M",)
 
 # Only call the LLM when an event of this importance or higher occurs
 LLM_IMPORTANCE_THRESHOLD = 0.7
 
-# Hard cap on LLM calls per real-world minute (to control cost)
+# Hard cap on LLM calls per real-world minute (budget / throughput guard)
 LLM_RATE_LIMIT_PER_MINUTE = 30
+LLM_MAX_CALLS_PER_MINUTE = LLM_RATE_LIMIT_PER_MINUTE  # name used by DecisionRouter
+
+# Ceiling on the per-agent "consult the LLM" probability each decision.
+LLM_MAX_CONSULT_PROBABILITY = 0.8
 
 # Cache identical decisions for this many seconds
 LLM_CACHE_TTL_SECONDS = 600
@@ -203,47 +237,47 @@ LLM_TIMEOUT_SECONDS = 12.0
 
 @dataclass(frozen=True)
 class Palette:
-background: Tuple[int, int, int] = (18, 16, 22)
-grass: Tuple[int, int, int] = (52, 78, 58)
-grass_lush: Tuple[int, int, int] = (68, 102, 70)
-road: Tuple[int, int, int] = (48, 44, 52)
-road_marking: Tuple[int, int, int] = (210, 200, 160)
-sidewalk: Tuple[int, int, int] = (95, 92, 100)
-water: Tuple[int, int, int] = (45, 70, 100)
+    background: Tuple[int, int, int] = (18, 16, 22)
+    grass: Tuple[int, int, int] = (52, 78, 58)
+    grass_lush: Tuple[int, int, int] = (68, 102, 70)
+    road: Tuple[int, int, int] = (48, 44, 52)
+    road_marking: Tuple[int, int, int] = (210, 200, 160)
+    sidewalk: Tuple[int, int, int] = (95, 92, 100)
+    water: Tuple[int, int, int] = (45, 70, 100)
 
-house_wall: Tuple[int, int, int] = (162, 122, 96)
-house_roof: Tuple[int, int, int] = (110, 60, 50)
-house_wealthy_wall: Tuple[int, int, int] = (200, 180, 150)
-house_wealthy_roof: Tuple[int, int, int] = (60, 70, 90)
-slum_wall: Tuple[int, int, int] = (95, 78, 70)
-slum_roof: Tuple[int, int, int] = (70, 50, 45)
+    house_wall: Tuple[int, int, int] = (162, 122, 96)
+    house_roof: Tuple[int, int, int] = (110, 60, 50)
+    house_wealthy_wall: Tuple[int, int, int] = (200, 180, 150)
+    house_wealthy_roof: Tuple[int, int, int] = (60, 70, 90)
+    slum_wall: Tuple[int, int, int] = (95, 78, 70)
+    slum_roof: Tuple[int, int, int] = (70, 50, 45)
 
-shop_wall: Tuple[int, int, int] = (170, 140, 80)
-shop_roof: Tuple[int, int, int] = (130, 80, 50)
-factory_wall: Tuple[int, int, int] = (90, 90, 95)
-factory_roof: Tuple[int, int, int] = (55, 55, 60)
-park_tree: Tuple[int, int, int] = (40, 80, 50)
+    shop_wall: Tuple[int, int, int] = (170, 140, 80)
+    shop_roof: Tuple[int, int, int] = (130, 80, 50)
+    factory_wall: Tuple[int, int, int] = (90, 90, 95)
+    factory_roof: Tuple[int, int, int] = (55, 55, 60)
+    park_tree: Tuple[int, int, int] = (40, 80, 50)
 
-window_lit: Tuple[int, int, int] = (255, 215, 130)
-window_dark: Tuple[int, int, int] = (40, 40, 50)
+    window_lit: Tuple[int, int, int] = (255, 215, 130)
+    window_dark: Tuple[int, int, int] = (40, 40, 50)
 
-mood_happy: Tuple[int, int, int] = (120, 220, 130)
-mood_content: Tuple[int, int, int] = (200, 220, 160)
-mood_neutral: Tuple[int, int, int] = (210, 210, 210)
-mood_sad: Tuple[int, int, int] = (110, 140, 220)
-mood_angry: Tuple[int, int, int] = (230, 90, 80)
-mood_afraid: Tuple[int, int, int] = (180, 130, 220)
-mood_numb: Tuple[int, int, int] = (130, 130, 140)
+    mood_happy: Tuple[int, int, int] = (120, 220, 130)
+    mood_content: Tuple[int, int, int] = (200, 220, 160)
+    mood_neutral: Tuple[int, int, int] = (210, 210, 210)
+    mood_sad: Tuple[int, int, int] = (110, 140, 220)
+    mood_angry: Tuple[int, int, int] = (230, 90, 80)
+    mood_afraid: Tuple[int, int, int] = (180, 130, 220)
+    mood_numb: Tuple[int, int, int] = (130, 130, 140)
 
-night_overlay: Tuple[int, int, int] = (10, 12, 30)
+    night_overlay: Tuple[int, int, int] = (10, 12, 30)
 
-ui_bg: Tuple[int, int, int] = (24, 22, 30)
-ui_panel: Tuple[int, int, int] = (32, 30, 38)
-ui_accent: Tuple[int, int, int] = (212, 175, 90)
-ui_text: Tuple[int, int, int] = (230, 225, 215)
-ui_text_dim: Tuple[int, int, int] = (150, 145, 135)
-ui_text_danger: Tuple[int, int, int] = (230, 90, 80)
-ui_text_good: Tuple[int, int, int] = (120, 220, 130)
+    ui_bg: Tuple[int, int, int] = (24, 22, 30)
+    ui_panel: Tuple[int, int, int] = (32, 30, 38)
+    ui_accent: Tuple[int, int, int] = (212, 175, 90)
+    ui_text: Tuple[int, int, int] = (230, 225, 215)
+    ui_text_dim: Tuple[int, int, int] = (150, 145, 135)
+    ui_text_danger: Tuple[int, int, int] = (230, 90, 80)
+    ui_text_good: Tuple[int, int, int] = (120, 220, 130)
 
 
 PALETTE = Palette()

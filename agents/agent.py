@@ -24,18 +24,18 @@ if TYPE_CHECKING:
     from world.buildings import Building
 
 
-RU_FIRST = (
-    "Алексей","Анна","Борис","Вера","Виктор","Галина","Дмитрий","Евгений",
-    "Екатерина","Иван","Игорь","Ирина","Константин","Лариса","Лев","Людмила",
-    "Максим","Марина","Наталья","Николай","Олег","Ольга","Павел","Полина",
-    "Роман","Светлана","Сергей","Татьяна","Юрий","Юлия","Андрей","Артём",
-    "Михаил","Зоя","Степан","Тимофей","Раиса","Фёдор","Тамара","Лидия",
+FIRST_NAMES = (
+    "Alex","Anna","Boris","Vera","Victor","Grace","Dmitri","Eugene",
+    "Catherine","Ivan","Igor","Irene","Conrad","Laura","Leo","Linda",
+    "Max","Marina","Natalie","Nicholas","Oleg","Olga","Paul","Polina",
+    "Roman","Svetlana","Sergei","Tanya","Yuri","Julia","Andrew","Arthur",
+    "Michael","Zoe","Stephen","Timothy","Rose","Fred","Tamara","Lydia",
 )
-RU_LAST = (
-    "Иванов","Петров","Сидоров","Кузнецов","Смирнов","Васильев","Попов",
-    "Соколов","Михайлов","Новиков","Фёдоров","Морозов","Волков","Алексеев",
-    "Лебедев","Семёнов","Егоров","Павлов","Козлов","Степанов","Николаев",
-    "Орлов","Андреев","Макаров","Никитин","Захаров","Зайцев","Соловьёв",
+LAST_NAMES = (
+    "Ivanov","Petrov","Sidorov","Kuznetsov","Smirnov","Vasiliev","Popov",
+    "Sokolov","Mikhailov","Novikov","Fedorov","Morozov","Volkov","Alexeev",
+    "Lebedev","Semenov","Egorov","Pavlov","Kozlov","Stepanov","Nikolaev",
+    "Orlov","Andreev","Makarov","Nikitin","Zakharov","Zaitsev","Soloviev",
 )
 
 
@@ -80,7 +80,7 @@ class Agent:
     # ── Construction ──────────────────────────────────────────────────────────
     @classmethod
     def spawn(cls, aid: int, home: "Building", rng: random.Random, world: "World") -> "Agent":
-        name = f"{rng.choice(RU_FIRST)} {rng.choice(RU_LAST)}"
+        name = f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}"
         age = max(16, int(rng.gauss(35, 14)))
         # Position at one of the home's perimeter tiles
         x, y = cls._adjacent_walkable(home, world)
@@ -146,7 +146,7 @@ class Agent:
         self.action_progress -= dt
 
         if self.needs.is_dying():
-            self.die(world, reason="истощение")
+            self.die(world, reason="exhaustion")
 
     def daily_tick(self, world: "World") -> None:
         self.age += 1 / 365  # placeholder; aging is slow
@@ -345,17 +345,17 @@ class Agent:
 
         if delta > 0.20:
             self.memory.remember(MemoryEntry(
-                kind="positive_social", text=f"Хорошо поговорил с {other.name}",
+                kind="positive_social", text=f"Had a good talk with {other.name}",
                 importance=0.4, other_id=other.id,
             ))
             world.events.post(WorldEvent(
                 kind="positive_social", actor_id=self.id, target_id=other.id,
                 location=(self.x, self.y), importance=0.25,
-                text=f"{self.name} и {other.name} подружились",
+                text=f"{self.name} and {other.name} became friends",
             ))
         elif delta < -0.05:
             self.memory.remember(MemoryEntry(
-                kind="negative_social", text=f"Поссорился с {other.name}",
+                kind="negative_social", text=f"Quarreled with {other.name}",
                 importance=0.5, other_id=other.id,
             ))
 
@@ -374,7 +374,7 @@ class Agent:
         self.alive = False
         world.events.post(WorldEvent(
             kind="death", actor_id=self.id, location=(self.x, self.y),
-            importance=0.9, text=f"{self.name} умер ({reason})",
+            importance=0.9, text=f"{self.name} died ({reason})",
             payload={"reason": reason},
         ))
         # Free up housing/work slots
