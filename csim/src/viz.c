@@ -1,5 +1,6 @@
 /* viz.c — shared rendering helpers (no backend-specific types). */
 #include "viz.h"
+#include "llm.h"
 #include <stdio.h>
 
 const char *g_blit = "default";
@@ -26,8 +27,8 @@ void hud_string(const World *w, char *buf, int n, float speed, int paused,
     for (int i = 0; i < w->n_factions; i++) factions += (w->factions[i].active && w->factions[i].members > 0);
     snprintf(buf, (size_t)n,
              "Day %d  %02d:00  Pop %d  Deaths %d  Crimes %d  Wanted %d  Jail %d  Factions %d  "
-             "[x%.0f%s]  %d FPS (%s)",
+             "LLM %d  [x%.0f%s]  %d FPS (%s)",
              w->day, (int)w->hour, alive, w->deaths, w->crimes,
              crime_wanted_count(w), crime_jailed_count(w), factions,
-             speed, paused ? " PAUSED" : "", fps, backend);
+             llm_total_calls(), speed, paused ? " PAUSED" : "", fps, backend);
 }

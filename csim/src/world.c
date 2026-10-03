@@ -1,5 +1,6 @@
 /* world.c — world generation, population, tick orchestration, save/load. */
 #include "sim.h"
+#include "llm.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -243,6 +244,19 @@ static void set_mood_color(Agent *a) {
     a->b = (unsigned char)(80 * (1 - wb) + 130 * wb);
 }
 
+/* Interest heuristic: when is an agent worth an LLM consult? (decision_router) */
+static int should_consult(World *w, Agent *a) {
+    double score = 0.0;
+    if (needs_is_critical(&a->needs)) score += 0.5;
+    if (fabs(a->needs.social - 0.5) > 0.35) score += 0.2;
+    for (int i = 0; i < a->rels.n; i++)
+        if (a->rels.rel[i].affinity <= RIVALRY_AFFINITY) { score += 0.15; break; }
+    if (a->faction_id != -1) score += 0.15;
+    if (a->pers.o > 0.7) score += 0.10;
+    double p = score < 0.8 ? score : 0.8;
+    return rng_double(&w->rng) < p;
+}
+
 /* ── Tick ────────────────────────────────────────────────────────────────── */
 void world_tick(World *w, double dt_seconds) {
     double game_hours = dt_seconds * TIME_SCALE / 3600.0;
@@ -268,6 +282,12 @@ void world_tick(World *w, double dt_seconds) {
             a->action_progress = ACTION_SECONDS;
             a->acted = 0;
             set_target(w, a);
+            /* Occasionally ask the LLM to override (non-blocking). */
+            if (llm_enabled() && !a->llm_pending && should_consult(w, a)) {
+                char prompt[768];
+                llm_build_prompt(a, w, prompt, sizeof(prompt));
+                if (llm_submit(a->id, prompt)) a->llm_pending = 1;
+            }
         }
         move_toward(w, a, dt_seconds);
         if (arrived(a) && !a->acted) { execute_action(w, a); a->acted = 1; }
@@ -283,6 +303,22 @@ void world_tick(World *w, double dt_seconds) {
             const char *reason = a->needs.hunger <= 0.01 ? "starvation" : "exhaustion";
             snprintf(t, sizeof(t), "%s died (%s)", a->name, reason);
             events_post(w, EV_DEATH, a->id, -1, (int)a->x, (int)a->y, 0.9, t);
+        }
+    }
+
+    /* Apply any LLM decisions that have come back (deferred override). */
+    int aid, act;
+    while (llm_poll(&aid, &act)) {
+        for (int i = 0; i < w->n_agents; i++) {
+            if (w->agents[i].id != aid) continue;
+            Agent *a = &w->agents[i];
+            a->llm_pending = 0;
+            if (a->alive && a->arrested_ticks == 0 && act >= 0 && act < A_COUNT) {
+                a->action = (Action)act;
+                a->acted = 0;
+                set_target(w, a);
+            }
+            break;
         }
     }
 

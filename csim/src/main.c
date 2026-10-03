@@ -8,6 +8,7 @@
  */
 #include "sim.h"
 #include "viz.h"
+#include "llm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -80,10 +81,17 @@ int main(int argc, char **argv) {
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
+    llm_init();   /* enabled only if OPENROUTER_API_KEY is set */
 
-    if (!strcmp(backend, "raylib")) return run_raylib(&w);
-    if (!strcmp(backend, "notcurses") || !strcmp(backend, "nc")) return run_notcurses(&w);
-    fprintf(stderr, "unknown backend '%s' (use raylib or notcurses)\n", backend);
-    usage(argv[0]);
-    return 2;
+    int rc;
+    if (!strcmp(backend, "raylib")) rc = run_raylib(&w);
+    else if (!strcmp(backend, "notcurses") || !strcmp(backend, "nc")) rc = run_notcurses(&w);
+    else {
+        fprintf(stderr, "unknown backend '%s' (use raylib or notcurses)\n", backend);
+        usage(argv[0]);
+        llm_shutdown();
+        return 2;
+    }
+    llm_shutdown();
+    return rc;
 }

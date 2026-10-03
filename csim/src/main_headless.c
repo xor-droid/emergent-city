@@ -3,12 +3,14 @@
  *   cc -O2 -o csim_headless src/main_headless.c src/sim.c src/systems.c src/world.c -lm
  */
 #include "sim.h"
+#include "llm.h"
 #include <stdio.h>
 
 int main(void) {
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
+    llm_init();   /* set OPENROUTER_API_KEY to enable Qwen consults */
     int start = w.n_agents;
 
     int police = 0;
@@ -51,7 +53,8 @@ int main(void) {
         if (fr > max_friends) max_friends = fr;
         if (a->faction_id != -1) in_faction++;
     }
-    printf("\nalive=%d/%d  deaths=%d  crimes=%d\n", alive, start, w.deaths, w.crimes);
+    printf("\nalive=%d/%d  deaths=%d  crimes=%d  llm_enabled=%d  llm_calls=%d\n",
+           alive, start, w.deaths, w.crimes, llm_enabled(), llm_total_calls());
     printf("avg friends/agent=%.1f (max %d)   agents in a faction=%d\n",
            alive ? (double)total_friends / alive : 0.0, max_friends, in_faction);
     printf("factions:");
@@ -63,5 +66,6 @@ int main(void) {
         const WorldEvent *e = events_recent(&w, i);
         if (e) printf("  [%s] %s\n", event_kind_name(e->kind), e->text);
     }
+    llm_shutdown();
     return 0;
 }

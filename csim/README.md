@@ -5,9 +5,18 @@ A full POSIX-C port of the simulation. Ports the real logic from the Python sim:
 Relationships (friends/rivals + decay), Memory, Crime + Wanted + Jail (with
 severity-scaled hunts/sentences), police hunting + lie-low, Factions (gangs &
 cults), Economy (cost of living), an Event feed, greedy pathing, and the
-World/agent/time loop** — deterministic PCG32 RNG, binary save/load, and two
-renderers (raylib window + notcurses terminal). LLM-driven decisions are the one
-piece not yet ported (planned via libcurl + cJSON against the local Qwen server).
+World/agent/time loop** — deterministic PCG32 RNG, binary save/load, two
+renderers (raylib window + notcurses terminal), and **LLM-driven decisions**
+(libcurl + cJSON against the local Qwen server, on a background thread so the
+sim never blocks). Feature parity with the Python sim.
+
+## LLM decisions
+Set `OPENROUTER_API_KEY` (any value locally) to enable Qwen consults; the client
+reads `OPENROUTER_BASE_URL` (default the local Qwen server) and `OPENROUTER_MODEL`.
+A worker thread does the HTTP calls; results are applied to agents on later ticks
+(deferred override), rate-limited and gated to "interesting" agents — the HUD
+shows the running call count. Needs `libcurl` + `libcjson` at build time
+(auto-detected); without them the sim runs purely rule-based.
 
 ## Layout
 ```

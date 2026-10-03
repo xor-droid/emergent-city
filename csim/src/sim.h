@@ -147,6 +147,7 @@ typedef struct {
 
     int is_police;
     int faction_id;         /* -1 if none */
+    int llm_pending;        /* an LLM decision request is in flight */
 
     int wanted;
     int wanted_ticks;
