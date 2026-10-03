@@ -59,16 +59,36 @@ Backend dependencies:
 - **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers
   (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`).
 - **notcurses** — `sudo apt install libnotcurses-dev`.
-  - **Known issue:** Debian/Ubuntu's notcurses **3.0.17** has an input-parser
-    assertion (`process_escape`, `in.c`) that aborts on Kitty-protocol terminals
-    (Kitty/Ghostty/WezTerm). Workaround: build notcurses from source in Release
-    mode (defines `NDEBUG`, disabling the assert):
+  - **Known issue (upstream notcurses input parser):** on startup notcurses
+    interrogates the terminal (sends DA1 + capability queries) and **blocks with
+    no timeout** until it parses the DA1 reply (`inputlayer_get_responses`,
+    `in.c`). On some terminals its escape-sequence automaton overflows while
+    parsing the batched query responses (`process_escape`, `in.c`:
+    `amata.used <= buflen`). In a **debug** build that aborts; in a **Release**
+    build (`NDEBUG`) the assert is skipped but the reply is silently mis-parsed,
+    so the DA1 handshake never completes and init **hangs forever**. Seen on
+    Kitty-protocol terminals (Kitty/Ghostty/WezTerm) and on some **WSL / Windows
+    Terminal** setups.
+  - **What we do about it:** `backend_notcurses.c` runs `notcurses_init` on a
+    worker thread with a **4 s watchdog** (`CSIM_NC_INIT_TIMEOUT` to override). If
+    the handshake stalls it restores the terminal and exits with a message
+    instead of freezing — it never leaves you with a dead blank screen.
+  - **If notcurses won't start in your terminal:** this is an upstream limitation
+    we can't fix from the app. Use the GPU backend, which has full feature parity:
+    ```sh
+    ./build/csim --backend raylib
+    ```
+    Or try a terminal whose query replies notcurses parses cleanly (a plain
+    `xterm` under WSLg often works; Kitty-protocol terminals and this WSL/Windows
+    Terminal combo do not). Building notcurses from source in Release avoids the
+    *abort* but not the *hang*:
     ```sh
     sudo apt install libunistring-dev libdeflate-dev
     cmake -B build -S . -DCSIM_FETCH_NOTCURSES=ON && cmake --build build -j1
     ```
-    Or, with the system package, launch under a plainer terminfo:
-    `TERM=xterm-256color ./build/csim --backend notcurses`.
+  - **Diagnostics:** `CSIM_NCLOG=/tmp/nclog.txt ./build/csim --backend notcurses`
+    logs terminal geometry, the init result (or `TIMED OUT`), per-frame
+    blit/render return codes, and every key received.
 
 Note: build single-threaded in this project — `cmake --build build -j1`.
 

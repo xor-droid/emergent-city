@@ -17,6 +17,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #define PXT 3
 
@@ -30,12 +32,67 @@ static void fillrow(struct ncplane *n,int y,int x,int wdt,uint32_t bg){
 }
 static const char *fac_name(World*w,int fid){ return (fid<0||fid>=w->n_factions)?"-":w->factions[fid].name; }
 
+/* Optional diagnostic log (CSIM_NCLOG=/path). No-op unless the env var is set. */
+static FILE *g_nclog = NULL;
+#define NCLOG(...) do{ if(g_nclog){ fprintf(g_nclog,__VA_ARGS__); fflush(g_nclog);} }while(0)
+
+/* notcurses_init() blocks forever on its terminal-capability handshake (it waits
+ * on a condvar for the terminal's DA1 reply, with no timeout — see
+ * inputlayer_get_responses in notcurses' in.c). Some terminals (bare ptys, and
+ * some WSL/Windows Terminal setups) never complete that reply, freezing the app
+ * before it can render. We run init on a worker thread and give it a deadline;
+ * if it stalls we restore the terminal and bail with guidance instead. */
+struct nc_init_ctx { struct notcurses_options *opts; struct notcurses *nc;
+                     int done; pthread_mutex_t m; pthread_cond_t c; };
+static void *nc_init_worker(void *arg){
+    struct nc_init_ctx *c = arg;
+    struct notcurses *nc = notcurses_init(c->opts, NULL);
+    pthread_mutex_lock(&c->m); c->nc = nc; c->done = 1;
+    pthread_cond_signal(&c->c); pthread_mutex_unlock(&c->m);
+    return NULL;
+}
+
 int run_notcurses(World *w) {
+    const char *logpath = getenv("CSIM_NCLOG");
+    if (logpath) { g_nclog = fopen(logpath,"w");
+        NCLOG("[nclog] start  TERM=%s  COLORTERM=%s\n",
+              getenv("TERM")?getenv("TERM"):"(unset)",
+              getenv("COLORTERM")?getenv("COLORTERM"):"(unset)"); }
+
     struct notcurses_options opts; memset(&opts,0,sizeof(opts));
     opts.flags = NCOPTION_SUPPRESS_BANNERS;
-    struct notcurses *nc = notcurses_init(&opts, NULL);
-    if (!nc) { fprintf(stderr, "notcurses_init failed\n"); return 1; }
+
+    /* Watchdog-protected init (see nc_init_ctx comment). */
+    double init_timeout = 4.0;
+    { const char *e = getenv("CSIM_NC_INIT_TIMEOUT"); if (e){ double v=atof(e); if(v>0) init_timeout=v; } }
+    struct nc_init_ctx ic; memset(&ic,0,sizeof(ic)); ic.opts=&opts;
+    pthread_mutex_init(&ic.m,NULL); pthread_cond_init(&ic.c,NULL);
+    pthread_t ith; pthread_create(&ith,NULL,nc_init_worker,&ic);
+    struct timespec dl; clock_gettime(CLOCK_REALTIME,&dl); dl.tv_sec += (time_t)init_timeout;
+    pthread_mutex_lock(&ic.m);
+    int werr=0; while(!ic.done && werr==0) werr=pthread_cond_timedwait(&ic.c,&ic.m,&dl);
+    struct notcurses *nc = ic.nc; int timed_out = !ic.done;
+    pthread_mutex_unlock(&ic.m);
+    if (timed_out) {
+        pthread_detach(ith);  /* worker is wedged in notcurses' DA1 wait; it dies with the process */
+        NCLOG("[nclog] notcurses_init TIMED OUT after %.1fs (terminal never answered the DA1 handshake)\n", init_timeout);
+        const char *restore = "\033[?1049l\033[?25h\033[0m\r\n";  /* leave alt-screen, show cursor, reset attrs */
+        ssize_t wn = write(STDERR_FILENO, restore, strlen(restore)); (void)wn;
+        fprintf(stderr,
+            "notcurses: your terminal did not complete the startup handshake within %.0fs.\n"
+            "  TERM=%s is not answering notcurses' capability query (common on some WSL/\n"
+            "  Windows Terminal and bare-pty setups). The notcurses backend can't run here.\n"
+            "  Use the GPU backend instead:  ./build/csim --backend raylib\n"
+            "  (If this terminal looks garbled now, run:  reset )\n",
+            init_timeout, getenv("TERM")?getenv("TERM"):"(unset)");
+        if (g_nclog) fclose(g_nclog);
+        return 2;
+    }
+    pthread_join(ith,NULL);
+    if (!nc) { fprintf(stderr, "notcurses_init failed\n"); NCLOG("[nclog] notcurses_init FAILED (returned NULL)\n"); if(g_nclog)fclose(g_nclog); return 1; }
     struct ncplane *std = notcurses_stdplane(nc);
+    { unsigned ir,icol; ncplane_dim_yx(std,&ir,&icol);
+      NCLOG("[nclog] init ok  stdplane=%ux%u (rows x cols)  isatty(stdout)=%d\n", ir, icol, isatty(1)); }
 
     /* Default to sextants: high-res AND composes with the HUD/panel text on the
      * std plane. NCBLIT_DEFAULT can auto-pick PIXEL graphics, which abort when
@@ -73,6 +130,7 @@ int run_notcurses(World *w) {
 
         struct ncinput ni; uint32_t id;
         while ((id = notcurses_get_nblock(nc, &ni)) != 0) {
+            NCLOG("[nclog] input id=%u (0x%x) evtype=%d\n", id, id, ni.evtype);
             if (ni.evtype == NCTYPE_RELEASE) continue;
             int nav = 0;
             if (id=='q'||id=='Q') running=0;
@@ -125,8 +183,11 @@ int run_notcurses(World *w) {
                     X=bx+PXT/2;Y=by+d; if(X>=0&&X<W&&Y>=0&&Y<H){size_t o=((size_t)Y*W+X)*4;buf[o]=255;buf[o+1]=255;buf[o+2]=0;buf[o+3]=255;} } } }
 
         struct ncvisual *v = ncvisual_from_rgba(buf, H, W*4, W);
+        struct ncplane *blitp = NULL;
         if (v) { struct ncvisual_options vo; memset(&vo,0,sizeof(vo));
-            vo.n=std; vo.scaling=NCSCALE_SCALE; vo.blitter=blit; ncvisual_blit(nc,v,&vo); ncvisual_destroy(v); }
+            vo.n=std; vo.scaling=NCSCALE_SCALE; vo.blitter=blit; blitp = ncvisual_blit(nc,v,&vo); ncvisual_destroy(v); }
+        if (frames<=3) NCLOG("[nclog] frame %d dims=%ux%u from_rgba=%s blit=%s blitter=%d\n",
+                             frames, rows, cols, v?"ok":"NULL", blitp?"ok":"NULL", (int)blit);
 
         /* HUD */
         char hud[256]; hud_string(w,hud,sizeof(hud),speed,paused,fps,"notcurses");
@@ -209,10 +270,12 @@ int run_notcurses(World *w) {
             } else selected=-1;
         }
 
-        notcurses_render(nc);
+        int rr = notcurses_render(nc);
+        if (frames<=3) NCLOG("[nclog] frame %d notcurses_render=%d\n", frames, rr);
         struct timespec slp={0,33*1000*1000}; nanosleep(&slp,NULL);
     }
     free(buf);
+    NCLOG("[nclog] clean exit (q)\n"); if(g_nclog) fclose(g_nclog);
     notcurses_stop(nc);
     return 0;
 }
