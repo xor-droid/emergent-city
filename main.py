@@ -13,6 +13,7 @@ import os
 import sys
 import random
 import logging
+import signal
 from typing import Optional
 
 import pygame
@@ -95,6 +96,20 @@ def main() -> int:
     paused = False
     followed_agent_id: Optional[int] = None
 
+    # ── Screenshot: press P, send SIGUSR1, or `touch` the trigger file to
+    # save the current frame to shot_path.
+    shot_path = os.environ.get("EMERGENT_SHOT_PATH", "screenshot.png")
+    shot_trigger = os.environ.get("EMERGENT_SHOT_TRIGGER", "")
+    shot_request = {"pending": False}
+
+    def _request_shot(signum=None, frame=None):
+        shot_request["pending"] = True
+
+    try:
+        signal.signal(signal.SIGUSR1, _request_shot)
+    except (ValueError, AttributeError, OSError):
+        pass  # not on the main thread / unsupported platform
+
     log.info(
         "World ready: %dx%d tiles, %d citizens. Running.",
         world.width, world.height, len(world.agents),
@@ -135,6 +150,8 @@ def main() -> int:
                     followed_agent_id = panel.selected_agent_id
                 elif event.key == pygame.K_g:
                     god.toggle()
+                elif event.key == pygame.K_p:
+                    _request_shot()
                 elif event.key == pygame.K_TAB:
                     feed.toggle_visible()
                 elif event.key == pygame.K_ESCAPE:
@@ -191,6 +208,21 @@ def main() -> int:
         god.draw_indicator(screen)
 
         pygame.display.flip()
+
+        if shot_trigger and os.path.exists(shot_trigger):
+            try:
+                os.remove(shot_trigger)
+            except OSError:
+                pass
+            shot_request["pending"] = True
+
+        if shot_request["pending"]:
+            shot_request["pending"] = False
+            try:
+                pygame.image.save(screen, shot_path)
+                log.info("Saved screenshot to %s (%dx%d)", shot_path, *screen.get_size())
+            except Exception as e:  # noqa: BLE001
+                log.warning("Screenshot failed: %s", e)
 
     pygame.quit()
     return 0

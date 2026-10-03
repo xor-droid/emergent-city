@@ -47,3 +47,4 @@ logs/
 
 # LLM cache
 .llm_cache/
+screenshot.png
