@@ -94,12 +94,26 @@ static float rl_ui_scale(void){
 }
 static int rl_focused(void){ return IsWindowFocused(); }
 
+static void *rl_load_tex(const char *path, int *w, int *h){
+    Texture2D t = LoadTexture(path);
+    if(t.id == 0) return NULL;
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);   /* crisp pixel-art scaling */
+    Texture2D *p = malloc(sizeof(Texture2D)); if(!p){ UnloadTexture(t); return NULL; }
+    *p = t; if(w)*w=t.width; if(h)*h=t.height; return p;
+}
+static void rl_draw_tex(void *tex,int sx,int sy,int sw,int sh,int dx,int dy,int dw,int dh,GfxColor c){
+    if(!tex) return; Texture2D *p=(Texture2D*)tex;
+    Rectangle src={(float)sx,(float)sy,(float)sw,(float)sh}, dst={(float)dx,(float)dy,(float)dw,(float)dh};
+    DrawTexturePro(*p, src, dst, (Vector2){0,0}, 0.0f, C(c));
+}
+static void rl_free_tex(void *tex){ if(tex){ Texture2D *p=(Texture2D*)tex; UnloadTexture(*p); free(p); } }
+
 const GfxBackend *gfx_raylib(void){
     static const GfxBackend b = {
         "raylib", rl_init, rl_shutdown, rl_should_close, rl_poll, rl_begin, rl_present,
         rl_width, rl_height, rl_fill_rect, rl_rect_lines, rl_line, rl_circle, rl_text, rl_text_w,
         rl_key_pressed, rl_key_down, rl_mouse, rl_mouse_pressed, rl_mouse_down, rl_wheel, rl_screenshot,
-        rl_ui_scale, rl_focused,
+        rl_ui_scale, rl_focused, rl_load_tex, rl_draw_tex, rl_free_tex,
     };
     return &b;
 }

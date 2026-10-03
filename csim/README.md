@@ -55,6 +55,20 @@ cell a dark tile-tinted background with a brighter CP437 glyph: `,` grass,
 `.` road, `≈` water, `♣` park, `⌂` home, `$` shop, `O` office, `B` bar,
 `+` church, `P` police; citizens are `☺` (`☻` police).
 
+**Image tilesets** (`--tileset NAME`, or a path to a `.png`): replace the font
+glyphs with a tileset image (implies ASCII/tile view). Assets are **not
+bundled** (licensing) — each name resolves to a file under the tileset dir
+(`CSIM_TILESET_DIR`, default `./tilesets`); if the file is missing, the game
+prints where to get it and falls back to font glyphs. Cell size is per-set
+(default 16), overridable with `CSIM_TILESET_CELL`.
+- **CC0, CP437 grid:** `camashu` — [DorfFortressTileSet](https://github.com/Camashu/DorfFortressTileSet)
+- **DF-wiki CP437 (verify each license):** `curses` `phoebus` `anikki` — [tileset repository](https://dwarffortresswiki.org/Tileset_repository)
+- **CC0, semantic sprites:** `kenney` `kenney-indoor` `kenney-caves` `kenney-1bit` — [Kenney via OpenGameArt](https://opengameart.org/content/roguelikerpg-pack-1700-tiles)
+
+CP437 sheets map each tile to its code-page-437 glyph (tinted). Semantic packs
+map each tile *type* to a sprite cell (placeholder layout — adjust per sheet;
+spaced sheets like Kenney's may need per-set spacing added).
+
 Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
 `CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·
 `CSIM_DEMO=1` open panels · `CSIM_SHOT=path` screenshot · `CSIM_BENCH=N`

@@ -54,6 +54,42 @@ static const char *ascii_glyph(TileType t){
         default:return ".";
     }
 }
+/* ---- Optional image tilesets for ASCII/tile mode (--tileset / CSIM_TILESET) ----
+ * Assets are NOT bundled (licensing); each name resolves to a file under the
+ * tileset dir (CSIM_TILESET_DIR, default "tilesets"). If missing we print where
+ * to get it and fall back to font glyphs. A path ending in .png is used directly
+ * (treated as a CP437 sheet). Cell size is per-set (default 16), overridable
+ * with CSIM_TILESET_CELL. */
+enum { TSK_CP437, TSK_SEMANTIC };
+typedef struct { const char *name; int kind; const char *file; int cell; const char *url; const char *license; } TsEntry;
+static const TsEntry TSETS[] = {
+  {"camashu",       TSK_CP437,    "camashu.png",          16, "https://github.com/Camashu/DorfFortressTileSet",                "CC0"},
+  {"curses",        TSK_CP437,    "curses.png",           16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"phoebus",       TSK_CP437,    "phoebus.png",          16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"anikki",        TSK_CP437,    "anikki.png",           16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"kenney",        TSK_SEMANTIC, "kenney_roguelike.png", 16, "https://opengameart.org/content/roguelikerpg-pack-1700-tiles",  "CC0"},
+  {"kenney-indoor", TSK_SEMANTIC, "kenney_indoor.png",    16, "https://opengameart.org/content/roguelike-indoor-pack",         "CC0"},
+  {"kenney-caves",  TSK_SEMANTIC, "kenney_caves.png",     16, "https://opengameart.org/content/roguelike-caves-dungeons-pack", "CC0"},
+  {"kenney-1bit",   TSK_SEMANTIC, "kenney_1bit.png",      16, "https://opengameart.org/content/1-bit-pack",                    "CC0"},
+};
+static const int N_TSETS = (int)(sizeof(TSETS)/sizeof(TSETS[0]));
+
+/* code-page-437 index for a tile (into a 16-wide CP437 sheet) */
+static int cp437_for(TileType t){
+    switch(t){ case T_GRASS:return ','; case T_ROAD:return '.';
+        case T_WATER:return 247 /*≈*/; case T_PARK:return 5 /*♣*/; case T_HOME:return 127 /*⌂*/;
+        case T_SHOP:return '$'; case T_WORK:return 'O'; case T_BAR:return 'B';
+        case T_CHURCH:return '+'; case T_POLICE:return 'P'; default:return '.'; }
+}
+/* semantic sprite cell (col,row); PLACEHOLDER layout — adjust per sheet. col<0 = skip. */
+static void semantic_cell(TileType t, int *col, int *row){
+    *row=0;
+    switch(t){ case T_HOME:*col=0;break; case T_SHOP:*col=1;break; case T_WORK:*col=2;break;
+        case T_BAR:*col=3;break; case T_CHURCH:*col=4;break; case T_POLICE:*col=5;break;
+        case T_PARK:*col=6;break; case T_WATER:*col=7;break; case T_ROAD:*col=8;break;
+        default:*col=-1;break; /* grass: leave as tinted background */ }
+}
+
 static const char *faction_name(World *w,int fid){ return (fid<0||fid>=w->n_factions)?"-":w->factions[fid].name; }
 static const char *agent_tag(const Agent *a){
     if(a->arrested_ticks>0) return "JAIL";
@@ -85,6 +121,33 @@ int run_ui(World *w){
     int show_right=1, show_jail=0, show_factions=0, show_legend=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0;
+
+    /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
+    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_cols=16;
+    { const char *tsname=getenv("CSIM_TILESET");
+      if(tsname && tsname[0] && G->load_tex){
+        char path[600]; const TsEntry *ent=NULL; int direct=0;
+        if(strchr(tsname,'/')||strstr(tsname,".png")){ snprintf(path,sizeof(path),"%s",tsname); direct=1; }
+        else for(int i=0;i<N_TSETS;i++) if(!strcmp(tsname,TSETS[i].name)){ ent=&TSETS[i]; break; }
+        const char *dir=getenv("CSIM_TILESET_DIR"); if(!dir) dir="tilesets";
+        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind; ts_cell=ent->cell; }
+        { const char *cs=getenv("CSIM_TILESET_CELL"); if(cs){ int c=atoi(cs); if(c>0) ts_cell=c; } }
+        if(!ent && !direct){
+            fprintf(stderr,"unknown tileset '%s'. options:",tsname);
+            for(int i=0;i<N_TSETS;i++) fprintf(stderr," %s",TSETS[i].name);
+            fprintf(stderr,"  (or a path to a .png)\n");
+        } else {
+            int tw=0,th=0; ts_tex=G->load_tex(path,&tw,&th);
+            if(ts_tex){ ts_cols = ts_cell>0 ? tw/ts_cell : 16; if(ts_cols<1) ts_cols=1; ascii=1;
+                fprintf(stderr,"[tileset] %s  %dx%d  %dpx cells  %d cols  (%s)\n",
+                        path,tw,th,ts_cell,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
+            } else {
+                fprintf(stderr,"[tileset] not found: %s — using font glyphs.\n", path);
+                if(ent) fprintf(stderr,"          get it (%s): %s\n", ent->license, ent->url);
+            }
+        }
+      }
+    }
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
     if(getenv("CSIM_DEMO")){ god=1; show_jail=1; show_factions=1; }
@@ -217,19 +280,37 @@ int run_ui(World *w){
             if(selected>=0){ Agent *a=world_agent_by_id(w,selected);
                 if(a&&a->alive){ float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
                     G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(120,110,40,210)); } }
-            /* pass 2: glyphs */
-            for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
-                TileType t2=(TileType)w->tile[x][y];
-                const char *s=ascii_glyph(t2); if(!s||!s[0]) continue;
-                float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
-                int tw=G->text_w(s,fs);
-                G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,shade(tile_col(t2),70));
-            }
-            for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
-                const char *s = a->is_police ? "☻" : "☺"; /* ☻ police / ☺ citizen */
-                float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
-                int tw=G->text_w(s,fs);
-                G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,gfx_rgb(a->r,a->g,a->b));
+            /* pass 2: either image-tileset cells or font glyphs */
+            if(ts_tex){
+                for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
+                    TileType t2=(TileType)w->tile[x][y];
+                    int col,row; GfxColor tint;
+                    if(ts_kind==TSK_CP437){ int code=cp437_for(t2); col=code%ts_cols; row=code/ts_cols; tint=shade(tile_col(t2),70); }
+                    else { semantic_cell(t2,&col,&row); if(col<0) continue; tint=COL_WHITE; }
+                    float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                    G->draw_tex(ts_tex, col*ts_cell,row*ts_cell,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                }
+                for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
+                    int col,row; GfxColor tint;
+                    if(ts_kind==TSK_CP437){ int code=a->is_police?2:1; col=code%ts_cols; row=code/ts_cols; tint=gfx_rgb(a->r,a->g,a->b); }
+                    else { col=9; row=0; tint=COL_WHITE; }   /* a 'person' cell (placeholder) */
+                    float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
+                    G->draw_tex(ts_tex, col*ts_cell,row*ts_cell,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                }
+            } else {
+                for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
+                    TileType t2=(TileType)w->tile[x][y];
+                    const char *s=ascii_glyph(t2); if(!s||!s[0]) continue;
+                    float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                    int tw=G->text_w(s,fs);
+                    G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,shade(tile_col(t2),70));
+                }
+                for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
+                    const char *s = a->is_police ? "☻" : "☺"; /* ☻ police / ☺ citizen */
+                    float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
+                    int tw=G->text_w(s,fs);
+                    G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,gfx_rgb(a->r,a->g,a->b));
+                }
             }
         } else {
             GfxColor outline=gfx_rgb(12,10,16);
@@ -414,6 +495,7 @@ int run_ui(World *w){
                 fflush(stdout); break; }
         } else if(shot && ++frame==120){ if(G->screenshot) G->screenshot(shot); break; }
     }
+    if(ts_tex && G->free_tex) G->free_tex(ts_tex);
     G->shutdown();
     return 0;
 }

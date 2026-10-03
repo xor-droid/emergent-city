@@ -13,8 +13,14 @@
 #include <stdlib.h>
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--backend raylib]\n", argv0);
+    printf("Usage: %s [--backend raylib] [--tileset NAME|path.png]\n", argv0);
     printf("  Renders the simulation in a GPU window (raylib).\n");
+    printf("  --tileset: image tileset for ASCII/tile mode (asset must be present under\n");
+    printf("     the tileset dir; if missing, prints where to get it and uses font glyphs):\n");
+    printf("       CC0 CP437 grid: camashu\n");
+    printf("       DF-wiki CP437 (verify license): curses, phoebus, anikki\n");
+    printf("       CC0 semantic sprites: kenney, kenney-indoor, kenney-caves, kenney-1bit\n");
+    printf("     dir=CSIM_TILESET_DIR (default ./tilesets); cell px=CSIM_TILESET_CELL (default 16).\n");
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
     printf("            j jail, f factions, l legend, a ASCII(Dwarf-Fortress) mode,\n");
     printf("            Tab feed, Space pause, 1/2/3 speed, q/Esc quit.\n");
@@ -25,12 +31,16 @@ static void usage(const char *argv0) {
 
 int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
-        const char *name = NULL;
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
-        else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) name = argv[++i];
-        else if (!strncmp(argv[i], "--backend=", 10)) name = argv[i] + 10;
-        else { fprintf(stderr, "unknown argument: %s\n", argv[i]); usage(argv[0]); return 2; }
-        if (name && strcmp(name, "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
+        else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
+            if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
+        } else if (!strncmp(argv[i], "--backend=", 10)) {
+            if (strcmp(argv[i] + 10, "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
+        } else if (!strcmp(argv[i], "--tileset") && i + 1 < argc) {
+            setenv("CSIM_TILESET", argv[++i], 1);
+        } else if (!strncmp(argv[i], "--tileset=", 10)) {
+            setenv("CSIM_TILESET", argv[i] + 10, 1);
+        } else { fprintf(stderr, "unknown argument: %s\n", argv[i]); usage(argv[0]); return 2; }
     }
 
     G = gfx_raylib();

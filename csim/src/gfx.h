@@ -61,6 +61,12 @@ typedef struct GfxBackend {
     void  (*screenshot)(const char *path);
     float (*ui_scale)(void);             /* suggested UI scale from monitor size (may be NULL) */
     int   (*focused)(void);              /* 1 if the window has focus (may be NULL -> assume yes) */
+    /* Tileset support (for ASCII/tile render). All may be NULL. */
+    void *(*load_tex)(const char *path, int *w, int *h);  /* NULL on failure */
+    void  (*draw_tex)(void *tex, int sx,int sy,int sw,int sh,  /* src rect in the sheet */
+                      int dx,int dy,int dw,int dh,            /* dest rect on screen */
+                      GfxColor tint);
+    void  (*free_tex)(void *tex);
 } GfxBackend;
 
 /* The active backend, set by main.c; the UI (ui.c) calls through it. */
