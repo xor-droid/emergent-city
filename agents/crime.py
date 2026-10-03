@@ -42,6 +42,7 @@ class CrimeSystem:
         success = world.rng.random() < success_chance
 
         importance = 0.55 if kind == "theft" else 0.85
+        against = f" against {target.name}" if target is not None else ""
 
         if success:
             loot = world.rng.uniform(5.0, 40.0)
@@ -55,19 +56,20 @@ class CrimeSystem:
                 target_id=target.id if target else -1,
                 location=(x, y),
                 importance=importance,
-                text=f"Crime ({kind}) succeeded",
+                text=f"{perpetrator.name} committed {kind}{against} (${loot:.0f})",
                 payload={"kind": kind, "loot": loot, "witnesses": len(witnesses)},
             ))
         else:
             # Caught
             perpetrator.needs.safety = max(0.0, perpetrator.needs.safety - 0.3)
+            caught_by = " — caught by police" if police_nearby else " — but failed"
             self.events.post(WorldEvent(
                 kind="crime_failed",
                 actor_id=perpetrator.id,
                 target_id=target.id if target else -1,
                 location=(x, y),
                 importance=importance + 0.1,
-                text=f"Crime ({kind}) failed",
+                text=f"{perpetrator.name} attempted {kind}{against}{caught_by}",
                 payload={"kind": kind, "police": police_nearby},
             ))
             if police_nearby:

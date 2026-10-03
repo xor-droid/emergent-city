@@ -297,6 +297,11 @@ class Agent:
                 self.needs.money -= config.MEAL_PRICE
                 self.needs.hunger = min(1.0, self.needs.hunger + 0.6)
                 world.economy.record_purchase("food", 1.0)
+            elif self.needs.hunger < config.NEED_CRITICAL_THRESHOLD:
+                # Destitute and starving: a free charity meal (smaller than a
+                # bought one) keeps them alive, so poverty leads to crime, not
+                # death. They stay poor and hungry sooner, preserving pressure.
+                self.needs.hunger = min(1.0, self.needs.hunger + 0.3)
 
         elif self.current_action == "sleep":
             self.sleep_ticks = config.SLEEP_TICKS

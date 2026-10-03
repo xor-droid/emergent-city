@@ -51,8 +51,13 @@ class UtilityAI:
 
         # ── Eat
         eat = (1.0 - n.hunger) ** 2 * 2.0
-        if n.money < config.MEAL_PRICE * 0.5:
-            eat *= 0.4
+        if n.hunger < config.NEED_CRITICAL_THRESHOLD:
+            # Starving: eating is life-or-death and must beat even the sleep
+            # emergency boost. A charity meal is available even if broke, so
+            # don't suppress it for lack of money here.
+            eat += 3.0
+        elif n.money < config.MEAL_PRICE * 0.5:
+            eat *= 0.4  # can't really afford it (and not yet desperate)
         scores.append(ActionScore("eat", eat, "hunger"))
 
         # ── Sleep
