@@ -1,10 +1,9 @@
-/* main.c — entry point: build the world, pick a windowed backend, run the UI.
+/* main.c — entry point: build the world, run the UI (raylib backend).
  *
- *   ./csim [--backend raylib|sdl3|glfw]
+ *   ./csim [--backend raylib]
  *
- * All three backends render the same UI (src/ui.c) through the gfx.h interface.
- * Only the backends compiled in (CMake HAVE_RAYLIB/HAVE_SDL3/HAVE_GLFW) are
- * selectable; raylib is the default.
+ * The UI (src/ui.c) renders through the gfx.h interface; raylib is the shipped
+ * backend. --backend raylib is accepted (for habit); anything else errors.
  */
 #include "sim.h"
 #include "gfx.h"
@@ -13,66 +12,28 @@
 #include <string.h>
 #include <stdlib.h>
 
-static const GfxBackend *pick(const char *name) {
-#ifdef HAVE_RAYLIB
-    if (!strcmp(name, "raylib")) return gfx_raylib();
-#endif
-#ifdef HAVE_SDL3
-    if (!strcmp(name, "sdl3"))   return gfx_sdl3();
-#endif
-#ifdef HAVE_GLFW
-    if (!strcmp(name, "glfw"))   return gfx_glfw();
-#endif
-    return NULL;
-}
-
-static const GfxBackend *first_available(void) {
-#if defined(HAVE_RAYLIB)
-    return gfx_raylib();
-#elif defined(HAVE_SDL3)
-    return gfx_sdl3();
-#elif defined(HAVE_GLFW)
-    return gfx_glfw();
-#else
-    return NULL;
-#endif
-}
-
 static void usage(const char *argv0) {
-    printf("Usage: %s [--backend NAME]\n", argv0);
-    printf("  NAME is one of the compiled-in windowed backends:");
-#ifdef HAVE_RAYLIB
-    printf(" raylib");
-#endif
-#ifdef HAVE_SDL3
-    printf(" sdl3");
-#endif
-#ifdef HAVE_GLFW
-    printf(" glfw");
-#endif
-    printf("   (default: raylib)\n");
+    printf("Usage: %s [--backend raylib]\n", argv0);
+    printf("  Renders the simulation in a GPU window (raylib).\n");
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
-    printf("            j jail, f factions, l legend, Tab feed, Space pause, 1/2/3 speed.\n");
-    printf("  Env: CSIM_ZOOM=N initial zoom, CSIM_DEMO=1 open panels, CSIM_SHOT=path screenshot.\n");
+    printf("            j jail, f factions, l legend, a ASCII(Dwarf-Fortress) mode,\n");
+    printf("            Tab feed, Space pause, 1/2/3 speed, q/Esc quit.\n");
+    printf("  Env: CSIM_UI=N ui scale (default: from monitor), CSIM_ZOOM=N zoom,\n");
+    printf("       CSIM_ASCII=1 start in ASCII mode, CSIM_DEMO=1 panels,\n");
+    printf("       CSIM_SHOT=path shot, CSIM_BENCH=N fps.\n");
 }
 
 int main(int argc, char **argv) {
-    const char *backend = "raylib";
     for (int i = 1; i < argc; i++) {
+        const char *name = NULL;
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
-        else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) backend = argv[++i];
-        else if (!strncmp(argv[i], "--backend=", 10)) backend = argv[i] + 10;
+        else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) name = argv[++i];
+        else if (!strncmp(argv[i], "--backend=", 10)) name = argv[i] + 10;
         else { fprintf(stderr, "unknown argument: %s\n", argv[i]); usage(argv[0]); return 2; }
+        if (name && strcmp(name, "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
     }
 
-    const GfxBackend *gb = pick(backend);
-    if (!gb) {
-        fprintf(stderr, "backend '%s' not available; ", backend);
-        gb = first_available();
-        if (!gb) { fprintf(stderr, "no windowed backend compiled in.\n"); return 2; }
-        fprintf(stderr, "using '%s' instead.\n", gb->name);
-    }
-    G = gb;
+    G = gfx_raylib();
 
     World w;
     world_init(&w, 1337);

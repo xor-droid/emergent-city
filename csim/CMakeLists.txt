@@ -37,17 +37,14 @@ add_executable(csim_headless src/main_headless.c ${CORE_SOURCES})
 target_link_libraries(csim_headless m)
 apply_llm(csim_headless)
 
-# ── Graphical build: one UI (src/ui.c) over three windowed backends. ──
-# The UI is backend-neutral (gfx.h); each available backend is compiled in and
-# selectable at runtime via --backend raylib|sdl3|glfw.
-# Note: PNG screenshots (sdl3/glfw) call stbi_write_png from stb_image_write,
-# whose implementation raylib already bundles and links — we just include the
-# header for prototypes, so there's no separate stb TU (avoids symbol clashes).
-set(CSIM_SOURCES src/main.c src/ui.c src/viz.c ${CORE_SOURCES})
-set(CSIM_DEFS "")
+# ── Graphical build: the UI (src/ui.c) over the raylib backend (gfx.h). ──
+# The gfx.h abstraction stays so another backend could be re-added easily, but
+# raylib is the only one shipped.
+set(CSIM_SOURCES src/main.c src/ui.c src/viz.c src/gfx_raylib.c ${CORE_SOURCES})
+set(CSIM_DEFS HAVE_RAYLIB)
 set(CSIM_LIBS m)
 
-# raylib: installed copy if present, else fetch+build from source. (default backend)
+# raylib: installed copy if present, else fetch+build from source.
 find_package(raylib 4.5 QUIET)
 if(NOT raylib_FOUND)
   include(FetchContent)
@@ -57,43 +54,14 @@ if(NOT raylib_FOUND)
     GIT_TAG 5.5 GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(raylib)
 endif()
-list(APPEND CSIM_SOURCES src/gfx_raylib.c)
-list(APPEND CSIM_DEFS HAVE_RAYLIB)
 list(APPEND CSIM_LIBS raylib)
-set(HAVE_SDL3 FALSE)
-set(HAVE_GLFW FALSE)
-
-# SDL3 backend (pkg-config). Text via SDL_RenderDebugText; PNG screenshots via stb.
-if(PkgConfig_FOUND)
-  pkg_check_modules(SDL3 QUIET sdl3)
-  if(SDL3_FOUND)
-    set(HAVE_SDL3 TRUE)
-    list(APPEND CSIM_SOURCES src/gfx_sdl3.c)
-    list(APPEND CSIM_DEFS HAVE_SDL3)
-    list(APPEND CSIM_LIBS ${SDL3_LIBRARIES})
-  endif()
-endif()
-
-# GLFW + legacy OpenGL backend. Text via stb_easy_font; PNG screenshots via stb.
-if(PkgConfig_FOUND)
-  pkg_check_modules(GLFW3 QUIET glfw3)
-  if(GLFW3_FOUND)
-    set(HAVE_GLFW TRUE)
-    list(APPEND CSIM_SOURCES src/gfx_glfw.c)
-    list(APPEND CSIM_DEFS HAVE_GLFW)
-    list(APPEND CSIM_LIBS ${GLFW3_LIBRARIES})
-  endif()
-endif()
-
 if(UNIX AND NOT APPLE)
   list(APPEND CSIM_LIBS GL X11 pthread dl rt m)
 endif()
 
 add_executable(csim ${CSIM_SOURCES})
 target_compile_definitions(csim PRIVATE ${CSIM_DEFS})
-target_include_directories(csim PRIVATE ${SDL3_INCLUDE_DIRS} ${GLFW3_INCLUDE_DIRS})
-target_link_directories(csim PRIVATE ${SDL3_LIBRARY_DIRS} ${GLFW3_LIBRARY_DIRS})
 target_link_libraries(csim ${CSIM_LIBS})
 apply_llm(csim)
 
-message(STATUS "csim backends:  raylib=ON  sdl3=${HAVE_SDL3}  glfw=${HAVE_GLFW}  llm=${HAVE_LLM_LIBS}")
+message(STATUS "csim:  raylib=ON  llm=${HAVE_LLM_LIBS}")

@@ -1,9 +1,9 @@
 /* gfx.h — tiny immediate-mode drawing + input abstraction.
  *
- * The whole UI (src/ui.c) is written ONCE against this interface, so the three
- * windowed backends — raylib, SDL3, GLFW+OpenGL — stay in lockstep by
- * construction. Each backend provides a GfxBackend vtable; main.c picks one at
- * runtime (--backend) and sets the global G, then calls run_ui().
+ * The whole UI (src/ui.c) is written ONCE against this interface. raylib is the
+ * shipped backend (gfx_raylib.c); the abstraction stays so another backend
+ * (SDL3, GLFW, ...) could be re-added just by providing a GfxBackend vtable.
+ * main.c sets the global G and calls run_ui().
  *
  * Coordinates are screen-space pixels, origin top-left, y down. Text is drawn
  * from its top-left at the given pixel height.
@@ -29,6 +29,7 @@ enum {
     GFX_KEY_G, GFX_KEY_J, GFX_KEY_F, GFX_KEY_L,
     GFX_KEY_1, GFX_KEY_2, GFX_KEY_3, GFX_KEY_4, GFX_KEY_5,
     GFX_KEY_6, GFX_KEY_7, GFX_KEY_8, GFX_KEY_9,
+    GFX_KEY_A, GFX_KEY_Q,
     GFX_KEY__COUNT
 };
 enum { GFX_MBTN_LEFT = 0, GFX_MBTN_RIGHT = 1 };
@@ -58,15 +59,15 @@ typedef struct GfxBackend {
     int   (*mouse_down)(int btn);        /* held */
     float (*wheel)(void);                /* this frame's wheel delta */
     void  (*screenshot)(const char *path);
+    float (*ui_scale)(void);             /* suggested UI scale from monitor size (may be NULL) */
+    int   (*focused)(void);              /* 1 if the window has focus (may be NULL -> assume yes) */
 } GfxBackend;
 
 /* The active backend, set by main.c; the UI (ui.c) calls through it. */
 extern const GfxBackend *G;
 
-/* Backend factories — defined only when that backend is compiled in. */
+/* Backend factory. */
 const GfxBackend *gfx_raylib(void);
-const GfxBackend *gfx_sdl3(void);
-const GfxBackend *gfx_glfw(void);
 
 /* The shared UI/run loop (uses G). Returns 0 on clean exit. */
 int run_ui(World *w);

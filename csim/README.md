@@ -28,44 +28,41 @@ csim/
   src/sim.h             full data model + API (no graphics deps)
   src/viz.h / viz.c     render helpers (tile colors, legend, HUD string)
   src/gfx.h             gfx abstraction (drawing + input + backend vtable)
-  src/ui.c              the whole UI, written ONCE against gfx.h
-  src/gfx_raylib.c      backend: raylib
-  src/gfx_sdl3.c        backend: SDL3 (SDL_Renderer + debug text)
-  src/gfx_glfw.c        backend: GLFW + legacy OpenGL (+ stb_easy_font)
-  src/stb_*.h           vendored single-header libs (font, PNG write)
-  src/main.c            entry point + --backend selection
+  src/ui.c              the whole UI, written against gfx.h
+  src/gfx_raylib.c      the raylib backend (GPU window; TTF UI font)
+  src/main.c            entry point
   src/main_headless.c   runs the core and prints a report (plain gcc, no deps)
-  CMakeLists.txt        builds raylib (fetched) + sdl3/glfw (if installed)
+  CMakeLists.txt        builds raylib (fetched)
 ```
 
-## Rendering (one UI, three windowed backends)
-The entire UI lives in `ui.c`, written once against the `gfx.h` interface, so
-the backends can't drift. Pick one at runtime:
+## Rendering (raylib GPU window)
+The UI lives in `ui.c`, written against the small `gfx.h` interface and rendered
+by the raylib backend. (The abstraction stays so another backend could be
+re-added just by providing a `GfxBackend` vtable.)
 ```sh
-./build/csim                     # raylib (default)
-./build/csim --backend sdl3      # SDL3
-./build/csim --backend glfw      # GLFW + OpenGL
-./build/csim --help              # lists compiled-in backends + controls
+./build/csim            # run
+./build/csim --help     # controls + env vars
 ```
 Controls: drag (right-mouse) pan · wheel zoom · click a citizen to inspect ·
-`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `l` legend · `Tab`
-feed · arrows/PgUp/PgDn browse list · Space pause · `1`/`2`/`3` speed · Esc.
-Zoom in and buildings show a type glyph: `H` home, `$` shop, `O` office,
-`B` bar, `+` church, `P` police.
+`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `l` legend · `a` ASCII
+(Dwarf-Fortress) mode · `Tab` feed · arrows/PgUp/PgDn browse list · Space pause ·
+`1`/`2`/`3` speed · `q` or Esc to quit. Zoom in and buildings show a type glyph: `H` home,
+`$` shop, `O` office, `B` bar, `+` church, `P` police. Small UI text uses an
+antialiased TTF (DejaVu Sans) for legibility, scaled for the display.
 
-Env: `CSIM_ZOOM=N` initial zoom · `CSIM_DEMO=1` open panels · `CSIM_SHOT=path`
-dump a screenshot.
+**ASCII mode** (`a`, or `CSIM_ASCII=1`): a Dwarf-Fortress-style render — each
+tile a colored character on black (`,` grass, `.` road, `~` water, `"` park,
+`H/$/O/B/+/P` buildings) and citizens as `@` (`P` police).
 
-Dependencies:
-- **raylib** (always on, default) — fetched + built by CMake; needs GL/X11 dev
-  headers (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev
-  libxcursor-dev libxi-dev`).
-- **SDL3** — `sudo apt install libsdl3-dev` (enables `--backend sdl3`).
-- **GLFW** — `sudo apt install libglfw3-dev` (enables `--backend glfw`).
+Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
+`CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·
+`CSIM_DEMO=1` open panels · `CSIM_SHOT=path` screenshot · `CSIM_BENCH=N`
+uncapped N-frame FPS benchmark.
 
-CMake compiles in whichever are present; missing ones are simply unavailable at
-runtime. Under WSL, run GUI apps with `export DISPLAY=:0` (WSLg provides the
-X server).
+Dependency: **raylib** is fetched + built by CMake (no apt package); it needs
+GL/X11 dev headers (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev
+libxcursor-dev libxi-dev`). Under WSL, run GUI apps with `export DISPLAY=:0`
+(WSLg provides the X server).
 
 Note: build single-threaded in this project — `cmake --build build -j1`.
 
