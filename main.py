@@ -131,6 +131,10 @@ def main() -> int:
     def apply_resize(w: int, h: int) -> None:
         nonlocal screen
         screen = pygame.display.set_mode((w, h), pygame.DOUBLEBUF | pygame.RESIZABLE)
+        # Clear BOTH double buffers so no stale frame/border ghosts through
+        # while resizing (one fill+flip per buffer).
+        screen.fill((0, 0, 0)); pygame.display.flip()
+        screen.fill((0, 0, 0)); pygame.display.flip()
         nw, nh = screen.get_size()
         camera.resize(nw, nh)
         for widget in (renderer, hud, feed, panel):
