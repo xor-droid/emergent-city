@@ -60,6 +60,7 @@ class Agent:
     color: Tuple[int, int, int] = (200, 200, 200)
     faction_id: int = -1
     is_police: bool = False
+    broke_flagged: bool = False
     alive: bool = True
     arrested_ticks: int = 0
     wanted: bool = False
@@ -171,6 +172,15 @@ class Agent:
         # pressure so poverty — and thus occasional crime — stays a real dynamic.
         cost = config.RENT_PER_DAY + self.needs.money * config.UPKEEP_FRACTION
         self.needs.money = max(0.0, self.needs.money - cost)
+        # Ambient milestone: becoming destitute (can't even afford a meal).
+        if self.needs.money < config.MEAL_PRICE and not self.broke_flagged:
+            self.broke_flagged = True
+            world.events.post(WorldEvent(
+                kind="hardship", actor_id=self.id, location=(self.x, self.y),
+                importance=0.4, text=f"{self.name} is destitute",
+            ))
+        elif self.needs.money >= config.LOW_MONEY_THRESHOLD:
+            self.broke_flagged = False
         # Try to find a workplace if missing
         if self.workplace_id == -1:
             for b in world.buildings.workplaces():
@@ -408,6 +418,15 @@ class Agent:
                 kind="negative_social", text=f"Quarreled with {other.name}",
                 importance=0.5, other_id=other.id,
             ))
+            # Only announce a real falling-out: affinity crossed into rivalry.
+            if (self.relationships.hates(other.id)
+                    and other.id not in self.relationships.announced_rivals):
+                self.relationships.announced_rivals.add(other.id)
+                world.events.post(WorldEvent(
+                    kind="negative_social", actor_id=self.id, target_id=other.id,
+                    location=(self.x, self.y), importance=0.3,
+                    text=f"{self.name} and {other.name} became rivals",
+                ))
 
     def _choose_crime_kind(self, world: "World", target) -> str:
         """Pick a crime type from personality & desperation. Violent traits lean

@@ -92,7 +92,8 @@ typedef enum {
 /* World event kinds (drive the event feed). */
 typedef enum {
     EV_CRIME, EV_CRIME_FAILED, EV_ARREST, EV_WANTED, EV_LAID_LOW,
-    EV_DEATH, EV_BIRTH, EV_FRIENDS, EV_QUARREL, EV_FACTION, EV_KIND_COUNT
+    EV_DEATH, EV_BIRTH, EV_FRIENDS, EV_QUARREL, EV_FACTION, EV_HARDSHIP,
+    EV_KIND_COUNT
 } EventKind;
 
 typedef struct {
@@ -110,6 +111,7 @@ typedef struct {
     double affinity;        /* -1..1 */
     double familiarity;     /* 0..1 */
     int announced_friend;   /* already announced a friendship with them */
+    int announced_rival;    /* already announced a rivalry with them */
 } Relation;
 
 typedef struct {
@@ -148,6 +150,7 @@ typedef struct {
     int is_police;
     int faction_id;         /* -1 if none */
     int llm_pending;        /* an LLM decision request is in flight */
+    int broke_flagged;      /* destitute milestone already announced */
 
     int wanted;
     int wanted_ticks;

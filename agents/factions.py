@@ -8,6 +8,7 @@ from typing import List, Dict, TYPE_CHECKING
 import random
 
 import config
+from world.events import WorldEvent
 
 if TYPE_CHECKING:
     from world.world import World
@@ -117,18 +118,19 @@ class FactionSystem:
             # Recruit drift: occasional new member from desperate citizens
             if world.rng.random() < 0.25 and world.agents:
                 cand = world.rng.choice(world.agents)
-                if (cand.alive and cand.faction_id == -1
-                        and cand.needs.belonging < 0.4
-                        and cand.personality.crime_propensity() > 0.5
-                        and f.kind == "gang"):
+                joined = (cand.alive and cand.faction_id == -1 and (
+                    (f.kind == "gang" and cand.needs.belonging < 0.4
+                     and cand.personality.crime_propensity() > 0.5) or
+                    (f.kind == "cult" and cand.personality.faith() > 0.7
+                     and cand.needs.meaning < 0.4)))
+                if joined:
                     self.recruit(f.id, cand.id)
                     cand.faction_id = f.id
-                elif (cand.alive and cand.faction_id == -1
-                      and cand.personality.faith() > 0.7
-                      and cand.needs.meaning < 0.4
-                      and f.kind == "cult"):
-                    self.recruit(f.id, cand.id)
-                    cand.faction_id = f.id
+                    world.events.post(WorldEvent(
+                        kind="faction_join", actor_id=cand.id,
+                        location=(cand.x, cand.y), importance=0.45,
+                        text=f"{cand.name} joined {f.name}",
+                    ))
 
     def to_dict(self) -> dict:
         return {

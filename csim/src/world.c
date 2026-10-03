@@ -223,6 +223,13 @@ static void do_socialize(World *w, Agent *a) {
         mem_add(&a->mem, "Had a good talk", 0.3);
     } else if (delta < -0.05) {
         mem_add(&a->mem, "Quarreled with someone", 0.5);
+        /* announce a real falling-out only when affinity crosses into rivalry */
+        if (ra && ra->affinity <= RIVALRY_AFFINITY && !ra->announced_rival) {
+            ra->announced_rival = 1;
+            Relation *ro = rel_get(&o->rels, a->id); if (ro) ro->announced_rival = 1;
+            char t[96]; snprintf(t, sizeof(t), "%s and %s became rivals", a->name, o->name);
+            events_post(w, EV_QUARREL, a->id, o->id, (int)a->x, (int)a->y, 0.3, t);
+        }
     }
 }
 

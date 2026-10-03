@@ -17,7 +17,6 @@ void llm_init(void) {}
 void llm_shutdown(void) {}
 int  llm_enabled(void) { return 0; }
 int  llm_total_calls(void) { return 0; }
-void llm_build_prompt(const Agent *a, const World *w, char *buf, int n) { (void)a;(void)w; if (n) buf[0]='\0'; }
 int  llm_submit(int agent_id, const char *prompt) { (void)agent_id;(void)prompt; return 0; }
 int  llm_poll(int *agent_id, int *action) { (void)agent_id;(void)action; return 0; }
 

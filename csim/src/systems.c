@@ -156,6 +156,8 @@ void factions_daily(World *w) {
             if (join) {
                 c->faction_id = f->id; f->members++;
                 if (f->leader_id == -1) f->leader_id = c->id;
+                char t[96]; snprintf(t, sizeof(t), "%s joined %s", c->name, f->name);
+                events_post(w, EV_FACTION, c->id, -1, (int)c->x, (int)c->y, 0.45, t);
             }
         }
     }
@@ -197,5 +199,13 @@ void economy_daily(World *w) {
         if (!a->alive) continue;
         double cost = RENT_PER_DAY + a->needs.money * UPKEEP_FRACTION;
         a->needs.money = clampd(a->needs.money - cost, 0.0, 1e9);
+        /* ambient: becoming destitute (can't afford a meal) */
+        if (a->needs.money < MEAL_PRICE && !a->broke_flagged) {
+            a->broke_flagged = 1;
+            char t[96]; snprintf(t, sizeof(t), "%s is destitute", a->name);
+            events_post(w, EV_HARDSHIP, a->id, -1, (int)a->x, (int)a->y, 0.4, t);
+        } else if (a->needs.money >= LOW_MONEY) {
+            a->broke_flagged = 0;
+        }
     }
 }

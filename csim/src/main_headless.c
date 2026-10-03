@@ -62,11 +62,15 @@ int main(void) {
     for (int i = 0; i < w.n_factions; i++)
         if (w.factions[i].active && w.factions[i].members)
             printf(" %s(%d)", w.factions[i].name, w.factions[i].members);
-    printf("\n\nlast events:\n");
-    for (int i = 0; i < 6 && i < w.ev_count; i++) {
+    int ehist[EV_KIND_COUNT] = {0};
+    for (int i = 0; i < w.ev_count; i++) {
         const WorldEvent *e = events_recent(&w, i);
-        if (e) printf("  [%s] %s\n", event_kind_name(e->kind), e->text);
+        if (e) ehist[e->kind]++;
     }
+    printf("\nrecent event kinds (last %d):", w.ev_count);
+    for (int i = 0; i < EV_KIND_COUNT; i++)
+        if (ehist[i]) printf(" %s=%d", event_kind_name((EventKind)i), ehist[i]);
+    printf("\n");
     llm_shutdown();
     return 0;
 }

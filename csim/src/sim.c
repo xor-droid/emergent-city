@@ -229,7 +229,7 @@ const WorldEvent *events_recent(const World *w, int i) {
 const char *event_kind_name(EventKind k) {
     static const char *names[EV_KIND_COUNT] = {
         "crime","crime_failed","arrest","wanted","laid_low",
-        "death","birth","friends","quarrel","faction"
+        "death","birth","friends","quarrel","faction","hardship"
     };
     return (k >= 0 && k < EV_KIND_COUNT) ? names[k] : "?";
 }

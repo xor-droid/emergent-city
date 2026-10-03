@@ -22,6 +22,7 @@ class RelationshipBook:
     # Others we've already announced a friendship with (prevents re-announcing
     # when affinity dips below the threshold and crosses back). Transient.
     announced_friends: set = field(default_factory=set)
+    announced_rivals: set = field(default_factory=set)
 
     def adjust(self, other_id: int, d_affinity: float, d_fam: float = 0.05) -> None:
         a = self.affinity.get(other_id, 0.0) + d_affinity
