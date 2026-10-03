@@ -65,6 +65,8 @@ class Agent:
     wanted: bool = False
     wanted_ticks: int = 0      # lie-low countdown while evading police
     wanted_for: str = ""       # the crime they're wanted for
+    jailed_for: str = ""       # crime they're currently serving time for
+    sentence_total: int = 0    # full sentence length (ticks); served = total - arrested_ticks
     sleep_ticks: int = 0
     speech_cooldown: float = 0.0
     last_dialogue: str = ""
@@ -122,6 +124,10 @@ class Agent:
 
         if self.arrested_ticks > 0:
             self.arrested_ticks -= 1
+            if self.arrested_ticks == 0:
+                # Released: clear jail record.
+                self.jailed_for = ""
+                self.sentence_total = 0
             return
 
         # Convert dt seconds → in-game hours

@@ -171,7 +171,11 @@ DANGER_DECAY_PER_SECOND = 0.001
 # the police for this many ticks, the heat dies down and they're cleared
 # ("lying low"). Police arrest wanted agents within POLICE_ARREST_RADIUS tiles.
 WANTED_DURATION_TICKS = 2400
-POLICE_ARREST_RADIUS = 4
+# Police coverage kept deliberately low so hunts are visible: an officer must be
+# close (small radius) and only has a per-tick chance to actually make the
+# collar, so fugitives can slip away and stay wanted for a while.
+POLICE_ARREST_RADIUS = 2
+POLICE_ARREST_CHANCE = 0.12
 # While wanted, an agent lies low: far less likely to commit new crimes.
 WANTED_CRIME_SUPPRESSION = 0.25
 

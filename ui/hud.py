@@ -57,10 +57,14 @@ class HUD:
         )
         factions = getattr(world, "factions", None)
         n_factions = len(factions.factions) if factions and hasattr(factions, "factions") else 0
+        jailed = sum(
+            1 for a in getattr(world, "agents", [])
+            if getattr(a, "alive", True) and getattr(a, "arrested_ticks", 0) > 0
+        )
 
         line = (
             f"{time_str}"
-            f"Population: {alive}  Deaths: {dead}  Wanted: {wanted}  "
+            f"Population: {alive}  Deaths: {dead}  Wanted: {wanted}  Jail: {jailed}  "
             f"Factions: {n_factions}  "
             f"LLM: {self.llm_calls}"
         )

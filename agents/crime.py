@@ -66,8 +66,7 @@ class CrimeSystem:
         elif police_nearby:
             # Caught red-handed by police at the scene.
             perpetrator.needs.safety = max(0.0, perpetrator.needs.safety - 0.3)
-            perpetrator.arrested_ticks = self._sentence(kind)
-            self._clear_wanted(perpetrator)
+            self._jail(perpetrator, kind)
             self.events.post(WorldEvent(
                 kind="arrest",
                 actor_id=perpetrator.id,
@@ -108,6 +107,14 @@ class CrimeSystem:
     def _sentence(self, kind: str) -> int:
         """Jail time for a crime, scaled by its severity."""
         return int(config.ARREST_DURATION_TICKS * self._severity(kind))
+
+    def _jail(self, a, kind: str) -> None:
+        """Put an agent in jail for `kind`, recording the sentence for the roster."""
+        sentence = self._sentence(kind)
+        a.arrested_ticks = sentence
+        a.sentence_total = sentence
+        a.jailed_for = kind
+        self._clear_wanted(a)
 
     def _mark_wanted(self, a, kind: str, world: "World") -> None:
         # More serious crimes are hunted longer. Keep the longer of any existing
@@ -151,10 +158,9 @@ class CrimeSystem:
                 continue
             cop = next((p for p in police
                         if abs(p.x - a.x) <= r and abs(p.y - a.y) <= r), None)
-            if cop is not None:
+            if cop is not None and world.rng.random() < config.POLICE_ARREST_CHANCE:
                 kind = a.wanted_for or "a crime"
-                a.arrested_ticks = self._sentence(kind)
-                self._clear_wanted(a)
+                self._jail(a, kind)
                 self.events.post(WorldEvent(
                     kind="arrest", actor_id=a.id, target_id=cop.id,
                     location=(a.x, a.y), importance=0.7,

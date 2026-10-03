@@ -27,6 +27,7 @@ from ui.hud import HUD
 from ui.event_feed import EventFeed
 from ui.agent_panel import AgentPanel
 from ui.god_mode import GodMode
+from ui.jail_panel import JailPanel
 from ui.save_load import SaveLoad
 from llm.openrouter_client import OpenRouterClient
 from llm.decision_router import DecisionRouter
@@ -102,6 +103,7 @@ def main() -> int:
     feed = EventFeed(screen, world)
     panel = AgentPanel(screen, world, camera)
     god = GodMode(world)
+    jail = JailPanel(screen, world)
     saver = SaveLoad(world)
 
     # ── State
@@ -137,7 +139,7 @@ def main() -> int:
         screen.fill((0, 0, 0)); pygame.display.flip()
         nw, nh = screen.get_size()
         camera.resize(nw, nh)
-        for widget in (renderer, hud, feed, panel):
+        for widget in (renderer, hud, feed, panel, jail):
             widget.screen = screen
         log.info("Resized window to %dx%d (actual %dx%d)", w, h, nw, nh)
 
@@ -179,6 +181,8 @@ def main() -> int:
                     god.toggle()
                 elif event.key == pygame.K_p:
                     _request_shot()
+                elif event.key == pygame.K_j:
+                    jail.toggle_visible()
                 elif event.key == pygame.K_TAB:
                     feed.toggle_visible()
                 elif event.key == pygame.K_ESCAPE:
@@ -232,6 +236,7 @@ def main() -> int:
         )
         feed.draw()
         panel.draw()
+        jail.draw()
         god.draw_indicator(screen)
 
         pygame.display.flip()
