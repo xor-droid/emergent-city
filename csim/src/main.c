@@ -21,22 +21,6 @@ int run_raylib(World *w) {
     return 1;
 }
 #endif
-#ifndef HAVE_SDL2
-int run_sdl2(World *w) {
-    (void)w;
-    fprintf(stderr, "sdl2 backend not built. Install it and rebuild:\n"
-                    "  sudo apt install libsdl2-dev libsdl2-ttf-dev\n");
-    return 1;
-}
-#endif
-#ifndef HAVE_TUI
-int run_tui(World *w) {
-    (void)w;
-    fprintf(stderr, "tui backend not built. Install it and rebuild:\n"
-                    "  sudo apt install libncurses-dev\n");
-    return 1;
-}
-#endif
 #ifndef HAVE_NC
 int run_notcurses(World *w) {
     (void)w;
@@ -47,7 +31,7 @@ int run_notcurses(World *w) {
 #endif
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--backend raylib|sdl2|tui|notcurses] [--blit MODE]\n", argv0);
+    printf("Usage: %s [--backend raylib|notcurses] [--blit MODE]\n", argv0);
     printf("  --blit (notcurses only): default|pixel|sextant|quad|half|braille|ascii\n"
            "         pixel = true terminal pixel graphics (Kitty/Sixel/iTerm2);\n"
            "         sextant = 2x3 sub-cell blocks (works everywhere, incl. tmux).\n");
@@ -55,16 +39,6 @@ static void usage(const char *argv0) {
     printf("  raylib backend: built\n");
 #else
     printf("  raylib backend: NOT built\n");
-#endif
-#if defined(HAVE_SDL2)
-    printf("  sdl2 backend:   built\n");
-#else
-    printf("  sdl2 backend:   NOT built (sudo apt install libsdl2-dev libsdl2-ttf-dev)\n");
-#endif
-#if defined(HAVE_TUI)
-    printf("  tui backend:    built\n");
-#else
-    printf("  tui backend:    NOT built (sudo apt install libncurses-dev)\n");
 #endif
 #if defined(HAVE_NC)
     printf("  notcurses:      built\n");
@@ -76,8 +50,8 @@ static void usage(const char *argv0) {
 int main(int argc, char **argv) {
 #if defined(HAVE_RAYLIB)
     const char *backend = "raylib";
-#elif defined(HAVE_SDL2)
-    const char *backend = "sdl2";
+#elif defined(HAVE_NC)
+    const char *backend = "notcurses";
 #else
     const char *backend = "none";
 #endif
@@ -108,10 +82,8 @@ int main(int argc, char **argv) {
     world_populate(&w, 150);
 
     if (!strcmp(backend, "raylib")) return run_raylib(&w);
-    if (!strcmp(backend, "sdl2"))   return run_sdl2(&w);
-    if (!strcmp(backend, "tui") || !strcmp(backend, "ascii")) return run_tui(&w);
     if (!strcmp(backend, "notcurses") || !strcmp(backend, "nc")) return run_notcurses(&w);
-    fprintf(stderr, "unknown backend '%s' (use raylib, sdl2, tui or notcurses)\n", backend);
+    fprintf(stderr, "unknown backend '%s' (use raylib or notcurses)\n", backend);
     usage(argv[0]);
     return 2;
 }

@@ -25,8 +25,6 @@ void hud_string(const World *w, char *buf, int n, float speed, int paused,
 
 /* Renderer entry points. Return 0 on clean exit, nonzero if unavailable. */
 int run_raylib(World *w);
-int run_sdl2(World *w);
-int run_tui(World *w);     /* ncurses ASCII renderer */
-int run_notcurses(World *w); /* notcurses high-res terminal renderer */
+int run_notcurses(World *w); /* notcurses terminal renderer (pixel/sextant/ascii) */
 
 #endif /* VIZ_H */
