@@ -200,7 +200,7 @@ int run_ui(World *w){
     }
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
-    if(getenv("CSIM_DEMO")){ god=1; show_jail=1; show_factions=1; }
+    if(getenv("CSIM_DEMO")){ god=1; show_jail=1; show_factions=1; if(w->n_agents>0) selected=w->agents[0].id; }
     /* benchmark mode: uncapped (backends disable vsync when CSIM_BENCH is set),
      * sim paused, measure FPS over N frames after a 60-frame warmup. */
     int bench=0; { const char *bs=getenv("CSIM_BENCH"); if(bs){ bench=atoi(bs); if(bench<1) bench=1; } }
@@ -473,26 +473,36 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(300); G->fill_rect(0,hudH,pw,US(320),gfx_rgba(24,22,30,230));
-                int yy=hudH+US(6);
-                snprintf(buf,sizeof(buf),"%s  #%d",a->name,a->id); G->text(buf,US(10),yy,US(15),COL_GOLD); yy+=US(24);
-                snprintf(buf,sizeof(buf),"Age %d   Action: %s",a->age,action_name(a->action)); G->text(buf,US(10),yy,US(12),COL_WHITE); yy+=US(18);
-                snprintf(buf,sizeof(buf),"Money %.0f   Faction %d",a->needs.money,a->faction_id); G->text(buf,US(10),yy,US(12),COL_WHITE); yy+=US(18);
-                if(a->is_police){ G->text("POLICE",US(10),yy,US(12),gfx_rgb(120,180,230)); yy+=US(18); }
-                if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED for %s",a->wanted_for); G->text(buf,US(10),yy,US(12),COL_RED); yy+=US(18); }
-                if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED for %s",a->jailed_for); G->text(buf,US(10),yy,US(12),COL_AMBER); yy+=US(18); }
-                const char *lbl[6]={"hunger","energy","safety","social","meaning","belong"};
+                int pw=US(348), ph=US(336);
+                G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
+                G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
+                int yy=hudH+US(10);
+                snprintf(buf,sizeof(buf),"%.26s  #%d",a->name,a->id); G->text(buf,US(12),yy,US(16),COL_GOLD); yy+=US(25);
+                G->line(US(10),yy,pw-US(10),yy,gfx_rgb(72,68,84)); yy+=US(8);
+                snprintf(buf,sizeof(buf),"Age %d      %s",a->age,action_name(a->action)); G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
+                snprintf(buf,sizeof(buf),"Money %.0f      %.16s",a->needs.money,faction_name(w,a->faction_id)); G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
+                if(a->is_police){ G->text("POLICE",US(12),yy,US(13),gfx_rgb(120,180,230)); yy+=US(20); }
+                if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED: %.24s",a->wanted_for); G->text(buf,US(12),yy,US(13),COL_RED); yy+=US(20); }
+                if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED: %.24s",a->jailed_for); G->text(buf,US(12),yy,US(13),COL_AMBER); yy+=US(20); }
+                yy+=US(4);
+                const char *lbl[6]={"Hunger","Energy","Safety","Social","Meaning","Belong"};
                 double v[6]={a->needs.hunger,a->needs.energy,a->needs.safety,a->needs.social,a->needs.meaning,a->needs.belonging};
-                for(int i=0;i<6;i++){ G->text(lbl[i],US(10),yy,US(11),COL_WHITE);
-                    G->fill_rect(US(90),yy,US(180),US(8),gfx_rgb(50,50,60));
+                int barx=US(96), barw=US(188), barh=US(13);
+                for(int i=0;i<6;i++){
+                    G->text(lbl[i],US(12),yy+US(1),US(12),gfx_rgb(208,202,192));
+                    G->fill_rect(barx,yy,barw,barh,gfx_rgb(46,44,54));
                     GfxColor c=v[i]<0.2?COL_RED:v[i]<0.4?COL_AMBER:COL_GREEN;
-                    G->fill_rect(US(90),yy,(int)(US(180)*v[i]),US(8),c); yy+=US(16); }
+                    int fw=(int)(barw*(v[i]<0?0:v[i]>1?1:v[i])); G->fill_rect(barx,yy,fw,barh,c);
+                    snprintf(buf,sizeof(buf),"%d%%",(int)(v[i]*100+0.5)); G->text(buf,barx+barw+US(8),yy+US(1),US(11),gfx_rgb(185,180,172));
+                    yy+=US(19);
+                }
+                yy+=US(5);
                 int friends=0,rivals=0;
                 for(int i=0;i<a->rels.n;i++){ if(a->rels.rel[i].affinity>=FRIENDSHIP_AFFINITY) friends++;
                     else if(a->rels.rel[i].affinity<=RIVALRY_AFFINITY) rivals++; }
-                snprintf(buf,sizeof(buf),"Friends %d  Rivals %d  Known %d",friends,rivals,a->rels.n);
-                G->text(buf,US(10),yy,US(12),COL_WHITE); yy+=US(18);
-                G->text("arrows/wheel: browse   esc: close",US(10),yy+US(4),US(10),COL_GRAY);
+                snprintf(buf,sizeof(buf),"Friends %d    Rivals %d    Known %d",friends,rivals,a->rels.n);
+                G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
+                G->text("arrows / wheel: browse      esc: close",US(12),yy,US(11),COL_GRAY);
             } else selected=-1;
         }
 
