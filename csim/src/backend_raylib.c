@@ -16,6 +16,13 @@ static Color rgb(unsigned char r, unsigned char g, unsigned char b) { return (Co
 static unsigned char clampb(int v){ return (unsigned char)(v<0?0:v>255?255:v); }
 static Color shade(Color c, int d) { return (Color){clampb(c.r+d),clampb(c.g+d),clampb(c.b+d),c.a}; }
 
+/* Single-char type marker drawn on buildings when zoomed in. */
+static char building_glyph(TileType t) {
+    switch (t) { case T_HOME: return 'H'; case T_SHOP: return '$'; case T_WORK: return 'O';
+                 case T_BAR: return 'B'; case T_CHURCH: return '+'; case T_POLICE: return 'P';
+                 default: return 0; }
+}
+
 static const char *faction_name(World *w, int fid) {
     if (fid < 0 || fid >= w->n_factions) return "-";
     return w->factions[fid].name;
@@ -37,6 +44,7 @@ int run_raylib(World *w) {
 
     Camera2D cam = {0};
     cam.zoom = 1.0f;
+    { const char *ez = getenv("CSIM_ZOOM"); if (ez) { float z = (float)atof(ez); if (z > 0) cam.zoom = z; } }
     cam.offset = (Vector2){screenW * 0.5f, screenH * 0.5f};
     cam.target = (Vector2){WORLD_W * TILE_PX * 0.5f, WORLD_H * TILE_PX * 0.5f};
 
@@ -163,6 +171,22 @@ int run_raylib(World *w) {
                 DrawRectangleLines((int)(a->x*TILE_PX)-2, (int)(a->y*TILE_PX)-2, TILE_PX+4, TILE_PX+4, YELLOW);
         }
         EndMode2D();
+
+        /* ── zoom-aware building type glyphs (screen space, crisp) ── */
+        float tpx = TILE_PX * cam.zoom;              /* on-screen tile size */
+        if (tpx >= 13.0f) {
+            int fs = (int)(tpx * 0.72f); if (fs < 8) fs = 8;
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++) {
+                    char g = building_glyph((TileType)w->tile[x][y]);
+                    if (!g) continue;
+                    char s[2] = { g, 0 };
+                    Vector2 sp = GetWorldToScreen2D(
+                        (Vector2){ x*TILE_PX + TILE_PX*0.5f, y*TILE_PX + TILE_PX*0.5f }, cam);
+                    int tw = MeasureText(s, fs);
+                    DrawText(s, (int)(sp.x - tw*0.5f), (int)(sp.y - fs*0.5f), fs, (Color){18,14,20,230});
+                }
+        }
 
         /* ── HUD ── */
         char hud[256]; hud_string(w, hud, sizeof(hud), speed, paused, GetFPS(), "raylib");

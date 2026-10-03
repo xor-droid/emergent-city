@@ -47,6 +47,8 @@ Two best-of-breed renderers: a GPU window (raylib) and a terminal renderer
 ```
 Controls (raylib): drag/arrows pan, wheel zoom, click a citizen to inspect,
   g god mode, j jail, f factions, l legend, Tab feed, Space pause, 1/2/3 speed.
+  Zoom in (wheel) and buildings show a type glyph: H home, $ shop, O office,
+  B bar, + church, P police. CSIM_ZOOM=N sets the initial zoom.
 notcurses: arrows pan/select, g god, 1-8 tool, Enter apply, j jail, f factions,
   l legend, Tab feed, Space pause, 1/2/3 speed, q quit.
 
