@@ -1,8 +1,9 @@
-/* sim.h — Emergent City C port: core data + simulation API (no graphics deps).
+/* sim.h — Emergent City C port: full data model + simulation API (no graphics deps).
  *
- * This is a proof-of-concept port of the Python sim's data-oriented core:
- * Needs, Personality, UtilityAI and a minimal World/agent/time loop. It compiles
- * with plain C (libm only); the renderer (main.c, raylib) is a thin layer on top.
+ * Ports the Python sim's data-oriented core to C: Needs, Personality, UtilityAI,
+ * Relationships, Memory, Crime+Wanted+Jail, Factions, Economy, Events, A*
+ * pathfinding, and the World/agent/time loop. Compiles with C + libm; renderers
+ * (backend_raylib.c / backend_notcurses.c) are thin layers on top.
  */
 #ifndef SIM_H
 #define SIM_H
@@ -14,8 +15,13 @@
 #define WORLD_W 120
 #define WORLD_H 90
 #define MAX_AGENTS 400
+#define MAX_BUILDINGS 2048
+#define MAX_FACTIONS 32
+#define EVENT_RING 256          /* recent world events kept for the feed */
+#define MAX_RELATIONS 40        /* per-agent relationship ledger (LRU-ish) */
+#define AGENT_MEMORY 8          /* per-agent recent memories */
 
-/* ── Needs decay per in-game hour (from config.py) ───────────────────────── */
+/* ── Needs decay per in-game hour ────────────────────────────────────────── */
 #define HUNGER_DECAY     0.045
 #define ENERGY_DECAY     0.035
 #define SOCIAL_DECAY     0.020
@@ -26,7 +32,7 @@
 
 /* ── Time ────────────────────────────────────────────────────────────────── */
 #define SECONDS_PER_HOUR 30.0
-#define TIME_SCALE       (3600.0 / SECONDS_PER_HOUR)   /* in-game sec / real sec */
+#define TIME_SCALE       (3600.0 / SECONDS_PER_HOUR)
 #define DAYTIME_START    6
 #define NIGHT_START      20
 
@@ -41,12 +47,28 @@
 #define RENT_PER_DAY     5.0
 #define UPKEEP_FRACTION  0.35
 
-/* ── Personality ─────────────────────────────────────────────────────────── */
+/* ── Personality / movement ──────────────────────────────────────────────── */
 #define BIG5_MEAN  0.5
 #define BIG5_SD    0.18
-
-#define AGENT_SPEED_TPS 2.0   /* tiles per real second at 1x */
+#define AGENT_SPEED_TPS 2.0
 #define ACTION_SECONDS  6.0
+
+/* ── Relationships ───────────────────────────────────────────────────────── */
+#define FRIENDSHIP_AFFINITY 0.40
+#define RIVALRY_AFFINITY    (-0.30)
+#define RELATIONSHIP_DECAY  0.010
+#define INTERACT_FAMILIARITY 0.05
+
+/* ── Crime / wanted / jail ───────────────────────────────────────────────── */
+#define WITNESS_RADIUS       5
+#define ARREST_DURATION      600     /* jail sentence base (ticks) */
+#define WANTED_DURATION      2400    /* lie-low window (ticks) */
+#define POLICE_ARREST_RADIUS 2
+#define POLICE_ARREST_CHANCE 0.12
+#define WANTED_CRIME_SUPPRESSION 0.25
+
+/* ── Factions ────────────────────────────────────────────────────────────── */
+#define FACTION_RADIUS 8
 
 /* Behaviorally-relevant unique traits, as a bitmask. */
 enum {
@@ -59,13 +81,19 @@ enum {
 };
 
 typedef enum {
-    T_GRASS, T_ROAD, T_HOME, T_SHOP, T_WORK, T_BAR, T_CHURCH, T_TYPE_COUNT
+    T_GRASS, T_ROAD, T_HOME, T_SHOP, T_WORK, T_BAR, T_CHURCH, T_POLICE, T_TYPE_COUNT
 } TileType;
 
 typedef enum {
     A_EAT, A_SLEEP, A_WORK, A_SOCIALIZE, A_DRINK, A_PRAY, A_SHOP,
-    A_GO_HOME, A_CRIME, A_FLEE, A_WANDER, A_COUNT
+    A_GO_HOME, A_CRIME, A_FLEE, A_PATROL, A_WANDER, A_COUNT
 } Action;
+
+/* World event kinds (drive the event feed). */
+typedef enum {
+    EV_CRIME, EV_CRIME_FAILED, EV_ARREST, EV_WANTED, EV_LAID_LOW,
+    EV_DEATH, EV_BIRTH, EV_FRIENDS, EV_QUARREL, EV_FACTION, EV_KIND_COUNT
+} EventKind;
 
 typedef struct {
     double hunger, energy, safety, social, meaning, belonging, money;
@@ -76,33 +104,116 @@ typedef struct {
     uint32_t traits;        /* TR_* bitmask */
 } Personality;
 
+/* One remembered other agent. */
+typedef struct {
+    int other_id;
+    double affinity;        /* -1..1 */
+    double familiarity;     /* 0..1 */
+    int announced_friend;   /* already announced a friendship with them */
+} Relation;
+
+typedef struct {
+    Relation rel[MAX_RELATIONS];
+    int n;
+} Relationships;
+
+typedef struct {
+    char text[48];
+    double importance;
+} Memory;
+
+typedef struct {
+    Memory items[AGENT_MEMORY];
+    int head, n;            /* ring buffer */
+} MemoryBook;
+
 typedef struct {
     int id, alive;
-    double x, y;            /* tile position (float for smooth-ish move) */
-    int tx, ty;            /* current target tile (-1 if none) */
-    int home_x, home_y;
+    char name[32];
+    int age;
+    double x, y;
+    int tx, ty;
+    int home_id;            /* building index, or -1 */
+    int workplace_id;       /* building index, or -1 */
     Needs needs;
     Personality pers;
+    Relationships rels;
+    MemoryBook mem;
     Action action;
-    double action_progress; /* seconds until re-decide */
-    int acted;             /* action effect already applied this decision */
-    double move_progress;   /* accumulates toward one-tile steps */
+    double action_progress;
+    int acted;
+    double move_progress;
+    char facing;
+
+    int is_police;
+    int faction_id;         /* -1 if none */
+
+    int wanted;
+    int wanted_ticks;
+    char wanted_for[16];
+    int arrested_ticks;     /* jail time remaining (frozen while >0) */
+    int sentence_total;
+    char jailed_for[16];
+
+    char last_thought[64];
+    char last_dialogue[80];
+
     unsigned char r, g, b;  /* render color (mood) */
 } Agent;
 
 typedef struct {
-    uint8_t tile[WORLD_W][WORLD_H];   /* TileType */
+    int id;
+    TileType type;
+    int x, y, w, h;
+    int capacity;
+    int n_residents;        /* for homes */
+    int n_workers;          /* for workplaces */
+} Building;
+
+typedef struct {
+    int id, active;
+    char name[32];
+    int is_cult;            /* 0 gang, 1 cult */
+    int leader_id;
+    int members;
+    double treasury;
+    unsigned char r, g, b;
+} Faction;
+
+typedef struct {
+    EventKind kind;
+    int actor_id, target_id;
+    int x, y;
+    double importance;
+    char text[96];
+} WorldEvent;
+
+typedef struct {
+    uint8_t tile[WORLD_W][WORLD_H];     /* TileType */
+    uint8_t danger_[WORLD_W][WORLD_H];  /* 0..255 danger (crime heat) */
+
     Agent agents[MAX_AGENTS];
     int n_agents;
+    int next_id;
+
+    Building buildings[MAX_BUILDINGS];
+    int n_buildings;
+
+    Faction factions[MAX_FACTIONS];
+    int n_factions;
+
+    WorldEvent events[EVENT_RING];      /* ring buffer */
+    int ev_head, ev_count;
+
     double hour;    /* 0..24 */
     int day;
     Rng rng;
-    /* lightweight stats for the HUD / headless report */
-    int deaths;
-    int crimes;
+
+    /* stats for HUD / headless */
+    int deaths, crimes;
 } World;
 
-/* Personality */
+/* ── Personality ─────────────────────────────────────────────────────────── */
 void   personality_random(Personality *p, Rng *r);
 double pers_work_ethic(const Personality *p);
 double pers_social_drive(const Personality *p);
@@ -110,20 +221,65 @@ double pers_crime_propensity(const Personality *p);
 double pers_faith(const Personality *p);
 int    pers_has(const Personality *p, uint32_t trait);
 
-/* Needs */
+/* ── Needs ───────────────────────────────────────────────────────────────── */
 void needs_decay(Needs *n, double hours);
 int  needs_is_critical(const Needs *n);
 int  needs_is_dying(const Needs *n);
 
-/* Utility AI */
+/* ── Relationships ───────────────────────────────────────────────────────── */
+Relation *rel_get(Relationships *rs, int other_id);        /* NULL if unknown */
+Relation *rel_touch(Relationships *rs, int other_id);      /* get-or-create */
+void      rel_adjust(Relationships *rs, int other_id, double d_aff);
+void      rel_decay_all(Relationships *rs, double days);
+int       rel_is_friend(const Relationships *rs, int other_id);
+
+/* ── Memory ──────────────────────────────────────────────────────────────── */
+void mem_add(MemoryBook *m, const char *text, double importance);
+
+/* ── Utility AI ──────────────────────────────────────────────────────────── */
 Action      utility_best_action(const Agent *a, const World *w);
 const char *action_name(Action a);
 const char *tile_name(TileType t);
 
-/* World */
+/* ── Events ──────────────────────────────────────────────────────────────── */
+void             events_post(World *w, EventKind k, int actor, int target,
+                             int x, int y, double importance, const char *text);
+const WorldEvent *events_recent(const World *w, int i); /* i=0 newest; NULL past end */
+const char       *event_kind_name(EventKind k);
+
+/* ── Crime / wanted / jail ───────────────────────────────────────────────── */
+void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind);
+void crime_tick(World *w);        /* police hunting + lie-low cooldown */
+int  crime_jailed_count(const World *w);
+int  crime_wanted_count(const World *w);
+
+/* ── Factions ────────────────────────────────────────────────────────────── */
+void factions_seed(World *w);
+void factions_daily(World *w);
+int  factions_raise(World *w, int is_cult, int cx, int cy);  /* returns faction id or -1 */
+
+/* ── Economy ─────────────────────────────────────────────────────────────── */
+void economy_daily(World *w);     /* cost of living, wages settle */
+
+/* ── Pathing (A*) ────────────────────────────────────────────────────────── */
+int  tile_walkable(const World *w, int x, int y);
+/* step one tile from (fx,fy) toward (tx,ty); writes next (*nx,*ny). 1 if moved. */
+int  path_step(const World *w, int fx, int fy, int tx, int ty, int *nx, int *ny);
+
+/* ── Buildings ───────────────────────────────────────────────────────────── */
+int  building_nearest(const World *w, int fx, int fy, TileType type);
+Building *building_get(World *w, int id);
+
+/* ── World ───────────────────────────────────────────────────────────────── */
 void world_init(World *w, uint64_t seed);
 void world_populate(World *w, int n);
 void world_tick(World *w, double dt_seconds);
 int  world_is_night(const World *w);
+int  world_alive(const World *w);
+Agent *world_agent_at(World *w, int tx, int ty, double radius);
+
+/* ── Save / load (JSON via cJSON if available; no-op stubs otherwise) ─────── */
+int  world_save(const World *w, const char *path);   /* 1 ok, 0 fail */
+int  world_load(World *w, const char *path);
 
 #endif /* SIM_H */

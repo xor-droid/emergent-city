@@ -1,16 +1,22 @@
-# Emergent City — C port (proof of concept)
+# Emergent City — C port
 
-A C port of the sim's data-oriented core, to gauge the effort of a full POSIX-C
-port with a portable graphics UI. It ports the real logic — **Needs decay,
-Personality (Big Five + traits and all derived weights), and the UtilityAI
-action scorer** — plus a minimal world/agent/time loop, deterministic PRNG, and
-a raylib renderer.
+A full POSIX-C port of the simulation. Ports the real logic from the Python sim:
+**Needs decay, Personality (Big Five + traits + all derived weights), UtilityAI,
+Relationships (friends/rivals + decay), Memory, Crime + Wanted + Jail (with
+severity-scaled hunts/sentences), police hunting + lie-low, Factions (gangs &
+cults), Economy (cost of living), an Event feed, greedy pathing, and the
+World/agent/time loop** — deterministic PCG32 RNG, binary save/load, and two
+renderers (raylib window + notcurses terminal). LLM-driven decisions are the one
+piece not yet ported (planned via libcurl + cJSON against the local Qwen server).
 
 ## Layout
 ```
 csim/
   src/rng.h             PCG32 deterministic PRNG (header-only)
-  src/sim.h / sim.c     the ported core (no graphics deps)
+  src/sim.c             core leaf systems (needs/personality/utility/rels/mem/events/pathing/buildings)
+  src/systems.c         crime+wanted+jail, factions, economy
+  src/world.c           worldgen, population, tick orchestration, save/load
+  src/sim.h             full data model + API (no graphics deps)
   src/viz.h / viz.c     shared render helpers (tile colors, HUD string)
   src/main.c            entry point + --backend dispatch
   src/main_headless.c   runs the core and prints a report (plain gcc, no deps)

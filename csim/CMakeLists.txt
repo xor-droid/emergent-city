@@ -7,12 +7,14 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(CORE_SOURCES src/sim.c src/systems.c src/world.c)
+
 # ── Headless core: zero external dependencies (libm only). Always builds. ──
-add_executable(csim_headless src/main_headless.c src/sim.c)
+add_executable(csim_headless src/main_headless.c ${CORE_SOURCES})
 target_link_libraries(csim_headless m)
 
 # ── Graphical build: compile whichever renderer backends are available. ──
-set(CSIM_SOURCES src/main.c src/sim.c src/viz.c)
+set(CSIM_SOURCES src/main.c src/viz.c ${CORE_SOURCES})
 set(CSIM_DEFS "")
 set(CSIM_LIBS m)
 
