@@ -67,6 +67,22 @@
 #define POLICE_ARREST_CHANCE 0.12
 #define WANTED_CRIME_SUPPRESSION 0.25
 
+/* ── Crime roles & the drug trade ────────────────────────────────────────── */
+enum { CR_CITIZEN, CR_CAREER, CR_DEALER, CR_KINGPIN, CR_KILLER };  /* Agent.crime_role */
+#define KILLER_CHANCE 0.006   /* tiny chance a spawned agent is a latent serial killer */
+#define CAREER_FRACTION   0.07    /* of high-propensity agents who turn pro */
+#define USER_FRACTION     0.12    /* share of citizens who become drug users */
+#define DRUG_STREET_PRICE 14.0    /* dealer -> user, per unit (scaled by addiction) */
+#define DRUG_WHOLESALE    6.0     /* kingpin -> dealer, per unit */
+#define DRUG_BATCH        8       /* units per import / wholesale buy */
+#define SELL_RADIUS       6       /* how near a user must be for a street sale */
+#define TURF_RADIUS       16      /* dealer territory radius */
+#define RETALIATE_RADIUS  10      /* immediate retaliation range */
+/* career-criminal escalation thresholds (crimes_committed) */
+#define ESCALATE_T1 4
+#define ESCALATE_T2 10
+#define ESCALATE_T3 22
+
 /* ── Factions ────────────────────────────────────────────────────────────── */
 #define FACTION_RADIUS 8
 
@@ -152,6 +168,15 @@ typedef struct {
     int faction_id;         /* -1 if none */
     int llm_pending;        /* an LLM decision request is in flight */
     int broke_flagged;      /* destitute milestone already announced */
+
+    /* ── crime roles & the drug trade ── */
+    unsigned char crime_role;   /* CR_* */
+    int   crimes_committed;     /* successful crimes (notoriety + escalation tier) */
+    float crime_skill;          /* 0..1 competence: better success, harder to catch */
+    float addiction;            /* 0..1 drug dependence (users) */
+    int   drug_stock;           /* dealer/kingpin inventory, units */
+    int   dealer_id;            /* a user's regular dealer (-1 none) */
+    int   turf_x, turf_y;       /* a dealer's territory centre */
 
     int wanted;
     int wanted_ticks;
@@ -257,6 +282,8 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind);
 void crime_tick(World *w);        /* police hunting + lie-low cooldown */
 int  crime_jailed_count(const World *w);
 int  crime_wanted_count(const World *w);
+const char *crime_role_name(int role);
+void assign_crime_roles(World *w);   /* post-populate: pick career/dealer/kingpin/killer/users */
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

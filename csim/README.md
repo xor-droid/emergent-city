@@ -2,8 +2,11 @@
 
 A full POSIX-C port of the simulation. Ports the real logic from the Python sim:
 **Needs decay, Personality (Big Five + traits + all derived weights), UtilityAI,
-Relationships (friends/rivals + decay), Memory, Crime + Wanted + Jail (with
-severity-scaled hunts/sentences), police hunting + lie-low, Factions (gangs &
+Relationships (friends/rivals + decay), Memory, a layered **crime underworld**
+(career criminals who escalate for profit, a wholesale→dealer→user **drug
+trade** with turf/customer **retaliation**, faction turf wars, extortion, plus
+a rare latent **serial killer**), Wanted + Jail (severity-scaled hunts/sentences),
+police hunting + lie-low, Factions (gangs &
 cults), Economy (cost of living), an Event feed, greedy pathing, and the
 World/agent/time loop** — deterministic PCG32 RNG, binary save/load, a raylib
 GPU-window renderer, and **LLM-driven decisions** (libcurl + cJSON against the

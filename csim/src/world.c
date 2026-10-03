@@ -172,6 +172,7 @@ void world_populate(World *w, int n) {
         a->wanted_for[0] = a->jailed_for[0] = '\0';
         w->n_agents++;
     }
+    assign_crime_roles(w);   /* career criminals, dealers, kingpins, users, a rare killer */
 }
 
 Agent *world_agent_by_id(World *w, int id) {
@@ -244,12 +245,42 @@ static int arrived(const Agent *a) {
 }
 
 static const char *choose_crime_kind(World *w, Agent *a, Agent *target) {
-    if (!target) return "theft";
     Personality *p = &a->pers;
-    if ((pers_has(p, TR_CRUEL) || pers_has(p, TR_VENGEFUL) || pers_has(p, TR_BRAVE))
-        && rng_double(&w->rng) < 0.5) return "assault";
-    if (a->needs.money < LOW_MONEY * 0.5 && rng_double(&w->rng) < 0.4) return "robbery";
-    return "theft";
+    Rng *r = &w->rng;
+
+    /* serial killer: kill for the thrill (needs a victim nearby) */
+    if (a->crime_role == CR_KILLER) return target ? "murder" : "burglary";
+
+    /* drug trade */
+    if (a->crime_role == CR_KINGPIN) return "trafficking";
+    if (a->crime_role == CR_DEALER)  return a->drug_stock > 0 ? "dealing" : "trafficking";
+
+    /* faction / rivalry violence */
+    if (target) {
+        if (a->faction_id >= 0 && target->faction_id >= 0 && target->faction_id != a->faction_id)
+            return rng_double(r) < 0.5 ? "assault" : "vandalism";                 /* turf war */
+        if (a->faction_id >= 0 && target->faction_id < 0 && rng_double(r) < 0.4)
+            return "extortion";                                                   /* shakedown */
+        Relation *rel = rel_get(&a->rels, target->id);
+        if (rel && rel->affinity <= RIVALRY_AFFINITY &&
+            (pers_has(p, TR_VENGEFUL) || pers_has(p, TR_CRUEL)) && rng_double(r) < 0.6)
+            return "assault";                                                     /* settle a grudge */
+        if ((pers_has(p, TR_CRUEL) || pers_has(p, TR_BRAVE)) && rng_double(r) < 0.25)
+            return "assault";
+    }
+
+    /* career criminal: escalate to bigger scores as notoriety grows */
+    if (a->crime_role == CR_CAREER) {
+        int cc = a->crimes_committed;
+        if (cc >= ESCALATE_T3 && rng_double(r) < 0.35) return "arson";
+        if (cc >= ESCALATE_T2) return rng_double(r) < 0.6 ? "robbery" : "burglary";
+        if (cc >= ESCALATE_T1) return rng_double(r) < 0.5 ? "burglary" : (target ? "robbery" : "theft");
+        return target ? "robbery" : "burglary";
+    }
+
+    /* desperate citizen */
+    if (a->needs.money < LOW_MONEY * 0.5 && target && rng_double(r) < 0.3) return "robbery";
+    return target ? "theft" : "burglary";
 }
 
 static Agent *nearest_other(World *w, Agent *a, int radius) {
@@ -315,7 +346,7 @@ static void execute_action(World *w, Agent *a) {
         case A_SHOP:    if (n->money >= LUXURY_PRICE) { n->money -= LUXURY_PRICE;
                             n->belonging = clampd(n->belonging + 0.2, 0, 1); } break;
         case A_CRIME: {
-            Agent *target = nearest_other(w, a, 3);
+            Agent *target = nearest_other(w, a, 6);
             crime_attempt(w, a, target, choose_crime_kind(w, a, target));
             break; }
         case A_FLEE:    n->safety = clampd(n->safety + 0.05, 0, 1); break;

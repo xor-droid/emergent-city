@@ -118,6 +118,9 @@ static const char *agent_tag(const Agent *a){
     if(a->arrested_ticks>0) return "JAIL";
     if(a->wanted) return "WANTED";
     if(a->is_police) return "police";
+    if(a->crime_role==CR_KINGPIN) return "kingpin";
+    if(a->crime_role==CR_DEALER)  return "dealer";
+    if(a->crime_role==CR_CAREER)  return "crim";   /* killers stay hidden until wanted */
     if(a->faction_id!=-1) return "faction";
     return "";
 }
@@ -201,7 +204,9 @@ int run_ui(World *w){
     }
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
-    if(getenv("CSIM_DEMO")){ god=1; if(w->n_agents>0){ selected=w->agents[0].id; follow=1; } }
+    if(getenv("CSIM_DEMO")){ god=1; if(w->n_agents>0){ selected=w->agents[0].id;
+        for(int i=0;i<w->n_agents;i++) if(w->agents[i].crime_role!=CR_CITIZEN){ selected=w->agents[i].id; break; }
+        follow=1; } }
     /* benchmark mode: uncapped (backends disable vsync when CSIM_BENCH is set),
      * sim paused, measure FPS over N frames after a 60-frame warmup. */
     int bench=0; { const char *bs=getenv("CSIM_BENCH"); if(bs){ bench=atoi(bs); if(bench<1) bench=1; } }
@@ -492,7 +497,7 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(348), ph=US(336);
+                int pw=US(348), ph=US(384);
                 G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
                 G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
                 int yy=hudH+US(10);
@@ -507,6 +512,12 @@ int run_ui(World *w){
                 if(a->is_police){ G->text("POLICE",US(12),yy,US(13),gfx_rgb(120,180,230)); yy+=US(20); }
                 if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED: %.24s",a->wanted_for); G->text(buf,US(12),yy,US(13),COL_RED); yy+=US(20); }
                 if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED: %.24s",a->jailed_for); G->text(buf,US(12),yy,US(13),COL_AMBER); yy+=US(20); }
+                if(a->crime_role!=CR_CITIZEN){
+                    GfxColor rc = a->crime_role==CR_KILLER?COL_RED : a->crime_role==CR_KINGPIN?gfx_rgb(220,120,220) : COL_AMBER;
+                    snprintf(buf,sizeof(buf),"Role: %s",crime_role_name(a->crime_role)); G->text(buf,US(12),yy,US(13),rc); yy+=US(20); }
+                if(a->crimes_committed>0){ snprintf(buf,sizeof(buf),"Rap sheet: %d  (skill %d%%)",a->crimes_committed,(int)(a->crime_skill*100)); G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(18); }
+                if(a->drug_stock>0){ snprintf(buf,sizeof(buf),"Drug stock: %d units",a->drug_stock); G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(18); }
+                if(a->addiction>0.05f){ snprintf(buf,sizeof(buf),"Addiction: %d%%",(int)(a->addiction*100)); G->text(buf,US(12),yy,US(12),gfx_rgb(224,150,120)); yy+=US(18); }
                 yy+=US(4);
                 const char *lbl[6]={"Hunger","Energy","Safety","Social","Meaning","Belong"};
                 double v[6]={a->needs.hunger,a->needs.energy,a->needs.safety,a->needs.social,a->needs.meaning,a->needs.belonging};

@@ -177,7 +177,15 @@ Action utility_best_action(const Agent *a, const World *w) {
     if (n->money < LOW_MONEY && n->hunger < 0.5)
         crime = prop * 1.2 * (1.0 - n->money / (LOW_MONEY > 1.0 ? LOW_MONEY : 1.0));
     if (a->faction_id != -1 && night) crime += 0.3 * prop;
-    if (n->safety > 0.7) crime *= 0.7;
+    /* career/dealer/kingpin: crime is their trade — it should beat a legit job */
+    if (a->crime_role == CR_CAREER)  { double c = 1.1 + 0.4 * prop; if (c > crime) crime = c; }
+    if (a->crime_role == CR_DEALER || a->crime_role == CR_KINGPIN) { if (1.4 > crime) crime = 1.4; }
+    if (a->crime_role == CR_KILLER) {   /* latent urge that awakens 'at some point', peaks at night */
+        unsigned awaken = (unsigned)((unsigned)a->id * 2654435761u) % 6 + 2;
+        if (w->day >= (int)awaken) { double u = 0.9 + (night ? 0.4 : 0.0) + 0.02 * w->day; if (u > crime) crime = u; }
+    }
+    if (a->addiction > 0.5f && n->money < LOW_MONEY) crime += a->addiction * 0.4;  /* feed the habit */
+    if (n->safety > 0.7 && a->crime_role == CR_CITIZEN) crime *= 0.7;
     if (a->wanted) crime *= WANTED_CRIME_SUPPRESSION;
     s[A_CRIME] = crime;
 
