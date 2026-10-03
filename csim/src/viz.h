@@ -13,6 +13,9 @@
 #define TILE_PX 8
 #define FONT_PATH "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
+/* notcurses blitter selection (set from --blit / CSIM_NCBLIT; "default" auto). */
+extern const char *g_blit;
+
 /* Backend-neutral tile color (RGB). */
 void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b);
 
@@ -24,5 +27,6 @@ void hud_string(const World *w, char *buf, int n, float speed, int paused,
 int run_raylib(World *w);
 int run_sdl2(World *w);
 int run_tui(World *w);     /* ncurses ASCII renderer */
+int run_notcurses(World *w); /* notcurses high-res terminal renderer */
 
 #endif /* VIZ_H */

@@ -4,6 +4,7 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 int run_sdl2(World *w) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -29,6 +30,8 @@ int run_sdl2(World *w) {
     Uint64 prev = SDL_GetPerformanceCounter();
     double freq = (double)SDL_GetPerformanceFrequency();
     int running = 1, fps = 0, frames = 0; double facc = 0.0;
+    const char *shot = getenv("CSIM_SHOT");   /* save a BMP after warm-up, then exit */
+    int shot_frame = 0;
 
     while (running) {
         SDL_Event e;
@@ -110,6 +113,17 @@ int run_sdl2(World *w) {
             }
         }
         SDL_RenderPresent(ren);
+
+        if (shot && ++shot_frame == 120) {
+            SDL_Surface *cap = SDL_CreateRGBSurfaceWithFormat(
+                0, screenW, screenH, 32, SDL_PIXELFORMAT_ARGB8888);
+            if (cap && SDL_RenderReadPixels(ren, NULL, SDL_PIXELFORMAT_ARGB8888,
+                                            cap->pixels, cap->pitch) == 0) {
+                SDL_SaveBMP(cap, shot);
+            }
+            if (cap) SDL_FreeSurface(cap);
+            running = 0;
+        }
     }
 
     if (font) TTF_CloseFont(font);

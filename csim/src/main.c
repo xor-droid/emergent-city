@@ -10,6 +10,7 @@
 #include "viz.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 /* Stubs for backends that weren't compiled in. */
 #ifndef HAVE_RAYLIB
@@ -36,9 +37,20 @@ int run_tui(World *w) {
     return 1;
 }
 #endif
+#ifndef HAVE_NC
+int run_notcurses(World *w) {
+    (void)w;
+    fprintf(stderr, "notcurses backend not built. Install it and rebuild:\n"
+                    "  sudo apt install libnotcurses-dev\n");
+    return 1;
+}
+#endif
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--backend raylib|sdl2|tui]\n", argv0);
+    printf("Usage: %s [--backend raylib|sdl2|tui|notcurses] [--blit MODE]\n", argv0);
+    printf("  --blit (notcurses only): default|pixel|sextant|quad|half|braille|ascii\n"
+           "         pixel = true terminal pixel graphics (Kitty/Sixel/iTerm2);\n"
+           "         sextant = 2x3 sub-cell blocks (works everywhere, incl. tmux).\n");
 #if defined(HAVE_RAYLIB)
     printf("  raylib backend: built\n");
 #else
@@ -54,6 +66,11 @@ static void usage(const char *argv0) {
 #else
     printf("  tui backend:    NOT built (sudo apt install libncurses-dev)\n");
 #endif
+#if defined(HAVE_NC)
+    printf("  notcurses:      built\n");
+#else
+    printf("  notcurses:      NOT built (sudo apt install libnotcurses-dev)\n");
+#endif
 }
 
 int main(int argc, char **argv) {
@@ -65,11 +82,19 @@ int main(int argc, char **argv) {
     const char *backend = "none";
 #endif
 
+    /* --blit default: the CLI flag wins, else CSIM_NCBLIT env, else "default". */
+    const char *env_blit = getenv("CSIM_NCBLIT");
+    if (env_blit) g_blit = env_blit;
+
     for (int i = 1; i < argc; i++) {
         if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc)
             backend = argv[++i];
         else if (!strncmp(argv[i], "--backend=", 10))
             backend = argv[i] + 10;
+        else if (!strcmp(argv[i], "--blit") && i + 1 < argc)
+            g_blit = argv[++i];
+        else if (!strncmp(argv[i], "--blit=", 7))
+            g_blit = argv[i] + 7;
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(argv[0]); return 0;
         } else {
@@ -85,7 +110,8 @@ int main(int argc, char **argv) {
     if (!strcmp(backend, "raylib")) return run_raylib(&w);
     if (!strcmp(backend, "sdl2"))   return run_sdl2(&w);
     if (!strcmp(backend, "tui") || !strcmp(backend, "ascii")) return run_tui(&w);
-    fprintf(stderr, "unknown backend '%s' (use raylib, sdl2 or tui)\n", backend);
+    if (!strcmp(backend, "notcurses") || !strcmp(backend, "nc")) return run_notcurses(&w);
+    fprintf(stderr, "unknown backend '%s' (use raylib, sdl2, tui or notcurses)\n", backend);
     usage(argv[0]);
     return 2;
 }

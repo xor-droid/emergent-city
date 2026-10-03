@@ -2,6 +2,8 @@
 #include "viz.h"
 #include <stdio.h>
 
+const char *g_blit = "default";
+
 void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b) {
     unsigned char R, G, B;
     switch (t) {

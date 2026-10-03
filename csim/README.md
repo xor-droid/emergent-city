@@ -22,22 +22,31 @@ csim/
 
 ## Rendering backends (one binary, pick at runtime)
 ```sh
-./build/csim --backend raylib   # GPU window (default)
-./build/csim --backend sdl2     # SDL2 window
-./build/csim --backend tui      # ncurses ASCII, in the terminal
-./build/csim --help             # shows which backends were compiled in
+./build/csim --backend raylib                    # GPU window (default)
+./build/csim --backend sdl2                      # SDL2 GPU window
+./build/csim --backend tui                       # ncurses ASCII (1 glyph/tile)
+./build/csim --backend notcurses                 # high-res terminal (auto pixel/sextant)
+./build/csim --backend notcurses --blit pixel    # force TRUE pixel graphics (Kitty/Sixel/iTerm2)
+./build/csim --backend notcurses --blit sextant  # force 2x3 sub-cell blocks (works in tmux)
+./build/csim --help                              # lists backends + blit modes
 ```
 CMake compiles whichever backends it finds; a backend that wasn't built prints
 how to enable it. Controls (raylib/sdl2): drag/arrows pan, wheel zoom, Space
-pause, 1/2/3 speed. TUI: arrows pan, Space pause, 1/2/3 speed, q quit.
+pause, 1/2/3 speed. Terminal backends: arrows pan, Space pause, 1/2/3 speed, q quit.
+
+`--blit` (notcurses only): `default|pixel|sextant|quad|half|braille|ascii`
+(flag > `CSIM_NCBLIT` env > `default`). True pixel graphics need a capable
+terminal **outside tmux** (Kitty/WezTerm/foot/recent Windows Terminal); tmux
+falls back to sextants.
 
 Backend dependencies:
 - **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers
   (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`).
 - **sdl2** — `sudo apt install libsdl2-dev libsdl2-ttf-dev`.
 - **tui** — `sudo apt install libncurses-dev` (usually already present).
-  For a *richer* TUI (true-color, sub-cell sextant/braille blitting, even images),
-  **notcurses** (`libnotcurses-dev`) is the upgrade path.
+- **notcurses** — `sudo apt install libnotcurses-dev`.
+
+Note: build single-threaded in this project — `cmake --build build -j1`.
 
 ## Build & run the headless core (no dependencies)
 Proves the port works with just a C compiler + libm:
