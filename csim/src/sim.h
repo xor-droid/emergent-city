@@ -45,7 +45,7 @@
 #define START_MONEY_MEAN 100.0
 #define START_MONEY_SD   50.0
 #define RENT_PER_DAY     5.0
-#define UPKEEP_FRACTION  0.35
+#define UPKEEP_FRACTION  0.15
 
 /* ── Personality / movement ──────────────────────────────────────────────── */
 #define BIG5_MEAN  0.5
@@ -113,13 +113,25 @@ enum { LANG_COMMON, LANG_HIGH, LANG_COASTAL, LANG_OLD, LANG_COUNT };
 #define EDU_YOUTH_GAIN    0.02    /* daily schooling gain for the young */
 #define EDU_ADULT_AGE     18      /* schooling stops counting past this age */
 
+/* ── Life cycle: aging & mortality ─────────────────────────────────────────── */
+#define YEARS_PER_DAY   2.0    /* life-years per game-day (default; env CSIM_YEARS_PER_DAY) */
+#define AGE_WORK        16     /* minimum age to work / commit crime / drink */
+#define AGE_ADULT       18     /* legal adult */
+#define AGE_CHILD_MAX   12     /* 0..12 = child */
+#define AGE_ELDER       65     /* 65+ = elder */
+#define AGE_MORTALITY   60     /* old-age death risk begins to climb here */
+#define AGE_MAXLIFE     100    /* hard upper bound */
+#define POP_TARGET      150    /* living-population the city immigrates toward */
+enum { LS_CHILD, LS_YOUTH, LS_ADULT, LS_ELDER };
+#define IS_MINOR(a) ((a)->age < AGE_WORK)
+
 /* ── Marriage / kinship / births ───────────────────────────────────────────── */
 #define MARRY_MIN_AGE    20      /* minimum age to wed */
-#define MARRY_AFFINITY   0.45    /* affinity with a partner needed to wed */
-#define MARRY_FAMILIAR   0.4     /* familiarity needed to wed */
-#define MARRY_CHANCE     0.22    /* daily chance a willing, eligible couple weds */
+#define MARRY_AFFINITY   0.35    /* affinity with a partner needed to wed */
+#define MARRY_FAMILIAR   0.3     /* familiarity needed to wed */
+#define MARRY_CHANCE     0.38    /* daily chance a willing, eligible couple weds */
 #define FERTILE_MAX_AGE  45      /* mothers stop conceiving past this */
-#define CONCEIVE_CHANCE  0.16    /* daily chance a married fertile couple conceives */
+#define CONCEIVE_CHANCE  0.38    /* daily chance a married fertile couple conceives */
 #define GESTATION_DAYS   4       /* game-days of pregnancy before a birth */
 #define MAX_CHILDREN     6       /* soft cap per mother */
 
@@ -202,6 +214,7 @@ typedef struct {
     int id, alive;
     char name[32];
     int age;
+    float age_frac;         /* 0..1 progress toward the next birthday (aging accumulator) */
     double x, y;
     int tx, ty;
     int home_id;            /* building index, or -1 */
@@ -388,6 +401,11 @@ void law_daily(World *w);            /* crackdowns when crime surges, on day cha
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
+void lifecycle_daily(World *w);             /* old-age mortality, on day change */
+void set_years_per_day(double y);           /* aging pace (CSIM_YEARS_PER_DAY / --years-per-day) */
+double get_years_per_day(void);
+int   life_stage(const Agent *a);           /* LS_CHILD/YOUTH/ADULT/ELDER */
+const char *life_stage_name(const Agent *a);
 void economy_setup(World *w);               /* assign occupations + landlords */
 int  count_properties(const World *w, int owner_id);  /* homes a landlord owns */
 const char *occupation_name(unsigned char occ);
@@ -424,6 +442,7 @@ int  world_alive(const World *w);
 Agent *world_agent_at(World *w, int tx, int ty, double radius);
 Agent *world_agent_by_id(World *w, int id);
 int  world_spawn_agent(World *w, int tx, int ty);   /* returns new agent id, or -1 */
+int  world_spawn_family(World *w);                   /* immigrate a couple + children; returns people added */
 
 /* ── .env loader (python-dotenv-style; does not override existing env) ──────── */
 void dotenv_load(const char *path);     /* load one file if it exists */

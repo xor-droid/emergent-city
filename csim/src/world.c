@@ -191,16 +191,26 @@ Agent *world_agent_by_id(World *w, int id) {
     return NULL;
 }
 
+/* Get a slot for a new agent: reuse a dead one (turnover reclaims the array), or
+   append. Returns NULL only when truly full. All refs are by id, so reuse is safe. */
+static Agent *alloc_agent(World *w) {
+    for (int i = 0; i < w->n_agents; i++) if (!w->agents[i].alive) return &w->agents[i];
+    if (w->n_agents >= MAX_AGENTS) return NULL;
+    return &w->agents[w->n_agents++];
+}
+
 /* Spawn + register one new citizen at (tx,ty) (God Mode). Returns id or -1. */
 int world_spawn_agent(World *w, int tx, int ty) {
-    if (w->n_agents >= MAX_AGENTS) return -1;
     Rng *r = &w->rng;
-    Agent *a = &w->agents[w->n_agents];
+    Agent *a = alloc_agent(w);
+    if (!a) return -1;
     memset(a, 0, sizeof(*a));
     a->id = w->next_id++;
     a->alive = 1;
     snprintf(a->name, sizeof(a->name), "%s %s", FIRST_NAMES[rng_int(r, 40)], LAST_NAMES[rng_int(r, 28)]);
-    a->age = (int)clampd(rng_gauss(r, 35, 14), 16, 90);
+    /* newcomers skew young — young adults with most of their fertile life ahead,
+       so the city replenishes through births, not just arrivals */
+    a->age = (int)clampd(rng_gauss(r, 26, 7), 18, 55);
     a->home_id = random_building(w, T_HOME);
     a->x = (tx >= 0 && tx < WORLD_W) ? tx : rng_int(r, WORLD_W);
     a->y = (ty >= 0 && ty < WORLD_H) ? ty : rng_int(r, WORLD_H);
@@ -223,7 +233,6 @@ int world_spawn_agent(World *w, int tx, int ty) {
     culture_assign(w, a);
     /* newcomers bring diversity: often a foreign tongue they'll assimilate over time */
     if (rng_double(r) < 0.6) { a->culture = CUL_NEWCOMER; a->language = (unsigned char)rng_int_incl(r, 1, LANG_COUNT - 1); }
-    w->n_agents++;
     char t[96]; snprintf(t, sizeof(t), "%s appeared in the city", a->name);
     events_post(w, EV_BIRTH, a->id, -1, a->x, a->y, 0.4, t);
     return a->id;
@@ -235,9 +244,9 @@ int world_spawn_agent(World *w, int tx, int ty) {
 
 /* Append a newborn carrying the father's surname and the family's home. */
 static int spawn_child(World *w, Agent *mum, Agent *dad) {
-    if (w->n_agents >= MAX_AGENTS) return -1;
     Rng *r = &w->rng;
-    Agent *a = &w->agents[w->n_agents];
+    Agent *a = alloc_agent(w);
+    if (!a) return -1;
     memset(a, 0, sizeof(*a));
     a->id = w->next_id++;
     a->alive = 1;
@@ -268,11 +277,38 @@ static int spawn_child(World *w, Agent *mum, Agent *dad) {
     a->needs.money = 0;
     personality_random(&a->pers, r);
     a->action = A_WANDER;
-    w->n_agents++;
     char t[112]; snprintf(t, sizeof(t), "%.20s and %.20s had a child, %.24s",
                           mum->name, dad->name, a->name);
     events_post(w, EV_BIRTH, a->id, mum->id, a->x, a->y, 0.7, t);
     return a->id;
+}
+
+/* Immigrate a whole young family — a married couple plus 1-3 children — so the
+   city's age pyramid fills from the bottom (native marriage can't keep pace with
+   compressed aging). Returns the number of people added. */
+int world_spawn_family(World *w) {
+    Rng *r = &w->rng;
+    int da = world_spawn_agent(w, -1, -1); if (da < 0) return 0;
+    int ma = world_spawn_agent(w, -1, -1); if (ma < 0) return 1;
+    Agent *dad = world_agent_by_id(w, da), *mum = world_agent_by_id(w, ma);
+    if (!dad || !mum) return 2;
+    dad->sex = 1; mum->sex = 0;
+    dad->age = (int)clampd(rng_gauss(r, 32, 5), 22, 45);
+    mum->age = (int)clampd(rng_gauss(r, 30, 5), 20, 42);
+    dad->spouse_id = mum->id; mum->spouse_id = dad->id;
+    if (dad->home_id >= 0) mum->home_id = dad->home_id;   /* one household */
+    mum->culture = dad->culture; mum->language = dad->language;
+    if (dad->faith != FAITH_NONE) mum->faith = dad->faith;
+    int count = 2;
+    int nkids = rng_int_incl(r, 1, 3);
+    for (int k = 0; k < nkids; k++) {
+        int cid = spawn_child(w, mum, dad);
+        if (cid < 0) break;
+        Agent *c = world_agent_by_id(w, cid);
+        if (c) { c->age = rng_int_incl(r, 0, 12); mum->n_children++; dad->n_children++; }
+        count++;
+    }
+    return count;
 }
 
 void kinship_daily(World *w) {
@@ -468,6 +504,28 @@ void culture_daily(World *w) {
         /* assimilation: pick up the Common tongue over time (schooling speeds it) */
         if (a->language != LANG_COMMON && rng_double(r) < ASSIMILATE_CHANCE * (0.5 + a->education))
             a->language = LANG_COMMON;
+    }
+}
+
+/* Old-age mortality (on day change): death risk climbs from AGE_MORTALITY, is
+   near-certain by AGE_MAXLIFE. Scaled so most die in their 70s-80s. */
+void lifecycle_daily(World *w) {
+    double ypd = get_years_per_day();
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->age < AGE_MORTALITY) continue;
+        double over = (double)(a->age - AGE_MORTALITY) / (double)(AGE_MAXLIFE - AGE_MORTALITY);
+        if (over < 0) over = 0;
+        double p_year = over * over;                 /* 0 at 60 -> 1 at 100 */
+        double p_day = p_year * ypd;                 /* convert annual risk to this game-day */
+        if (p_day > 0.9) p_day = 0.9;
+        if (a->age >= AGE_MAXLIFE || rng_double(&w->rng) < p_day) {
+            a->alive = 0; w->deaths++;
+            if (a->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, a->spouse_id);
+                if (sp) sp->spouse_id = -1; a->spouse_id = -1; a->pregnant_ticks = 0; }
+            char t[96]; snprintf(t, sizeof(t), "%.30s died of old age (%d)", a->name, a->age);
+            events_post(w, EV_DEATH, a->id, -1, (int)a->x, (int)a->y, 0.7, t);
+        }
     }
 }
 
@@ -732,6 +790,10 @@ void world_tick(World *w, double dt_seconds) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
 
+        /* aging: advance toward the next birthday (even while jailed) */
+        a->age_frac += (float)(game_hours * get_years_per_day() / 24.0);
+        if (a->age_frac >= 1.0f) { int yrs = (int)a->age_frac; a->age += yrs; a->age_frac -= (float)yrs; }
+
         if (a->arrested_ticks > 0) {
             if (--a->arrested_ticks == 0) { a->jailed_for[0] = '\0'; a->sentence_total = 0; a->jail_gang = 0; }
             set_mood_color(a);
@@ -790,7 +852,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); danger_decay(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); lifecycle_daily(w); danger_decay(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

@@ -575,15 +575,18 @@ int run_ui(World *w){
 
         /* ── city dashboard: aggregate economy / culture / governance  [E] ── */
         if(show_city){
-            int pw=US(372), ph=US(430), px=W/2-pw/2, py=hudH+US(18);
+            int pw=US(372), ph=US(452), px=W/2-pw/2, py=hudH+US(18);
             G->fill_rect(px,py,pw,ph,gfx_rgba(20,20,28,240)); G->rect_lines(px,py,pw,ph,COL_GOLD);
             int yy=py+US(12), lx=px+US(14);
             G->text("CITY DASHBOARD  [E]",lx,yy,US(15),COL_GOLD); yy+=US(24);
             int alive=0,relig=0,common=0,landl=0,indebt=0,married=0,injured=0,wanted=0;
+            int children=0,elders=0; long age_sum=0;
             double money=0,debt=0,edu=0;
             int faith[FAITH_COUNT]={0}, lang[LANG_COUNT]={0};
             for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
-                alive++; money+=a->needs.money; edu+=a->education;
+                alive++; money+=a->needs.money; edu+=a->education; age_sum+=a->age;
+                if(life_stage(a)==LS_CHILD||life_stage(a)==LS_YOUTH) children++;
+                else if(life_stage(a)==LS_ELDER) elders++;
                 faith[a->faith]++; lang[a->language]++;
                 if(a->faith!=FAITH_NONE) relig++;
                 if(a->language==LANG_COMMON) common++;
@@ -599,6 +602,7 @@ int run_ui(World *w){
             #define ROW(...) do{ snprintf(buf,sizeof(buf),__VA_ARGS__); G->text(buf,lx,yy,US(12),tx); yy+=US(18);}while(0)
             G->text("POPULATION",lx,yy,US(12),hd); yy+=US(18);
             ROW("Alive %d    Married %d    Injured %d",alive,married,injured);
+            ROW("Avg age %ld    Youth %d    Elders %d",alive?age_sum/alive:0,children,elders);
             ROW("Avg wealth %.0f    Wanted %d",alive?money/alive:0,wanted);
             yy+=US(6); G->text("ECONOMY",lx,yy,US(12),hd); yy+=US(18);
             ROW("Goods price %.2fx    Wage %.2fx",w->econ.goods_price,w->econ.wage_mult);
@@ -657,7 +661,7 @@ int run_ui(World *w){
                 int yy=hudH+US(10);
                 snprintf(buf,sizeof(buf),"%.26s  #%d",a->name,a->id); G->text(buf,US(12),yy,US(16),COL_GOLD); yy+=US(25);
                 G->line(US(10),yy,pw-US(10),yy,gfx_rgb(72,68,84)); yy+=US(8);
-                snprintf(buf,sizeof(buf),"Age %d      %s",a->age,action_name(a->action)); G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
+                snprintf(buf,sizeof(buf),"Age %d (%s)   %s",a->age,life_stage_name(a),action_name(a->action)); G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
                 snprintf(buf,sizeof(buf),"Money %.0f      %.16s",a->needs.money,faction_name(w,a->faction_id)); G->text(buf,US(12),yy,US(13),COL_WHITE); yy+=US(20);
                 { int ax=(int)a->x, ay=(int)a->y;
                   TileType tt=(ax>=0&&ax<WORLD_W&&ay>=0&&ay<WORLD_H)?(TileType)w->tile[ax][ay]:T_GRASS;

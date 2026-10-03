@@ -119,6 +119,22 @@ void mem_add(MemoryBook *m, const char *text, double importance) {
 }
 
 /* ── Utility AI ──────────────────────────────────────────────────────────── */
+/* ── Life cycle ─────────────────────────────────────────────────────────────── */
+static double g_years_per_day = YEARS_PER_DAY;
+void   set_years_per_day(double y) { if (y > 0.0) g_years_per_day = y; }
+double get_years_per_day(void) { return g_years_per_day; }
+
+int life_stage(const Agent *a) {
+    if (a->age <= AGE_CHILD_MAX) return LS_CHILD;
+    if (a->age < AGE_ADULT)      return LS_YOUTH;
+    if (a->age >= AGE_ELDER)     return LS_ELDER;
+    return LS_ADULT;
+}
+const char *life_stage_name(const Agent *a) {
+    switch (life_stage(a)) { case LS_CHILD: return "Child"; case LS_YOUTH: return "Youth";
+                             case LS_ELDER: return "Elder"; default: return "Adult"; }
+}
+
 Action utility_best_action(const Agent *a, const World *w) {
     const Needs *n = &a->needs;
     const Personality *p = &a->pers;
@@ -202,6 +218,10 @@ Action utility_best_action(const Agent *a, const World *w) {
     s[A_TREAT] = treat;
 
     s[A_WANDER] = 0.05;
+
+    /* children don't work, deal, drink or shop — they eat, sleep, play and learn */
+    if (IS_MINOR(a)) { s[A_WORK] = s[A_CRIME] = s[A_DRINK] = s[A_SHOP] = s[A_PATROL] = 0.0;
+                       s[A_SOCIALIZE] *= 1.4; s[A_WANDER] = 0.2; }
 
     Action best = A_WANDER; double bestv = -1.0;
     for (int i = 0; i < A_COUNT; i++) if (s[i] > bestv) { bestv = s[i]; best = (Action)i; }

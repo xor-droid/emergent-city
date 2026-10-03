@@ -472,9 +472,21 @@ void crime_daily(World *w) {
         }
     }
 
-    if (w->n_agents < 200 && rng_double(&w->rng) < 0.4) {   /* soft population cap */
-        int id = world_spawn_agent(w, -1, -1);
-        if (id >= 0) {
+    /* Immigration: newcomers arrive to keep a living city near its target size as
+       old age and crime thin the ranks. Based on the ALIVE count (dead slots are
+       reclaimed), so a high-turnover run doesn't quietly depopulate. */
+    int alive = world_alive(w);
+    if (alive < POP_TARGET) {
+        int gap = POP_TARGET - alive;
+        int want = 3 + gap / 6;         /* people to add today (steady trickle + shortfall) */
+        int added = 0, guard = 0;
+        while (added < want && guard++ < want + 6) {
+            if (rng_double(&w->rng) < 0.40) {      /* ~40% of arrivals are young families with kids */
+                added += world_spawn_family(w);
+                continue;
+            }
+            int id = world_spawn_agent(w, -1, -1);
+            if (id < 0) break;
             Agent *a = world_agent_by_id(w, id);
             if (a) {
                 a->dealer_id = -1; a->status = 2;
@@ -485,6 +497,7 @@ void crime_daily(World *w) {
                     if (prop > 0.5 && rng_double(&w->rng) < 0.22) { a->crime_role = CR_CAREER; a->crime_skill = 0.25f + (float)prop * 0.4f; }
                 }
             }
+            added++;
         }
     }
 }

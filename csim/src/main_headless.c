@@ -5,8 +5,10 @@
 #include "sim.h"
 #include "llm.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 int main(void) {
+    { const char *e = getenv("CSIM_YEARS_PER_DAY"); if (e) set_years_per_day(atof(e)); }
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
@@ -44,11 +46,15 @@ int main(void) {
     /* friendship + faction summary */
     int alive = 0, total_friends = 0, max_friends = 0, in_faction = 0;
     int married = 0, pregnant = 0, born = 0;
+    int children = 0, youths = 0, adults = 0, elders = 0; long age_sum = 0;
     for (int k = 0; k < w.n_agents; k++) {
         Agent *a = &w.agents[k];
         if (a->mother_id >= 0) born++;    /* born into the city during the run */
         if (!a->alive) continue;
         alive++;
+        age_sum += a->age;
+        switch (life_stage(a)) { case LS_CHILD: children++; break; case LS_YOUTH: youths++; break;
+                                 case LS_ELDER: elders++; break; default: adults++; }
         int fr = 0;
         for (int j = 0; j < a->rels.n; j++)
             if (a->rels.rel[j].affinity >= FRIENDSHIP_AFFINITY) fr++;
@@ -64,6 +70,8 @@ int main(void) {
            alive ? (double)total_friends / alive : 0.0, max_friends, in_faction);
     printf("family: married=%d (couples %d)  pregnant=%d  children born=%d\n",
            married, married / 2, pregnant, born);
+    printf("life cycle (%.1f yr/day): avg age=%ld  children=%d youths=%d adults=%d elders=%d\n",
+           get_years_per_day(), alive ? age_sum / alive : 0, children, youths, adults, elders);
     { int landlords = 0, indebted = 0; double debt_sum = 0;
       for (int k = 0; k < w.n_agents; k++) {
           Agent *a = &w.agents[k];

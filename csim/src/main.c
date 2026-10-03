@@ -29,13 +29,18 @@ static void usage(const char *argv0) {
     printf("  Env: CSIM_UI=N ui scale (default: from monitor), CSIM_ZOOM=N zoom,\n");
     printf("       CSIM_ASCII=1 start in ASCII mode, CSIM_DEMO=1 panels,\n");
     printf("       CSIM_CITY=1 dashboard, CSIM_OVERLAY=1..3 overlay,\n");
+    printf("  --years-per-day N  aging pace (life-years per game-day; default 2 = ~8h/life @1x).\n");
+    printf("  Env: CSIM_YEARS_PER_DAY=N same as --years-per-day,\n");
     printf("       CSIM_WARMDAYS=N pre-roll sim N days before the window opens,\n");
     printf("       CSIM_SHOT=name shot (to cwd), CSIM_SHOT_FRAMES=N warm-up, CSIM_BENCH=N fps.\n");
 }
 
 int main(int argc, char **argv) {
+    double ypd = -1.0;   /* aging pace (life-years per game-day); <0 = unset */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
+        else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--years-per-day=", 16)) { ypd = atof(argv[i] + 16); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -46,6 +51,9 @@ int main(int argc, char **argv) {
             setenv("CSIM_TILESET", argv[i] + 10, 1);
         } else { fprintf(stderr, "unknown argument: %s\n", argv[i]); usage(argv[0]); return 2; }
     }
+
+    if (ypd <= 0.0) { const char *e = getenv("CSIM_YEARS_PER_DAY"); if (e) ypd = atof(e); }
+    if (ypd > 0.0) set_years_per_day(ypd);
 
     G = gfx_raylib();
 
