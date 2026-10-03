@@ -63,7 +63,7 @@ class DecisionRouter:
         self.calls_this_minute += 1
         fut = self.client.submit(prompt, max_tokens=8, temperature=0.7)
         try:
-            resp = fut.result(timeout=config.LLM_TIMEOUT_SECONDS)
+            resp = fut.result(timeout=config.LLM_GAME_WAIT_SECONDS)
         except Exception:  # noqa: BLE001
             return None
         if resp.error or not resp.text:
@@ -81,7 +81,7 @@ class DecisionRouter:
         prompt = build_dialogue_prompt(agent, other, context)
         fut = self.client.submit(prompt, max_tokens=80, temperature=0.9)
         try:
-            resp = fut.result(timeout=config.LLM_TIMEOUT_SECONDS)
+            resp = fut.result(timeout=config.LLM_GAME_WAIT_SECONDS)
         except Exception:  # noqa: BLE001
             return ""
         return "" if resp.error else resp.text
@@ -93,7 +93,7 @@ class DecisionRouter:
         prompt = build_thought_prompt(agent, world)
         fut = self.client.submit(prompt, max_tokens=30, temperature=0.95)
         try:
-            resp = fut.result(timeout=config.LLM_TIMEOUT_SECONDS)
+            resp = fut.result(timeout=config.LLM_GAME_WAIT_SECONDS)
         except Exception:  # noqa: BLE001
             return ""
         return "" if resp.error else resp.text

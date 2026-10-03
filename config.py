@@ -233,6 +233,12 @@ LLM_MAX_TOKENS = 220
 LLM_TEMPERATURE = 0.9
 LLM_TIMEOUT_SECONDS = 12.0
 
+# How long the game loop will BLOCK waiting for an LLM reply before giving up
+# and falling back to the rule-based action this tick (the request still
+# finishes in the background). Keeps the sim smooth: a slow call no longer
+# freezes the loop. Fast calls (~130ms) still land within this budget.
+LLM_GAME_WAIT_SECONDS = 0.3
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Rendering — Palette (Disco Elysium / RimWorld inspired)

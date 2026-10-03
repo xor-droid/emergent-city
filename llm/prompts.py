@@ -6,6 +6,8 @@ All prompts are in English.
 from __future__ import annotations
 from typing import List, Dict, TYPE_CHECKING
 
+import config
+
 if TYPE_CHECKING:
     from agents.agent import Agent
     from world.world import World
@@ -23,9 +25,42 @@ SYSTEM_THOUGHT = (
 )
 
 SYSTEM_DECISION = (
-    "You suggest an action for a character. Answer with a single word from "
-    "this list: {actions}. No explanations."
+    "You are the instinct of a city resident, choosing their next action.\n"
+    "A need only counts as URGENT when it is low (below ~0.40); a need near 0 "
+    "overrides everything. If EVERY need is above 0.40 the person is "
+    "comfortable, so do NOT pick by tiny need differences — instead decide by "
+    "time of day and their personality/goals.\n"
+    "Priority: 1) satisfy any low (<0.40) need; else 2) fit the time of day "
+    "(daytime -> work/shop/socialize; evening -> socialize/drink_at_bar; "
+    "night -> sleep/go_home); and 3) fit personality/traits (religious->pray, "
+    "criminal or broke->commit_crime, lazy->wander/go_home, extravert->"
+    "socialize).\n"
+    "Need->action guide: eat/shop=hunger, sleep/go_home=energy, "
+    "socialize/drink_at_bar=social, work=money+meaning, pray=meaning+belonging, "
+    "commit_crime=money (risky), flee=danger, wander=restless.\n"
+    "Never default to 'eat' unless hunger is actually low. Reply with EXACTLY "
+    "ONE word from this list and nothing else: {actions}."
 )
+
+
+_LOW_NEED = 0.40  # a need below this is genuinely urgent
+
+
+def _needs_summary(n: "object") -> str:
+    """Flag only genuinely-low needs; otherwise say the person is comfortable.
+
+    Avoids implying that a marginally-lowest-but-high need (e.g. hunger=0.98 at
+    game start) is urgent, which was making the model always choose 'eat'.
+    """
+    core = [
+        ("hunger", n.hunger), ("energy", n.energy), ("safety", n.safety),
+        ("social", n.social), ("meaning", n.meaning), ("belonging", n.belonging),
+    ]
+    allvals = ", ".join(f"{k}={v:.2f}" for k, v in core) + f", money={n.money:.0f}"
+    low = [f"{k}={v:.2f}" for k, v in core if v < _LOW_NEED]
+    if low:
+        return f"URGENT low needs: {', '.join(low)}.\nAll needs: {allvals}"
+    return f"No urgent needs — this person is comfortable.\nAll needs: {allvals}"
 
 
 def _agent_brief(a: "Agent") -> str:
@@ -68,10 +103,19 @@ def build_thought_prompt(a: "Agent", world: "World") -> List[Dict[str, str]]:
 
 
 def build_decision_prompt(a: "Agent", world: "World", actions: List[str]) -> List[Dict[str, str]]:
+    pers = a.personality
+    hour = int(world.time_system.hour)
+    night = hour < config.DAYTIME_START_HOUR or hour >= config.NIGHTTIME_START_HOUR
+    tod = "night (most people sleep)" if night else "daytime"
+    traits = ", ".join(pers.unique_traits) or "—"
     return [
         {"role": "system", "content": SYSTEM_DECISION.format(actions=", ".join(actions))},
         {"role": "user", "content": (
-            f"{_agent_brief(a)}\n"
-            f"Hour: {world.time_system.hour}. What is the sensible thing to do now?"
+            f"{a.name}, age {a.age}. Traits: {traits}.\n"
+            f"Personality: O={pers.openness:.2f} C={pers.conscientiousness:.2f} "
+            f"E={pers.extraversion:.2f} A={pers.agreeableness:.2f} N={pers.neuroticism:.2f}.\n"
+            f"Needs (0=critical, 1=satisfied): {_needs_summary(a.needs)}.\n"
+            f"Time: {hour:02d}:00, {tod}.\n"
+            "Their one best action right now (one word):"
         )},
     ]
