@@ -109,17 +109,26 @@ def main() -> int:
                 running = False
 
             elif event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode(event.size, pygame.DOUBLEBUF | pygame.RESIZABLE)
-                camera.resize(event.size[0], event.size[1])
+                w, h = event.size
+                cw, ch = screen.get_size()
+                # Ignore tiny OS decoration drift: WSLg nudges the size by a few
+                # pixels each frame, which otherwise becomes a resize feedback
+                # loop. Honor only real (user) resizes, then rebuild the display
+                # and repoint every widget at the new surface so drawing follows.
+                if abs(w - cw) > 24 or abs(h - ch) > 24:
+                    screen = pygame.display.set_mode((w, h), pygame.DOUBLEBUF | pygame.RESIZABLE)
+                    nw, nh = screen.get_size()
+                    camera.resize(nw, nh)
+                    for widget in (renderer, hud, feed, panel):
+                        widget.screen = screen
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     paused = not paused
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3,
-                                   pygame.K_4, pygame.K_5, pygame.K_6):
-                    num = event.key - pygame.K_1  # 0..5
+                elif pygame.K_1 <= event.key <= pygame.K_9:
+                    num = event.key - pygame.K_1  # 0..8
                     if god.active:
-                        god.select_tool(num)       # pick a God Mode tool
+                        god.select_tool(num)       # pick a God Mode tool (1..9)
                     elif num < 3:
                         speed_index = num          # 1/2/3 = speed when not in God Mode
                 elif event.key == pygame.K_f:
@@ -130,6 +139,7 @@ def main() -> int:
                     feed.toggle_visible()
                 elif event.key == pygame.K_ESCAPE:
                     panel.close()
+                    god.close_editor()
                 elif event.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
                     saver.save()
                 elif event.key == pygame.K_l and (pygame.key.get_mods() & pygame.KMOD_CTRL):
@@ -138,7 +148,7 @@ def main() -> int:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     if god.active:
-                        god.apply_click(event.pos, camera)
+                        god.on_mouse_down(event.pos, camera)
                     else:
                         panel.handle_click(event.pos)
                 elif event.button == 4:
@@ -146,8 +156,14 @@ def main() -> int:
                 elif event.button == 5:
                     camera.zoom_at(event.pos, -0.1)
 
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1 and god.active:
+                    god.on_mouse_up()
+
             elif event.type == pygame.MOUSEMOTION:
-                if event.buttons[0] and not panel.is_open and not god.active:
+                if god.active:
+                    god.on_mouse_motion(event.pos)
+                elif event.buttons[0] and not panel.is_open:
                     camera.pan(-event.rel[0], -event.rel[1])
 
         # ── Camera follow
@@ -168,6 +184,7 @@ def main() -> int:
             speed=config.SPEED_MULTIPLIERS[speed_index],
             sim_time=world.time_system,
             population=len(world.agents),
+            llm_calls=llm_client.total_calls if llm_client else 0,
         )
         feed.draw()
         panel.draw()

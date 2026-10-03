@@ -13,6 +13,7 @@ Async-friendly via a thread pool; call submit() for fire-and-forget.
 from __future__ import annotations
 import os
 import time
+import logging
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -23,6 +24,8 @@ import config
 
 
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+log = logging.getLogger("llm")
 
 
 @dataclass
@@ -61,6 +64,12 @@ class OpenRouterClient:
         self.total_calls = 0
         self.total_tokens = 0
         self.failures = 0
+
+        host = self.base_url.split("//", 1)[-1].split("/", 1)[0]
+        if any(c in host for c in ("openrouter.ai", "openai.com")):
+            log.warning("LLM endpoint is a CLOUD host (%s), not the local container", host)
+        else:
+            log.info("LLM endpoint: %s (model=%s)", self.base_url, self.model)
 
     @property
     def enabled(self) -> bool:
@@ -152,6 +161,12 @@ class OpenRouterClient:
                 usage = data.get("usage", {}) or {}
                 self.total_calls += 1
                 self.total_tokens += usage.get("total_tokens", 0)
+                if config.LOG_LLM_CALLS:
+                    log.info("call #%d  %s  %d->%dtok  %.0fms  %r",
+                             self.total_calls, m,
+                             usage.get("prompt_tokens", 0),
+                             usage.get("completion_tokens", 0),
+                             latency, (text or "")[:48])
                 return LLMResponse(
                     text=text, model=m,
                     tokens_in=usage.get("prompt_tokens", 0),

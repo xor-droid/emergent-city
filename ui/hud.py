@@ -27,8 +27,10 @@ class HUD:
         speed: float = 1.0,
         sim_time=None,
         population: int = 0,
+        llm_calls: int = 0,
     ) -> None:
         """Main draw entry-point used by main.py."""
+        self.llm_calls = llm_calls
         surf = self.screen
         world = self.world
         bar = pygame.Surface((surf.get_width(), 28), pygame.SRCALPHA)

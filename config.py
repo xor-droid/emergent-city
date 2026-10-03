@@ -194,10 +194,11 @@ RIVALRY_AFFINITY_THRESHOLD = -0.30
 # A local llama.cpp server (e.g. Qwen3-8B) has no per-token cost, so this is on.
 LLM_ENABLED = True
 
-# Chat-completions endpoint. Leave empty to use the OPENROUTER_BASE_URL env var,
-# and if that is also empty the client falls back to OpenRouter's cloud URL.
-# For the local Qwen server, set OPENROUTER_BASE_URL in .env instead of here.
-LLM_BASE_URL = ""
+# Chat-completions endpoint (OpenAI-compatible). Hard-defaulted to our own
+# Qwen docker container on the LAN so we never silently hit a cloud provider
+# (openrouter.ai / api.openai.com). OPENROUTER_BASE_URL in .env can override it,
+# but if nothing is set we still point at the local container, not the cloud.
+LLM_BASE_URL = "http://10.0.0.134:9090/v1/chat/completions"
 
 # Qwen3 (and similar) default to a verbose "thinking" mode that leaves the
 # answer empty when the token budget is small. Append the `/no_think` soft
