@@ -49,8 +49,12 @@ static int  rl_init(const char *title,int w,int h){
         if(mh>1600){ int nw=(int)(mw*0.75f), nh=(int)(mh*0.75f);
             SetWindowSize(nw,nh); SetWindowPosition((mw-nw)/2,(mh-nh)/2); }
     }
-    /* UI font: 48px atlas is a bit small once scaled up on 4K; load at 64px. */
-    g_font = LoadFontEx(FONT_PATH, 64, NULL, 0);
+    /* UI font: 64px atlas (crisp when scaled). Load ASCII plus the CP437-style
+     * glyphs the ASCII render mode uses (≈ ♣ ⌂ ☺ ☻). */
+    int cps[128], n=0;
+    for(int c=32;c<=126;c++) cps[n++]=c;
+    cps[n++]=0x2248; cps[n++]=0x2663; cps[n++]=0x2302; cps[n++]=0x263A; cps[n++]=0x263B;
+    g_font = LoadFontEx(FONT_PATH, 64, cps, n);
     if(g_font.texture.id != 0){ SetTextureFilter(g_font.texture, TEXTURE_FILTER_BILINEAR); g_font_ok = 1; }
     return 0;
 }

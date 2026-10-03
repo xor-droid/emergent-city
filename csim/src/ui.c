@@ -43,13 +43,15 @@ static char building_glyph(TileType t){
                case T_BAR:return 'B'; case T_CHURCH:return '+'; case T_POLICE:return 'P';
                default:return 0; }
 }
-/* ASCII (Dwarf-Fortress) glyph per tile: ground punctuation + building letters. */
-static char ascii_glyph(TileType t){
+/* ASCII (Dwarf-Fortress) glyph per tile — CP437-style (UTF-8). The extended
+ * codepoints (≈ ♣ ⌂) must be in the font atlas: see gfx_raylib.c LoadFontEx. */
+static const char *ascii_glyph(TileType t){
     switch(t){
-        case T_GRASS:return ','; case T_ROAD:return '.'; case T_WATER:return '~'; case T_PARK:return '"';
-        case T_HOME:return 'H'; case T_SHOP:return '$'; case T_WORK:return 'O';
-        case T_BAR:return 'B'; case T_CHURCH:return '+'; case T_POLICE:return 'P';
-        default:return '.';
+        case T_GRASS:return ",";       case T_ROAD:return ".";
+        case T_WATER:return "≈"; /* ≈ */ case T_PARK:return "♣"; /* ♣ */
+        case T_HOME:return "⌂";  /* ⌂ */ case T_SHOP:return "$"; case T_WORK:return "O";
+        case T_BAR:return "B"; case T_CHURCH:return "+"; case T_POLICE:return "P";
+        default:return ".";
     }
 }
 static const char *faction_name(World *w,int fid){ return (fid<0||fid>=w->n_factions)?"-":w->factions[fid].name; }
@@ -199,21 +201,34 @@ int run_ui(World *w){
         float ts=TILE_PX*cam.zoom; int iw=(int)(ts+1.0f); if(iw<1)iw=1;
 
         if(ascii){
-            /* Dwarf-Fortress look: one colored character per tile on black, agents as @ (P for police). */
+            /* Dwarf-Fortress look: each cell gets a dark tile-tinted background plus
+             * a brighter CP437 glyph; agents are ☺ (☻ for police). Drawn in two
+             * passes (all backgrounds, then all glyphs) so each batches — mixing
+             * fill_rect and text per cell thrashes the renderer's batch. */
             int fs=(int)(ts*0.95f); if(fs<6)fs=6;
+            /* pass 1: cell backgrounds (+ selected-agent highlight) */
             for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
                 TileType t2=(TileType)w->tile[x][y];
-                char g=ascii_glyph(t2); if(!g||g==' ') continue;
-                char s[2]={g,0};
+                float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                GfxColor tc=tile_col(t2);
+                GfxColor bg=gfx_rgb((unsigned char)(tc.r*0.32f),(unsigned char)(tc.g*0.32f),(unsigned char)(tc.b*0.32f));
+                G->fill_rect((int)sx,(int)sy,iw,iw,bg);
+            }
+            if(selected>=0){ Agent *a=world_agent_by_id(w,selected);
+                if(a&&a->alive){ float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
+                    G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(120,110,40,210)); } }
+            /* pass 2: glyphs */
+            for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
+                TileType t2=(TileType)w->tile[x][y];
+                const char *s=ascii_glyph(t2); if(!s||!s[0]) continue;
                 float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
                 int tw=G->text_w(s,fs);
-                G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,shade(tile_col(t2),60));
+                G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,shade(tile_col(t2),70));
             }
             for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
-                char s[2]={ a->is_police?'P':'@', 0 };
+                const char *s = a->is_police ? "☻" : "☺"; /* ☻ police / ☺ citizen */
                 float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
                 int tw=G->text_w(s,fs);
-                if(a->id==selected) G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(120,110,40,210));
                 G->text(s,(int)sx+(iw-tw)/2,(int)sy+(iw-fs)/2,fs,gfx_rgb(a->r,a->g,a->b));
             }
         } else {

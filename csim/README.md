@@ -51,8 +51,9 @@ Controls: drag (right-mouse) pan · wheel zoom · click a citizen to inspect ·
 antialiased TTF (DejaVu Sans) for legibility, scaled for the display.
 
 **ASCII mode** (`a`, or `CSIM_ASCII=1`): a Dwarf-Fortress-style render — each
-tile a colored character on black (`,` grass, `.` road, `~` water, `"` park,
-`H/$/O/B/+/P` buildings) and citizens as `@` (`P` police).
+cell a dark tile-tinted background with a brighter CP437 glyph: `,` grass,
+`.` road, `≈` water, `♣` park, `⌂` home, `$` shop, `O` office, `B` bar,
+`+` church, `P` police; citizens are `☺` (`☻` police).
 
 Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
 `CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·
