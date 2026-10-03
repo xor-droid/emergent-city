@@ -125,6 +125,8 @@ class UtilityAI:
             crime += 0.3 * propensity
         if n.safety > 0.7:
             crime *= 0.7
+        if getattr(agent, "wanted", False):
+            crime *= config.WANTED_CRIME_SUPPRESSION  # lying low — avoid new crimes
         scores.append(ActionScore("commit_crime", crime, "desperate"))
 
         # ── Patrol (police only)

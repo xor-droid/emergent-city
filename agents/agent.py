@@ -62,6 +62,9 @@ class Agent:
     is_police: bool = False
     alive: bool = True
     arrested_ticks: int = 0
+    wanted: bool = False
+    wanted_ticks: int = 0      # lie-low countdown while evading police
+    wanted_for: str = ""       # the crime they're wanted for
     sleep_ticks: int = 0
     speech_cooldown: float = 0.0
     last_dialogue: str = ""
@@ -339,7 +342,8 @@ class Agent:
 
         elif self.current_action == "commit_crime":
             target = self._pick_crime_target(world)
-            world.crime.attempt_crime(self, world, kind="theft", target=target)
+            kind = self._choose_crime_kind(world, target)
+            world.crime.attempt_crime(self, world, kind=kind, target=target)
 
         elif self.current_action == "patrol":
             pass
@@ -396,6 +400,19 @@ class Agent:
                 kind="negative_social", text=f"Quarreled with {other.name}",
                 importance=0.5, other_id=other.id,
             ))
+
+    def _choose_crime_kind(self, world: "World", target) -> str:
+        """Pick a crime type from personality & desperation. Violent traits lean
+        toward assault; the desperate-and-broke toward (confrontational) robbery;
+        otherwise petty theft. More serious kinds mean longer hunts/sentences."""
+        p = self.personality
+        if target is None:
+            return "theft"
+        if (p.has("cruel") or p.has("vengeful") or p.has("brave")) and world.rng.random() < 0.5:
+            return "assault"
+        if self.needs.money < config.LOW_MONEY_THRESHOLD * 0.5 and world.rng.random() < 0.4:
+            return "robbery"
+        return "theft"
 
     def _pick_crime_target(self, world: "World"):
         nearby = [

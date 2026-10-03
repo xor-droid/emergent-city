@@ -166,6 +166,25 @@ WITNESS_RADIUS = 5
 ARREST_DURATION_TICKS = 600
 DANGER_DECAY_PER_SECOND = 0.001
 
+# Wanted / police hunting
+# A criminal seen by civilians (but not caught) becomes "wanted". If they avoid
+# the police for this many ticks, the heat dies down and they're cleared
+# ("lying low"). Police arrest wanted agents within POLICE_ARREST_RADIUS tiles.
+WANTED_DURATION_TICKS = 2400
+POLICE_ARREST_RADIUS = 4
+# While wanted, an agent lies low: far less likely to commit new crimes.
+WANTED_CRIME_SUPPRESSION = 0.25
+
+# Crime severity multiplier by kind. Scales BOTH how long the perpetrator is
+# hunted (wanted duration) AND the jail sentence if caught — the more serious
+# the crime, the longer they're pursued and the longer they serve.
+CRIME_SEVERITY = {
+    "theft": 1.0,      # petty
+    "robbery": 1.8,    # confrontational theft
+    "assault": 2.4,    # violent
+    "riot": 2.6,       # mob violence
+}
+
 # Gangs form when N agents with sympathetic traits cluster
 GANG_FORMATION_MIN_MEMBERS = 4
 CULT_FORMATION_MIN_MEMBERS = 3
