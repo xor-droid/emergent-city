@@ -118,6 +118,13 @@ STARTING_MONEY_STDDEV = 50.0
 # Below this balance an agent is considered poor (drives work/crime decisions).
 LOW_MONEY_THRESHOLD = 20.0
 
+# Daily cost of living, deducted each in-game day, to keep wealth bounded
+# (agents earn more than they spend otherwise). Total = flat rent + a fraction
+# of current wealth (upkeep scales with lifestyle). Tuned so money settles into
+# a band rather than inflating without limit, while keeping most agents solvent.
+RENT_PER_DAY = 5.0
+UPKEEP_FRACTION = 0.35
+
 GOOD_BASE_PRICES = {
 "food": 5.0,
 "tool": 25.0,

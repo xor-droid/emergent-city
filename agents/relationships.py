@@ -19,6 +19,9 @@ class RelationshipBook:
     familiarity: Dict[int, float] = field(default_factory=dict)
     romantic_partner: int = -1
     rivals: List[int] = field(default_factory=list)
+    # Others we've already announced a friendship with (prevents re-announcing
+    # when affinity dips below the threshold and crosses back). Transient.
+    announced_friends: set = field(default_factory=set)
 
     def adjust(self, other_id: int, d_affinity: float, d_fam: float = 0.05) -> None:
         a = self.affinity.get(other_id, 0.0) + d_affinity

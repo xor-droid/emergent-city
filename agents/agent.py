@@ -152,10 +152,16 @@ class Agent:
         self.action_progress -= dt
 
         if self.needs.is_dying():
-            self.die(world, reason="exhaustion")
+            reason = "starvation" if self.needs.hunger <= 0.01 else "exhaustion"
+            self.die(world, reason=reason)
 
     def daily_tick(self, world: "World") -> None:
         self.age += 1 / 365  # placeholder; aging is slow
+        # Cost of living: flat rent + upkeep scaling with wealth. Keeps money
+        # bounded (agents earn more than they spend) and keeps some economic
+        # pressure so poverty — and thus occasional crime — stays a real dynamic.
+        cost = config.RENT_PER_DAY + self.needs.money * config.UPKEEP_FRACTION
+        self.needs.money = max(0.0, self.needs.money - cost)
         # Try to find a workplace if missing
         if self.workplace_id == -1:
             for b in world.buildings.workplaces():
@@ -185,7 +191,12 @@ class Agent:
         self.target_x = -1
         self.target_y = -1
 
-        if action == "eat" or action == "shop":
+        if action == "eat" and self.needs.hunger < config.NEED_CRITICAL_THRESHOLD:
+            # Emergency: a starving agent eats where it is (buys food on the spot)
+            # instead of risking death walking to a distant shop. Target stays
+            # unset so the eat effect fires immediately on the next tick.
+            pass
+        elif action == "eat" or action == "shop":
             self._target_building(world, [BuildingType.SHOP])
         elif action == "sleep" or action == "go_home":
             self._target_building_by_id(world, self.home_id)
@@ -347,16 +358,19 @@ class Agent:
         # Compatibility nudge
         compat = 1.0 - abs(self.personality.agreeableness - other.personality.agreeableness)
         delta += (compat - 0.5) * 0.10
-        was_friend = self.relationships.likes(other.id)
         self.relationships.adjust(other.id, delta)
         other.relationships.adjust(self.id, delta * 0.8)
         self.needs.social = min(1.0, self.needs.social + 0.15)
         other.needs.social = min(1.0, other.needs.social + 0.10)
         self.needs.belonging = min(1.0, self.needs.belonging + 0.05)
 
-        if self.relationships.likes(other.id) and not was_friend:
-            # Affinity crossed the friendship threshold for the first time — a
-            # genuinely new friendship, worth a city event (not every good chat).
+        rel = self.relationships
+        if (rel.likes(other.id)
+                and other.id not in rel.announced_friends
+                and rel.familiarity.get(other.id, 0.0) >= 0.4):
+            # Established friendship (high affinity AND enough shared history),
+            # announced once per pair — not on every pleasant chat.
+            rel.announced_friends.add(other.id)
             self.memory.remember(MemoryEntry(
                 kind="positive_social", text=f"Became friends with {other.name}",
                 importance=0.5, other_id=other.id,
