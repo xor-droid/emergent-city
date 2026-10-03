@@ -3,7 +3,7 @@
  * Ports the Python sim's data-oriented core to C: Needs, Personality, UtilityAI,
  * Relationships, Memory, Crime+Wanted+Jail, Factions, Economy, Events, A*
  * pathfinding, and the World/agent/time loop. Compiles with C + libm; renderers
- * (backend_raylib.c / backend_notcurses.c) are thin layers on top.
+ * (backend_raylib.c) is a thin layer on top.
  */
 #ifndef SIM_H
 #define SIM_H

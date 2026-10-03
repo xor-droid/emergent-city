@@ -1,10 +1,9 @@
-/* main.c — entry point: parse --backend, build the world, dispatch to a renderer.
+/* main.c — entry point: build the world, run the raylib renderer.
  *
- *   ./csim [--backend raylib|sdl2] [-b raylib|sdl2]
+ *   ./csim [--backend raylib]
  *
- * Both backends share the same sim core; the only difference is the renderer.
- * Backends not compiled in (see CMake HAVE_RAYLIB/HAVE_SDL2) fall back to a stub
- * that explains how to enable them.
+ * The simulation renders in a GPU window (raylib). A stub (below) explains how
+ * to enable raylib if it wasn't compiled in.
  */
 #include "sim.h"
 #include "viz.h"
@@ -13,7 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* Stubs for backends that weren't compiled in. */
+/* Stub if raylib wasn't compiled in. */
 #ifndef HAVE_RAYLIB
 int run_raylib(World *w) {
     (void)w;
@@ -22,56 +21,29 @@ int run_raylib(World *w) {
     return 1;
 }
 #endif
-#ifndef HAVE_NC
-int run_notcurses(World *w) {
-    (void)w;
-    fprintf(stderr, "notcurses backend not built. Install it and rebuild:\n"
-                    "  sudo apt install libnotcurses-dev\n");
-    return 1;
-}
-#endif
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--backend raylib|notcurses] [--blit MODE]\n", argv0);
-    printf("  --blit (notcurses only): default|pixel|sextant|quad|half|braille|ascii\n"
-           "         pixel = true terminal pixel graphics (Kitty/Sixel/iTerm2);\n"
-           "         sextant = 2x3 sub-cell blocks (works everywhere, incl. tmux).\n");
-#if defined(HAVE_RAYLIB)
-    printf("  raylib backend: built\n");
-#else
-    printf("  raylib backend: NOT built\n");
-#endif
-#if defined(HAVE_NC)
-    printf("  notcurses:      built\n");
-#else
-    printf("  notcurses:      NOT built (sudo apt install libnotcurses-dev)\n");
-#endif
+    printf("Usage: %s [--backend raylib]\n", argv0);
+    printf("  Renders the simulation in a GPU window (raylib).\n");
+    printf("  Controls: drag/arrows pan, wheel zoom, click a citizen to inspect,\n");
+    printf("            g god mode, j jail, f factions, l legend, Tab feed,\n");
+    printf("            Space pause, 1/2/3 speed, Esc quit.\n");
+    printf("  Env: CSIM_ZOOM=N initial zoom, CSIM_DEMO=1 open panels,\n");
+    printf("       CSIM_SHOT=path dump a screenshot.\n");
 }
 
 int main(int argc, char **argv) {
-#if defined(HAVE_RAYLIB)
-    const char *backend = "raylib";
-#elif defined(HAVE_NC)
-    const char *backend = "notcurses";
-#else
-    const char *backend = "none";
-#endif
-
-    /* --blit default: the CLI flag wins, else CSIM_NCBLIT env, else "default". */
-    const char *env_blit = getenv("CSIM_NCBLIT");
-    if (env_blit) g_blit = env_blit;
-
     for (int i = 1; i < argc; i++) {
-        if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc)
-            backend = argv[++i];
-        else if (!strncmp(argv[i], "--backend=", 10))
-            backend = argv[i] + 10;
-        else if (!strcmp(argv[i], "--blit") && i + 1 < argc)
-            g_blit = argv[++i];
-        else if (!strncmp(argv[i], "--blit=", 7))
-            g_blit = argv[i] + 7;
-        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+        if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(argv[0]); return 0;
+        } else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
+            if (strcmp(argv[++i], "raylib")) {
+                fprintf(stderr, "only the raylib backend is available\n"); return 2;
+            }
+        } else if (!strncmp(argv[i], "--backend=", 10)) {
+            if (strcmp(argv[i] + 10, "raylib")) {
+                fprintf(stderr, "only the raylib backend is available\n"); return 2;
+            }
         } else {
             fprintf(stderr, "unknown argument: %s\n", argv[i]);
             usage(argv[0]); return 2;
@@ -84,15 +56,7 @@ int main(int argc, char **argv) {
     dotenv_autoload();   /* pick up the project .env (OPENROUTER_* vars) */
     llm_init();          /* enabled only if OPENROUTER_API_KEY is set */
 
-    int rc;
-    if (!strcmp(backend, "raylib")) rc = run_raylib(&w);
-    else if (!strcmp(backend, "notcurses") || !strcmp(backend, "nc")) rc = run_notcurses(&w);
-    else {
-        fprintf(stderr, "unknown backend '%s' (use raylib or notcurses)\n", backend);
-        usage(argv[0]);
-        llm_shutdown();
-        return 2;
-    }
+    int rc = run_raylib(&w);
     llm_shutdown();
     return rc;
 }

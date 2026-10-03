@@ -5,10 +5,10 @@ A full POSIX-C port of the simulation. Ports the real logic from the Python sim:
 Relationships (friends/rivals + decay), Memory, Crime + Wanted + Jail (with
 severity-scaled hunts/sentences), police hunting + lie-low, Factions (gangs &
 cults), Economy (cost of living), an Event feed, greedy pathing, and the
-World/agent/time loop** — deterministic PCG32 RNG, binary save/load, two
-renderers (raylib window + notcurses terminal), and **LLM-driven decisions**
-(libcurl + cJSON against the local Qwen server, on a background thread so the
-sim never blocks). Feature parity with the Python sim.
+World/agent/time loop** — deterministic PCG32 RNG, binary save/load, a raylib
+GPU-window renderer, and **LLM-driven decisions** (libcurl + cJSON against the
+local Qwen server, on a background thread so the sim never blocks). Feature
+parity with the Python sim.
 
 ## LLM decisions
 Set `OPENROUTER_API_KEY` (any value locally) to enable Qwen consults; the client
@@ -26,73 +26,30 @@ csim/
   src/systems.c         crime+wanted+jail, factions, economy
   src/world.c           worldgen, population, tick orchestration, save/load
   src/sim.h             full data model + API (no graphics deps)
-  src/viz.h / viz.c     shared render helpers (tile colors, HUD string)
-  src/main.c            entry point + --backend dispatch
+  src/viz.h / viz.c     render helpers (tile colors, legend, HUD string)
+  src/main.c            entry point
   src/main_headless.c   runs the core and prints a report (plain gcc, no deps)
   src/backend_raylib.c  raylib renderer (GPU window)
-  src/backend_notcurses.c  notcurses terminal renderer (pixel/sextant/ascii)
-  CMakeLists.txt        builds raylib (fetched) + notcurses (if installed)
+  CMakeLists.txt        builds raylib (fetched)
 ```
 
-## Rendering backends (one binary, pick at runtime)
-Two best-of-breed renderers: a GPU window (raylib) and a terminal renderer
-(notcurses) that spans ascii -> sextant -> true pixel graphics.
+## Rendering (raylib GPU window)
 ```sh
-./build/csim --backend raylib                    # GPU window (default)
-./build/csim --backend notcurses                 # terminal, auto pixel/sextant
-./build/csim --backend notcurses --blit pixel    # force TRUE pixel graphics (Kitty/Sixel/iTerm2)
-./build/csim --backend notcurses --blit sextant  # force 2x3 sub-cell blocks (works in tmux)
-./build/csim --backend notcurses --blit ascii    # plain ASCII cells (works anywhere)
-./build/csim --help                              # lists backends + blit modes
+./build/csim            # run (raylib is the only/default backend)
+./build/csim --help     # controls + env vars
 ```
-Controls (raylib): drag/arrows pan, wheel zoom, click a citizen to inspect,
-  g god mode, j jail, f factions, l legend, Tab feed, Space pause, 1/2/3 speed.
-  Zoom in (wheel) and buildings show a type glyph: H home, $ shop, O office,
-  B bar, + church, P police. CSIM_ZOOM=N sets the initial zoom.
-notcurses: arrows pan/select, g god, 1-8 tool, Enter apply, j jail, f factions,
-  l legend, Tab feed, Space pause, 1/2/3 speed, q quit.
+Controls: drag/arrows pan · wheel zoom · click a citizen to inspect · `g` god
+mode · `j` jail · `f` factions · `l` legend · `Tab` feed · Space pause ·
+`1`/`2`/`3` speed · Esc quit. Zoom in and buildings show a type glyph:
+`H` home, `$` shop, `O` office, `B` bar, `+` church, `P` police.
 
-`--blit` (notcurses only): `sextant` (default) `|quad|half|braille|ascii|pixel|auto`
-(flag > `CSIM_NCBLIT` env). Default is **sextant** (2x3 sub-cell, high-res, and
-composes safely with the HUD/panels). `pixel` is **opt-in/experimental**: true
-terminal pixel graphics (Kitty/Sixel) look best but share the text plane, which
-aborts on some terminals — use it only if your terminal renders it cleanly.
-`auto` lets notcurses negotiate the best blitter.
+Env: `CSIM_ZOOM=N` initial zoom · `CSIM_DEMO=1` open panels · `CSIM_SHOT=path`
+dump a screenshot.
 
-Backend dependencies:
-- **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers
-  (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`).
-- **notcurses** — `sudo apt install libnotcurses-dev`.
-  - **Known issue (upstream notcurses input parser):** on startup notcurses
-    interrogates the terminal (sends DA1 + capability queries) and **blocks with
-    no timeout** until it parses the DA1 reply (`inputlayer_get_responses`,
-    `in.c`). On some terminals its escape-sequence automaton overflows while
-    parsing the batched query responses (`process_escape`, `in.c`:
-    `amata.used <= buflen`). In a **debug** build that aborts; in a **Release**
-    build (`NDEBUG`) the assert is skipped but the reply is silently mis-parsed,
-    so the DA1 handshake never completes and init **hangs forever**. Seen on
-    Kitty-protocol terminals (Kitty/Ghostty/WezTerm) and on some **WSL / Windows
-    Terminal** setups.
-  - **What we do about it:** `backend_notcurses.c` runs `notcurses_init` on a
-    worker thread with a **4 s watchdog** (`CSIM_NC_INIT_TIMEOUT` to override). If
-    the handshake stalls it restores the terminal and exits with a message
-    instead of freezing — it never leaves you with a dead blank screen.
-  - **If notcurses won't start in your terminal:** this is an upstream limitation
-    we can't fix from the app. Use the GPU backend, which has full feature parity:
-    ```sh
-    ./build/csim --backend raylib
-    ```
-    Or try a terminal whose query replies notcurses parses cleanly (a plain
-    `xterm` under WSLg often works; Kitty-protocol terminals and this WSL/Windows
-    Terminal combo do not). Building notcurses from source in Release avoids the
-    *abort* but not the *hang*:
-    ```sh
-    sudo apt install libunistring-dev libdeflate-dev
-    cmake -B build -S . -DCSIM_FETCH_NOTCURSES=ON && cmake --build build -j1
-    ```
-  - **Diagnostics:** `CSIM_NCLOG=/tmp/nclog.txt ./build/csim --backend notcurses`
-    logs terminal geometry, the init result (or `TIMED OUT`), per-frame
-    blit/render return codes, and every key received.
+Dependency: **raylib** is fetched + built by CMake (no apt package); it needs
+GL/X11 dev headers (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev
+libxcursor-dev libxi-dev`). Under WSL, run GUI apps with `export DISPLAY=:0`
+(WSLg provides the X server).
 
 Note: build single-threaded in this project — `cmake --build build -j1`.
 

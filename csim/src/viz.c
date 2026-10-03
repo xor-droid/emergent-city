@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const char *g_blit = "default";
 
 const char *GOD_TOOL_NAME[G_NTOOLS] =
     {"Smite","Bless","Starve","Incite","Spawn","Gang","Cult","Riot"};

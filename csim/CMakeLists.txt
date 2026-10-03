@@ -59,51 +59,9 @@ if(UNIX AND NOT APPLE)
   list(APPEND CSIM_LIBS GL X11 pthread dl rt)
 endif()
 
-# notcurses (terminal renderer).
-#   - Default: use the system libnotcurses-dev via pkg-config.
-#   - CSIM_FETCH_NOTCURSES=ON: build notcurses from source in Release mode. This
-#     avoids the Debian 3.0.17 input-parser assertion (process_escape / in.c)
-#     that aborts on Kitty-protocol terminals — a Release build defines NDEBUG,
-#     which disables that assert. Needs: libunistring-dev libdeflate-dev.
-option(CSIM_FETCH_NOTCURSES "Build notcurses from source (Release; avoids the 3.0.17 input assert)" OFF)
-set(HAVE_NC_BACKEND FALSE)
-set(NC_FETCHED FALSE)
-if(CSIM_FETCH_NOTCURSES)
-  include(FetchContent)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)   # NDEBUG disables the assert
-  set(USE_MULTIMEDIA none CACHE STRING "" FORCE)
-  set(USE_QRCODEGEN OFF CACHE BOOL "" FORCE)
-  set(USE_CPP OFF CACHE BOOL "" FORCE)
-  set(USE_PANDOC OFF CACHE BOOL "" FORCE)
-  set(USE_DOCTEST OFF CACHE BOOL "" FORCE)
-  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-  set(BUILD_EXECUTABLES OFF CACHE BOOL "" FORCE)
-  FetchContent_Declare(notcurses
-    GIT_REPOSITORY https://github.com/dankamongmen/notcurses.git
-    GIT_TAG master GIT_SHALLOW TRUE)
-  FetchContent_MakeAvailable(notcurses)
-  set(HAVE_NC_BACKEND TRUE)
-  set(NC_FETCHED TRUE)
-  list(APPEND CSIM_SOURCES src/backend_notcurses.c)
-  list(APPEND CSIM_DEFS HAVE_NC)
-  list(APPEND CSIM_LIBS notcurses)
-elseif(PkgConfig_FOUND)
-  pkg_check_modules(NOTCURSES QUIET notcurses)
-  if(NOTCURSES_FOUND)
-    set(HAVE_NC_BACKEND TRUE)
-    list(APPEND CSIM_SOURCES src/backend_notcurses.c)
-    list(APPEND CSIM_DEFS HAVE_NC)
-    list(APPEND CSIM_LIBS ${NOTCURSES_LIBRARIES})
-  endif()
-endif()
-
 add_executable(csim ${CSIM_SOURCES})
 target_compile_definitions(csim PRIVATE ${CSIM_DEFS})
 target_link_libraries(csim ${CSIM_LIBS})
-if(HAVE_NC_BACKEND AND NOT NC_FETCHED)
-  target_include_directories(csim PRIVATE ${NOTCURSES_INCLUDE_DIRS})
-  target_link_directories(csim PRIVATE ${NOTCURSES_LIBRARY_DIRS})
-endif()
 apply_llm(csim)
 
-message(STATUS "csim backends:  raylib=ON  notcurses=${HAVE_NC_BACKEND} (fetched=${NC_FETCHED})  llm=${HAVE_LLM_LIBS}")
+message(STATUS "csim:  raylib=ON  llm=${HAVE_LLM_LIBS}")

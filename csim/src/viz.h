@@ -1,9 +1,8 @@
-/* viz.h — shared rendering helpers + backend entry points.
+/* viz.h — rendering helpers + backend entry point.
  *
- * Two interchangeable renderers implement run_*(World*): raylib and SDL2.
- * Which ones are compiled is decided by CMake (HAVE_RAYLIB / HAVE_SDL2); the
- * one that runs is chosen at runtime via --backend. Missing backends get a
- * stub (in main.c) that prints how to enable them.
+ * The raylib renderer implements run_raylib(World*). Whether raylib is compiled
+ * is decided by CMake (HAVE_RAYLIB); if not, a stub (in main.c) prints how to
+ * enable it.
  */
 #ifndef VIZ_H
 #define VIZ_H
@@ -13,10 +12,7 @@
 #define TILE_PX 8
 #define FONT_PATH "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
-/* notcurses blitter selection (set from --blit / CSIM_NCBLIT; "default" auto). */
-extern const char *g_blit;
-
-/* ── God Mode (shared by both renderers) ─────────────────────────────────── */
+/* ── God Mode ────────────────────────────────────────────────────────────── */
 enum { G_SMITE, G_BLESS, G_STARVE, G_INCITE, G_SPAWN, G_GANG, G_CULT, G_RIOT, G_NTOOLS };
 extern const char *GOD_TOOL_NAME[G_NTOOLS];
 /* Apply the selected tool at world tile (tx,ty); writes a short status line. */
@@ -42,8 +38,7 @@ int tile_shade_jitter(int x, int y, int range);
 void hud_string(const World *w, char *buf, int n, float speed, int paused,
                 int fps, const char *backend);
 
-/* Renderer entry points. Return 0 on clean exit, nonzero if unavailable. */
+/* Renderer entry point. Returns 0 on clean exit, nonzero if unavailable. */
 int run_raylib(World *w);
-int run_notcurses(World *w); /* notcurses terminal renderer (pixel/sextant/ascii) */
 
 #endif /* VIZ_H */
