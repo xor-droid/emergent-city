@@ -205,7 +205,7 @@ const char *action_name(Action a) {
 }
 const char *tile_name(TileType t) {
     static const char *names[T_TYPE_COUNT] = {
-        "grass","road","home","shop","work","bar","church","police"
+        "grass","road","home","shop","work","bar","church","police","park","water"
     };
     return (t >= 0 && t < T_TYPE_COUNT) ? names[t] : "?";
 }

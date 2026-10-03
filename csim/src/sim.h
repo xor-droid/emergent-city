@@ -15,7 +15,7 @@
 #define WORLD_W 120
 #define WORLD_H 90
 #define MAX_AGENTS 400
-#define MAX_BUILDINGS 2048
+#define MAX_BUILDINGS 4096   /* dense districted worldgen registers many buildings */
 #define MAX_FACTIONS 32
 #define EVENT_RING 256          /* recent world events kept for the feed */
 #define MAX_RELATIONS 40        /* per-agent relationship ledger (LRU-ish) */
@@ -81,7 +81,8 @@ enum {
 };
 
 typedef enum {
-    T_GRASS, T_ROAD, T_HOME, T_SHOP, T_WORK, T_BAR, T_CHURCH, T_POLICE, T_TYPE_COUNT
+    T_GRASS, T_ROAD, T_HOME, T_SHOP, T_WORK, T_BAR, T_CHURCH, T_POLICE,
+    T_PARK, T_WATER, T_TYPE_COUNT
 } TileType;
 
 typedef enum {

@@ -42,29 +42,93 @@ static void place_building(World *w, int x, int y, TileType t, int cap) {
     w->n_buildings++;
 }
 
+static int default_cap(TileType t) {
+    switch (t) { case T_HOME: return 4; case T_SHOP: return 8; case T_WORK: return 10;
+                 case T_BAR: return 6; case T_CHURCH: return 20; case T_POLICE: return 6;
+                 default: return 4; }
+}
+
+/* Pick a building type for a lot given its normalised distance from downtown
+ * (0 = city centre, 1 = edge). Gives a real city gradient: a dense office/retail
+ * core, mixed commercial inner ring, residential belt, and a sparse rural fringe. */
+static TileType district_building(Rng *r, double d) {
+    double roll = rng_double(r);
+    if (d < 0.20)                 /* downtown: offices + retail, some nightlife */
+        return roll<0.55?T_WORK : roll<0.85?T_SHOP : roll<0.95?T_BAR : T_HOME;
+    if (d < 0.38)                 /* inner ring: mixed commercial */
+        return roll<0.35?T_SHOP : roll<0.55?T_WORK : roll<0.68?T_BAR
+             : roll<0.73?T_CHURCH : T_HOME;
+    if (d < 0.62)                 /* residential belt */
+        return roll<0.78?T_HOME : roll<0.88?T_SHOP : roll<0.93?T_CHURCH
+             : roll<0.97?T_WORK : T_BAR;
+    return roll<0.88?T_HOME : roll<0.95?T_SHOP : T_CHURCH;  /* outskirts */
+}
+
+/* Probability a buildable lot is actually built, by district — leaves yards,
+ * green space and vacant lots so blocks don't read as solid colour. */
+static double district_fill(double d) {
+    if (d < 0.20) return 0.92; if (d < 0.38) return 0.80;
+    if (d < 0.62) return 0.66; if (d < 0.82) return 0.42; return 0.18;
+}
+
 void world_init(World *w, uint64_t seed) {
     memset(w, 0, sizeof(*w));
     rng_seed(&w->rng, seed, 0xCAFEu);
     Rng *r = &w->rng;
-    for (int x = 0; x < WORLD_W; x++)
-        for (int y = 0; y < WORLD_H; y++)
-            w->tile[x][y] = (x % 12 == 0 || y % 9 == 0) ? T_ROAD : T_GRASS;
+    const double cx = WORLD_W * 0.5, cy = WORLD_H * 0.5;
+    const double maxd = sqrt(cx*cx + cy*cy);
 
-    /* scatter buildings on non-road tiles */
-    for (int x = 0; x < WORLD_W; x++) {
+    /* 1. Base layer: grass, plus a meandering river down the east side. */
+    for (int y = 0; y < WORLD_H; y++) {
+        double rc = WORLD_W*0.72 + 10.0*sin(y*0.10) + 5.0*sin(y*0.31);
+        for (int x = 0; x < WORLD_W; x++)
+            w->tile[x][y] = (fabs(x - rc) < 1.6) ? T_WATER : T_GRASS;
+    }
+
+    /* 2. Street grid: minor streets every 7/6 tiles, major avenues every 21/18.
+     *    Streets stop at the river banks; major avenues bridge across it. */
+    for (int x = 0; x < WORLD_W; x++)
+        for (int y = 0; y < WORLD_H; y++) {
+            int major = (x % 21 == 0) || (y % 18 == 0);
+            int minor = (x % 7  == 0) || (y % 6  == 0);
+            if (w->tile[x][y] == T_WATER) { if (major) w->tile[x][y] = T_ROAD; continue; }
+            if (major || minor) w->tile[x][y] = T_ROAD;
+        }
+
+    /* 3. A handful of parks (whole-ish blocks of greenery). */
+    for (int p = 0; p < 6; p++) {
+        int px = 3 + rng_int(r, WORLD_W - 11), py = 3 + rng_int(r, WORLD_H - 9);
+        int pw = 4 + rng_int(r, 4), ph = 3 + rng_int(r, 3);
+        for (int x = px; x < px+pw && x < WORLD_W; x++)
+            for (int y = py; y < py+ph && y < WORLD_H; y++)
+                if (w->tile[x][y] == T_GRASS) w->tile[x][y] = T_PARK;
+    }
+
+    /* 4. Fill lots with buildings on a downtown-to-fringe density gradient. */
+    for (int x = 0; x < WORLD_W; x++)
         for (int y = 0; y < WORLD_H; y++) {
             if (w->tile[x][y] != T_GRASS) continue;
-            if (w->n_buildings >= MAX_BUILDINGS) break;
-            /* sparse placement spread across the whole map (~4% of grass) */
-            double roll = rng_double(r);
-            if (roll < 0.020)       place_building(w, x, y, T_HOME, 4);
-            else if (roll < 0.028)  place_building(w, x, y, T_SHOP, 8);
-            else if (roll < 0.034)  place_building(w, x, y, T_WORK, 10);
-            else if (roll < 0.037)  place_building(w, x, y, T_BAR, 6);
-            else if (roll < 0.039)  place_building(w, x, y, T_CHURCH, 20);
-            else if (roll < 0.040)  place_building(w, x, y, T_POLICE, 6);
+            if (w->n_buildings >= MAX_BUILDINGS) goto built;
+            double dx = x - cx, dy = y - cy, d = sqrt(dx*dx + dy*dy) / maxd;
+            if (rng_double(r) > district_fill(d)) continue;   /* leave as yard/grass */
+            TileType t = district_building(r, d);
+            place_building(w, x, y, t, default_cap(t));
+        }
+built:;
+
+    /* 5. Spread a few police stations across the quadrants (on open lots). */
+    for (int p = 0; p < 4 && w->n_buildings < MAX_BUILDINGS; p++) {
+        int tx = (p & 1) ? WORLD_W*3/4 : WORLD_W/4;
+        int ty = (p < 2) ? WORLD_H/4   : WORLD_H*3/4;
+        for (int rad = 0; rad < 10; rad++) {        /* spiral out to an open lot */
+            int ox = tx + rng_int(r, 2*rad+1) - rad, oy = ty + rng_int(r, 2*rad+1) - rad;
+            if (ox<0||ox>=WORLD_W||oy<0||oy>=WORLD_H) continue;
+            if (w->tile[ox][oy]==T_GRASS || w->tile[ox][oy]==T_PARK) {
+                place_building(w, ox, oy, T_POLICE, default_cap(T_POLICE)); break;
+            }
         }
     }
+
     w->hour = 8.0; w->day = 1;
     factions_seed(w);
 }

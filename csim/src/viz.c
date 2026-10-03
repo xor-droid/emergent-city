@@ -81,14 +81,16 @@ void god_apply(World *w, int tool, int tx, int ty, char *flash, int fn) {
 void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b) {
     unsigned char R, G, B;
     switch (t) {
-        case T_ROAD:   R = 48;  G = 44;  B = 52;  break;
-        case T_HOME:   R = 162; G = 122; B = 96;  break;
-        case T_SHOP:   R = 170; G = 140; B = 80;  break;
-        case T_WORK:   R = 90;  G = 90;  B = 95;  break;
-        case T_BAR:    R = 150; G = 110; B = 170; break;
-        case T_CHURCH: R = 200; G = 180; B = 150; break;
-        case T_POLICE: R = 70;  G = 90;  B = 160; break;
-        default:       R = 52;  G = 78;  B = 58;  break;  /* grass */
+        case T_ROAD:   R = 42;  G = 40;  B = 48;  break;  /* asphalt */
+        case T_HOME:   R = 162; G = 122; B = 96;  break;  /* brick/terracotta */
+        case T_SHOP:   R = 198; G = 162; B = 72;  break;  /* amber storefronts */
+        case T_WORK:   R = 118; G = 124; B = 140; break;  /* steel/glass offices */
+        case T_BAR:    R = 150; G = 110; B = 170; break;  /* neon violet */
+        case T_CHURCH: R = 208; G = 192; B = 160; break;  /* pale stone */
+        case T_POLICE: R = 70;  G = 100; B = 180; break;  /* blue */
+        case T_PARK:   R = 64;  G = 112; B = 66;  break;  /* bright greenery */
+        case T_WATER:  R = 46;  G = 86;  B = 128; break;  /* river/lake */
+        default:       R = 40;  G = 58;  B = 46;  break;  /* grass/undeveloped */
     }
     *r = R; *g = G; *b = B;
 }
