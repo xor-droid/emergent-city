@@ -95,6 +95,27 @@ void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b) 
     *r = R; *g = G; *b = B;
 }
 
+int tile_is_building(TileType t) {
+    switch (t) {
+        case T_HOME: case T_SHOP: case T_WORK:
+        case T_BAR:  case T_CHURCH: case T_POLICE: return 1;
+        default: return 0;
+    }
+}
+
+const LegendEntry LEGEND[] = {
+    { T_HOME,   "Home"   }, { T_SHOP,   "Shop"   }, { T_WORK,  "Office" },
+    { T_BAR,    "Bar"    }, { T_CHURCH, "Church" }, { T_POLICE,"Police" },
+    { T_PARK,   "Park"   }, { T_WATER,  "Water"  },
+};
+const int LEGEND_N = (int)(sizeof(LEGEND)/sizeof(LEGEND[0]));
+
+int tile_shade_jitter(int x, int y, int range) {
+    unsigned h = (unsigned)(x*73856093) ^ (unsigned)(y*19349663);
+    h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+    return (int)(h % (unsigned)(2*range+1)) - range;
+}
+
 void hud_string(const World *w, char *buf, int n, float speed, int paused,
                 int fps, const char *backend) {
     int alive = 0, factions = 0;

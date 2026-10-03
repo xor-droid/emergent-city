@@ -45,8 +45,10 @@ Two best-of-breed renderers: a GPU window (raylib) and a terminal renderer
 ./build/csim --backend notcurses --blit ascii    # plain ASCII cells (works anywhere)
 ./build/csim --help                              # lists backends + blit modes
 ```
-Controls (raylib): drag/arrows pan, wheel zoom, Space pause, 1/2/3 speed.
-notcurses: arrows pan, Space pause, 1/2/3 speed, q quit.
+Controls (raylib): drag/arrows pan, wheel zoom, click a citizen to inspect,
+  g god mode, j jail, f factions, l legend, Tab feed, Space pause, 1/2/3 speed.
+notcurses: arrows pan/select, g god, 1-8 tool, Enter apply, j jail, f factions,
+  l legend, Tab feed, Space pause, 1/2/3 speed, q quit.
 
 `--blit` (notcurses only): `sextant` (default) `|quad|half|braille|ascii|pixel|auto`
 (flag > `CSIM_NCBLIT` env). Default is **sextant** (2x3 sub-cell, high-res, and

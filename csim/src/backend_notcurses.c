@@ -5,7 +5,7 @@
  *   arrows / PgUp PgDn / Home End : browse the client list (selects + highlights)
  *   i inspect (same as selecting)   g god mode   1-8 pick tool
  *   enter : apply god tool at the selected citizen   Tab feed   j jail   f factions
- *   space pause   1/2/3 speed (outside god mode)   esc deselect   q quit
+ *   l legend   space pause   1/2/3 speed (outside god mode)   esc deselect   q quit
  */
 #define _GNU_SOURCE
 #include <wchar.h>
@@ -20,9 +20,10 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define PXT 3
+#define PXT 4   /* px per tile in the RGBA bitmap: room for an outline ring + roof */
 
 static double now_sec(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec*1e-9; }
+static unsigned char clampb(int v){ return (unsigned char)(v<0?0:v>255?255:v); }
 static void put(struct ncplane *n,int y,int x,uint32_t fg,uint32_t bg,const char*s){
     ncplane_set_fg_rgb(n,fg); ncplane_set_bg_rgb(n,bg); ncplane_putstr_yx(n,y,x,s);
 }
@@ -111,7 +112,7 @@ int run_notcurses(World *w) {
 
     int paused=0, running=1, fps=0, frames=0;
     float speed=1.0f;
-    int god=0, tool=G_SMITE, show_right=1, show_jail=0, show_fac=0;
+    int god=0, tool=G_SMITE, show_right=1, show_jail=0, show_fac=0, show_legend=1;
     int selected=-1, list_scroll=0;
     char flash[96]=""; double flash_until=0;
     double prev=now_sec(), facc=0;
@@ -139,6 +140,7 @@ int run_notcurses(World *w) {
             else if (id==NCKEY_TAB) show_right=!show_right;
             else if (id=='j'||id=='J') show_jail=!show_jail;
             else if (id=='f'||id=='F') show_fac=!show_fac;
+            else if (id=='l'||id=='L') show_legend=!show_legend;
             else if (id=='i'||id=='I') { /* selection already is inspection */ }
             else if (id==NCKEY_ESC) selected=-1;
             else if (id==NCKEY_DOWN) nav=1;
@@ -167,11 +169,21 @@ int run_notcurses(World *w) {
         if (facc>=0.5){ fps=(int)(frames/facc); frames=0; facc=0; }
         if (!paused && dt>0) world_tick(w, dt*speed);
 
-        /* paint bitmap */
+        /* paint bitmap: ground tiles flat; buildings as a raised block with a
+         * dark outline ring and a lit roof row (mirrors the raylib renderer). */
         for (int x=0;x<WORLD_W;x++) for(int y=0;y<WORLD_H;y++){
-            unsigned char r,g,b; tile_rgb((TileType)w->tile[x][y],&r,&g,&b);
+            TileType t=(TileType)w->tile[x][y];
+            unsigned char r,g,b; tile_rgb(t,&r,&g,&b);
+            int bld=tile_is_building(t), j=bld?tile_shade_jitter(x,y,14):0;
+            unsigned char br=clampb(r+j), bg=clampb(g+j), bb=clampb(b+j);
             for(int py=0;py<PXT;py++) for(int px=0;px<PXT;px++){
-                size_t o=((size_t)(y*PXT+py)*W+(x*PXT+px))*4; buf[o]=r;buf[o+1]=g;buf[o+2]=b;buf[o+3]=255; } }
+                unsigned char cr=br,cg=bg,cb=bb;
+                if (bld) {
+                    int edge = (px==0||py==0||px==PXT-1||py==PXT-1);
+                    if (edge)      { cr=clampb(br-55); cg=clampb(bg-55); cb=clampb(bb-55); } /* outline */
+                    else if (py==1){ cr=clampb(br+34); cg=clampb(bg+34); cb=clampb(bb+34); } /* roof */
+                }
+                size_t o=((size_t)(y*PXT+py)*W+(x*PXT+px))*4; buf[o]=cr;buf[o+1]=cg;buf[o+2]=cb;buf[o+3]=255; } }
         for (int i=0;i<w->n_agents;i++){ Agent*a=&w->agents[i]; if(!a->alive)continue;
             int bx=(int)a->x*PXT, by=(int)a->y*PXT;
             for(int py=0;py<PXT;py++) for(int px=0;px<PXT;px++){ int X=bx+px,Y=by+py;
@@ -268,6 +280,18 @@ int run_notcurses(World *w) {
                     char bar[24]; snprintf(bar,sizeof(bar),"%s %s",lb[i],b2); put(std,py+4+i,px+1,0xd0cbc0,0x18161e,bar); }
                 put(std,py+11,px+1,0x8a8780,0x18161e,"esc close");
             } else selected=-1;
+        }
+
+        /* legend (bottom-left) */
+        if (show_legend) {
+            int bw=16, by0=(int)rows-LEGEND_N-2; if(by0<1)by0=1;
+            for(int r=0;r<LEGEND_N+1 && by0+r<(int)rows;r++) fillrow(std,by0+r,0,bw,0x18161e);
+            put(std,by0,1,0xd4af5a,0x18161e,"LEGEND [L]");
+            for(int i=0;i<LEGEND_N && by0+1+i<(int)rows;i++){
+                unsigned char cr,cg,cb; tile_rgb(LEGEND[i].type,&cr,&cg,&cb);
+                uint32_t col=((uint32_t)cr<<16)|((uint32_t)cg<<8)|cb;
+                put(std,by0+1+i,1,col,col,"  ");
+                put(std,by0+1+i,4,0xe6e1d7,0x18161e,LEGEND[i].label); }
         }
 
         int rr = notcurses_render(nc);

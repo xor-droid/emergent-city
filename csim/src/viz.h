@@ -25,6 +25,19 @@ void god_apply(World *w, int tool, int tx, int ty, char *flash, int flashn);
 /* Backend-neutral tile color (RGB). */
 void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b);
 
+/* True for tile types that are structures (drawn as raised blocks), false for
+ * ground (grass/road/park/water). Shared so both backends draw them alike. */
+int tile_is_building(TileType t);
+
+/* Shared map legend (swatch color + label), used by both backends. */
+typedef struct { TileType type; const char *label; } LegendEntry;
+extern const LegendEntry LEGEND[];
+extern const int LEGEND_N;
+
+/* Deterministic per-lot shade jitter in [-range,+range] from tile coords, so
+ * clusters of same-type buildings don't read as one flat blob. */
+int tile_shade_jitter(int x, int y, int range);
+
 /* Compose the HUD status line shared by both backends. */
 void hud_string(const World *w, char *buf, int n, float speed, int paused,
                 int fps, const char *backend);

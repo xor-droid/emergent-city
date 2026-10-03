@@ -13,6 +13,8 @@
 
 static Color tile_color(TileType t) { unsigned char r,g,b; tile_rgb(t,&r,&g,&b); return (Color){r,g,b,255}; }
 static Color rgb(unsigned char r, unsigned char g, unsigned char b) { return (Color){r,g,b,255}; }
+static unsigned char clampb(int v){ return (unsigned char)(v<0?0:v>255?255:v); }
+static Color shade(Color c, int d) { return (Color){clampb(c.r+d),clampb(c.g+d),clampb(c.b+d),c.a}; }
 
 static const char *faction_name(World *w, int fid) {
     if (fid < 0 || fid >= w->n_factions) return "-";
@@ -40,7 +42,7 @@ int run_raylib(World *w) {
 
     int paused = 0; float speed = 1.0f;
     int god = 0, tool = G_SMITE;
-    int show_right = 1, show_jail = 0, show_factions = 0;
+    int show_right = 1, show_jail = 0, show_factions = 0, show_legend = 1;
     int selected = -1, list_scroll = 0;
     char flash[96] = ""; double flash_until = 0;
     const char *shot = getenv("CSIM_SHOT"); int frame = 0;
@@ -72,6 +74,7 @@ int run_raylib(World *w) {
         if (IsKeyPressed(KEY_TAB)) show_right = !show_right;
         if (IsKeyPressed(KEY_J)) show_jail = !show_jail;
         if (IsKeyPressed(KEY_F)) show_factions = !show_factions;
+        if (IsKeyPressed(KEY_L)) show_legend = !show_legend;
         for (int k = 0; k < 9; k++) if (IsKeyPressed(KEY_ONE + k)) {
             if (god) { if (k < G_NTOOLS) tool = k; }
             else if (k == 0) speed = 1; else if (k == 1) speed = 5; else if (k == 2) speed = 20;
@@ -129,13 +132,33 @@ int run_raylib(World *w) {
         BeginDrawing();
         ClearBackground((Color){18,16,22,255});
         BeginMode2D(cam);
-        for (int x = 0; x < WORLD_W; x++)
-            for (int y = 0; y < WORLD_H; y++)
-                DrawRectangle(x*TILE_PX, y*TILE_PX, TILE_PX, TILE_PX, tile_color((TileType)w->tile[x][y]));
+        /* only draw tiles inside the camera viewport (huge win when zoomed in) */
+        Vector2 tl = GetScreenToWorld2D((Vector2){0,0}, cam);
+        Vector2 br = GetScreenToWorld2D((Vector2){(float)W,(float)Hs}, cam);
+        int x0=(int)(tl.x/TILE_PX)-1, x1=(int)(br.x/TILE_PX)+1;
+        int y0=(int)(tl.y/TILE_PX)-1, y1=(int)(br.y/TILE_PX)+1;
+        if (x0<0)x0=0; if (y0<0)y0=0; if (x1>=WORLD_W)x1=WORLD_W-1; if (y1>=WORLD_H)y1=WORLD_H-1;
+        Color outline = (Color){12,10,16,255};
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++) {
+                TileType t = (TileType)w->tile[x][y];
+                int px = x*TILE_PX, py = y*TILE_PX;
+                if (!tile_is_building(t)) {             /* flat ground / road / water / park */
+                    DrawRectangle(px, py, TILE_PX, TILE_PX, tile_color(t));
+                    continue;
+                }
+                /* raised block in 3 rects: dark backing (=gap+outline) + body + lit roof */
+                Color body = shade(tile_color(t), tile_shade_jitter(x, y, 14));
+                DrawRectangle(px, py, TILE_PX, TILE_PX, outline);
+                DrawRectangle(px+1, py+1, TILE_PX-2, TILE_PX-2, body);
+                DrawRectangle(px+1, py+1, TILE_PX-2, 2, shade(body, 34));  /* roof highlight */
+            }
         for (int i = 0; i < w->n_agents; i++) {
             Agent *a = &w->agents[i];
             if (!a->alive) continue;
-            DrawRectangle((int)(a->x*TILE_PX)+1, (int)(a->y*TILE_PX)+1, TILE_PX-2, TILE_PX-2, rgb(a->r,a->g,a->b));
+            int cxp = (int)(a->x*TILE_PX) + TILE_PX/2, cyp = (int)(a->y*TILE_PX) + TILE_PX/2;
+            DrawCircle(cxp, cyp, TILE_PX*0.34f, (Color){0,0,0,160});     /* dark halo for contrast */
+            DrawCircle(cxp, cyp, TILE_PX*0.26f, rgb(a->r,a->g,a->b));    /* agent */
             if (a->id == selected)
                 DrawRectangleLines((int)(a->x*TILE_PX)-2, (int)(a->y*TILE_PX)-2, TILE_PX+4, TILE_PX+4, YELLOW);
         }
@@ -273,6 +296,23 @@ int run_raylib(World *w) {
         }
         if (flash[0] && GetTime() < flash_until)
             DrawText(flash, W/2 - MeasureText(flash,16)/2, 50, 16, (Color){230,225,215,255});
+
+        /* ── legend (bottom-left) ── */
+        if (show_legend) {
+            int rows = (LEGEND_N + 1) / 2, rh = 16, lw = 168, lh = 20 + rows*rh;
+            int lx = 10, ly = Hs - lh - 10;
+            DrawRectangle(lx, ly, lw, lh, (Color){24,22,30,225});
+            DrawRectangleLines(lx, ly, lw, lh, (Color){60,56,70,255});
+            DrawText("LEGEND  [L]", lx+8, ly+5, 11, (Color){212,175,90,255});
+            for (int i = 0; i < LEGEND_N; i++) {
+                int col = i % 2, row = i / 2;
+                int ex = lx + 8 + col*80, ey = ly + 22 + row*rh;
+                Color sc = tile_color(LEGEND[i].type);
+                DrawRectangle(ex, ey, 10, 10, sc);
+                DrawRectangleLines(ex, ey, 10, 10, (Color){10,8,14,180});
+                DrawText(LEGEND[i].label, ex+14, ey-1, 11, (Color){225,220,210,255});
+            }
+        }
 
         EndDrawing();
         if (shot && ++frame == 120) { TakeScreenshot(shot); break; }
