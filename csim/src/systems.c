@@ -578,15 +578,49 @@ void jail_tick(World *w) {
 
 /* ── Economy ─────────────────────────────────────────────────────────────── */
 void economy_daily(World *w) {
+    Economy *e = &w->econ;
+    int alive = 0, farmers = 0, workers = 0; double money_sum = 0;
+
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
-        double cost = RENT_PER_DAY + a->needs.money * UPKEEP_FRACTION;
-        a->needs.money = clampd(a->needs.money - cost, 0.0, 1e9);
+        alive++;
+        if (a->occupation == OCC_FARMER) farmers++;
+        else if (a->occupation != OCC_NONE) workers++;
+
+        /* ── rent: a tenant pays their landlord; the rent is transferred, not burned ── */
+        if (a->home_id >= 0) {
+            Building *hb = &w->buildings[a->home_id];
+            if (hb->owner_id >= 0 && hb->owner_id != a->id) {
+                double rent = RENT_TO_LANDLORD * e->goods_price;
+                if (rent > a->needs.money) rent = a->needs.money;
+                a->needs.money -= rent;
+                Agent *ll = world_agent_by_id(w, hb->owner_id);
+                if (ll && ll->alive) ll->needs.money += rent;
+            }
+        }
+        /* municipal upkeep (a modest sink) */
+        a->needs.money = clampd(a->needs.money - a->needs.money * UPKEEP_FRACTION, 0.0, 1e9);
+
+        /* ── credit: interest accrues; repay when flush, borrow when destitute ── */
+        if (a->debt > 0.0) {
+            a->debt *= (1.0 + DAILY_INTEREST);
+            if (a->needs.money > LOW_MONEY * 2) {
+                double repay = a->needs.money - LOW_MONEY * 2;
+                if (repay > a->debt) repay = a->debt;
+                a->needs.money -= repay; a->debt -= repay;
+                if (a->debt < 0.5) a->debt = 0.0;
+            }
+        }
+        if (a->needs.money < MEAL_PRICE && a->debt < DEBT_CEILING) {
+            a->needs.money += LOAN_AMOUNT; a->debt += LOAN_AMOUNT;
+        }
+
         if (a->addiction > 0.0f) a->addiction = (float)clampd(a->addiction - 0.015, 0, 1);  /* habit fades without use */
         if (a->injury > 0.0f) a->injury = (float)clampd(a->injury - 0.08, 0, 2);            /* wounds slowly heal */
         a->reputation = (float)clampd(a->reputation + (a->reputation > 0 ? -0.01 : 0.01), -1, 1);  /* drift to neutral */
-        /* recompute social tier from wealth + reputation + role */
+
+        /* recompute social tier from wealth + reputation + role + debt */
         int tier = 2;
         if (a->needs.money > 400) tier++;
         if (a->needs.money > 1000) tier++;
@@ -594,8 +628,12 @@ void economy_daily(World *w) {
         if (a->reputation > 0.3f) tier++;
         if (a->reputation < -0.3f) tier--;
         if (a->crime_role == CR_KINGPIN) tier++;
+        if (a->debt > DEBT_CEILING * 0.75) tier--;
         if (tier < 0) tier = 0; if (tier > 4) tier = 4;
         a->status = (unsigned char)tier;
+
+        money_sum += a->needs.money;
+
         /* ambient: becoming destitute (can't afford a meal) */
         if (a->needs.money < MEAL_PRICE && !a->broke_flagged) {
             a->broke_flagged = 1;
@@ -604,5 +642,28 @@ void economy_daily(World *w) {
         } else if (a->needs.money >= LOW_MONEY) {
             a->broke_flagged = 0;
         }
+    }
+
+    /* ── agriculture & markets settle for the day ── */
+    double produced = farmers * FOOD_PER_FARMER;        /* the harvest */
+    double consumed = alive  * FOOD_PER_CAPITA;         /* the city's appetite */
+    e->food_stock += produced - consumed;
+    e->food_stock *= (1.0 - FOOD_SPOILAGE);            /* some of the larder spoils */
+    if (e->food_stock < 0) e->food_stock = 0;
+    double demand = consumed;
+    double days_supply = demand > 0 ? e->food_stock / demand : 99.0;
+    e->food_price = clampd(2.5 - 0.3 * days_supply, FOOD_PRICE_MIN, FOOD_PRICE_MAX);
+
+    double avg_money = alive ? money_sum / alive : 0.0;
+    e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */
+    e->wage_mult   = clampd(0.6 + e->goods_price * 0.5, 0.6, 1.6); /* wages chase the cost of living */
+
+    e->gdp_prev = workers * GOODS_PER_WORKER + produced;          /* day's output: goods + harvest */
+    e->gdp_day  = 0.0;
+
+    /* a famine terrorises the city when the larder runs dry */
+    if (days_supply < 1.0 && alive > 0) {
+        char t[96]; snprintf(t, sizeof(t), "Food is scarce — only %.1f days left in the larder", days_supply);
+        events_post(w, EV_HARDSHIP, -1, -1, WORLD_W/2, WORLD_H/2, 0.8, t);
     }
 }

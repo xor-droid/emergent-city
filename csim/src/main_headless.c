@@ -64,6 +64,20 @@ int main(void) {
            alive ? (double)total_friends / alive : 0.0, max_friends, in_faction);
     printf("family: married=%d (couples %d)  pregnant=%d  children born=%d\n",
            married, married / 2, pregnant, born);
+    { int landlords = 0, indebted = 0; double debt_sum = 0;
+      for (int k = 0; k < w.n_agents; k++) {
+          Agent *a = &w.agents[k];
+          if (!a->alive) continue;
+          if (count_properties(&w, a->id) > 0) landlords++;
+          if (a->debt > 0.5) { indebted++; debt_sum += a->debt; }
+      }
+      double demand = alive * FOOD_PER_CAPITA;
+      printf("economy: food=%.0f (%.1f days)  food_price=%.2fx  goods_price=%.2fx  GDP/day=%.0f\n",
+             w.econ.food_stock, demand > 0 ? w.econ.food_stock / demand : 0.0,
+             w.econ.food_price, w.econ.goods_price, w.econ.gdp_prev);
+      printf("         landlords=%d  indebted=%d  total_debt=%.0f\n",
+             landlords, indebted, debt_sum);
+    }
     printf("factions:");
     for (int i = 0; i < w.n_factions; i++)
         if (w.factions[i].active && w.factions[i].members)

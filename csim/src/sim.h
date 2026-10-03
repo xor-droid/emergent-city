@@ -94,6 +94,24 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 #define ESCALATE_T2 10
 #define ESCALATE_T3 22
 
+/* ── Economy: production, markets, food, land, credit ──────────────────────── */
+#define FOOD_PER_CAPITA   1.0     /* food units an agent eats per meal */
+#define FOOD_PER_FARMER   6.0     /* food a farmer produces per day */
+#define FOOD_START_DAYS   8       /* city larder starts with this many days of food */
+#define FARMER_SHARE      0.30    /* of general laborers who work the land */
+#define GOODS_PER_WORKER  12.0    /* value a non-farm worker adds to GDP per shift */
+#define FOOD_SPOILAGE     0.03    /* fraction of the larder lost daily */
+#define FOOD_PRICE_MIN    0.5
+#define FOOD_PRICE_MAX    4.0
+#define RENT_TO_LANDLORD  6.0     /* daily rent a tenant pays their landlord */
+#define LOAN_AMOUNT       25.0    /* emergency micro-loan when destitute */
+#define DEBT_CEILING      200.0   /* no more credit past this */
+#define DAILY_INTEREST    0.03    /* interest accrued on outstanding debt per day */
+
+/* Agent occupations (derived from workplace). */
+enum { OCC_NONE, OCC_FARMER, OCC_LABORER, OCC_SHOPKEEP, OCC_BARKEEP,
+       OCC_CLERGY, OCC_OFFICER, OCC_COUNT };
+
 /* ── Marriage / kinship / births ───────────────────────────────────────────── */
 #define MARRY_MIN_AGE    20      /* minimum age to wed */
 #define MARRY_AFFINITY   0.45    /* affinity with a partner needed to wed */
@@ -211,6 +229,10 @@ typedef struct {
     int   n_children;
     int   pregnant_ticks;       /* >0 = gestating (days remaining); females only */
 
+    /* ── economy ── */
+    unsigned char occupation;   /* OCC_* derived from workplace */
+    double debt;                /* outstanding credit (accrues daily interest) */
+
     int wanted;
     int wanted_ticks;
     char wanted_for[16];
@@ -231,7 +253,18 @@ typedef struct {
     int capacity;
     int n_residents;        /* for homes */
     int n_workers;          /* for workplaces */
+    int owner_id;           /* landlord who owns this building (-1 none) */
 } Building;
+
+/* City-wide economy: markets, the food larder, prevailing wages. */
+typedef struct {
+    double food_stock;      /* city larder, in food units */
+    double food_price;      /* meal price multiplier (1 = normal) */
+    double goods_price;     /* luxury/drink price multiplier */
+    double wage_mult;       /* prevailing wage multiplier */
+    double gdp_day;         /* value produced so far today (accumulates) */
+    double gdp_prev;        /* yesterday's completed GDP (for display) */
+} Economy;
 
 typedef struct {
     int id, active;
@@ -275,6 +308,8 @@ typedef struct {
     /* stats for HUD / headless */
     int deaths, crimes;
     int crime_kind[CK_COUNT];   /* per-kind crime tally */
+
+    Economy econ;               /* city-wide markets, food, wages */
 } World;
 
 /* ── Personality ─────────────────────────────────────────────────────────── */
@@ -325,6 +360,9 @@ void jail_tick(World *w);            /* jail gangs + shankings, on day change */
 const char *jail_gang_name(int g);
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
+void economy_setup(World *w);               /* assign occupations + landlords, seed the larder */
+int  count_properties(const World *w, int owner_id);  /* homes a landlord owns */
+const char *occupation_name(unsigned char occ);
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

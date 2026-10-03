@@ -33,11 +33,14 @@ int world_alive(const World *w) {
 }
 
 /* ── Generation ──────────────────────────────────────────────────────────── */
+static unsigned char occ_for(World *w, Agent *a);
+
 static void place_building(World *w, int x, int y, TileType t, int cap) {
     if (w->n_buildings >= MAX_BUILDINGS) return;
     Building *b = &w->buildings[w->n_buildings];
     b->id = w->n_buildings; b->type = t; b->x = x; b->y = y; b->w = 1; b->h = 1;
     b->capacity = cap; b->n_residents = 0; b->n_workers = 0;
+    b->owner_id = -1;
     w->tile[x][y] = (uint8_t)t;
     w->n_buildings++;
 }
@@ -130,6 +133,7 @@ built:;
     }
 
     w->hour = 8.0; w->day = 1;
+    w->econ.food_price = 1.0; w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
     factions_seed(w);
 }
 
@@ -176,6 +180,7 @@ void world_populate(World *w, int n) {
         w->n_agents++;
     }
     assign_crime_roles(w);   /* career criminals, dealers, kingpins, users, a rare killer */
+    economy_setup(w);        /* occupations, landlords/tenants, seed the city larder */
 }
 
 Agent *world_agent_by_id(World *w, int id) {
@@ -209,6 +214,9 @@ int world_spawn_agent(World *w, int tx, int ty) {
     a->sex = (unsigned char)rng_int(r, 2);
     a->spouse_id = a->mother_id = a->father_id = -1;
     a->n_children = 0; a->pregnant_ticks = 0;
+    if (a->workplace_id >= 0 && w->buildings[a->workplace_id].type == T_POLICE) a->is_police = 1;
+    a->occupation = occ_for(w, a);
+    a->debt = 0.0;
     w->n_agents++;
     char t[96]; snprintf(t, sizeof(t), "%s appeared in the city", a->name);
     events_post(w, EV_BIRTH, a->id, -1, a->x, a->y, 0.4, t);
@@ -308,6 +316,70 @@ void kinship_daily(World *w) {
         if (!dad || !dad->alive) continue;
         if (rng_double(r) < CONCEIVE_CHANCE) a->pregnant_ticks = GESTATION_DAYS;
     }
+}
+
+/* ── economy: occupations, land ownership, the food larder ───────────────────── */
+
+const char *occupation_name(unsigned char occ) {
+    static const char *n[OCC_COUNT] = {
+        "Idle","Farmer","Laborer","Shopkeeper","Barkeep","Clergy","Officer" };
+    return occ < OCC_COUNT ? n[occ] : "?";
+}
+
+static unsigned char occ_for(World *w, Agent *a) {
+    if (a->is_police) return OCC_OFFICER;
+    if (a->workplace_id < 0) return OCC_NONE;
+    switch (w->buildings[a->workplace_id].type) {
+        case T_SHOP:   return OCC_SHOPKEEP;
+        case T_BAR:    return OCC_BARKEEP;
+        case T_CHURCH: return OCC_CLERGY;
+        case T_WORK:   return (rng_double(&w->rng) < FARMER_SHARE) ? OCC_FARMER : OCC_LABORER;
+        default:       return OCC_LABORER;
+    }
+}
+
+int count_properties(const World *w, int owner_id) {
+    int c = 0;
+    for (int i = 0; i < w->n_buildings; i++)
+        if (w->buildings[i].type == T_HOME && w->buildings[i].owner_id == owner_id) c++;
+    return c;
+}
+
+void economy_setup(World *w) {
+    Rng *r = &w->rng;
+    for (int i = 0; i < w->n_agents; i++)
+        if (w->agents[i].alive) w->agents[i].occupation = occ_for(w, &w->agents[i]);
+
+    /* Land ownership concentrates in a wealthy minority: the richest ~12% of the
+       city become the landlord class, and every home is deeded to one of them.
+       Most citizens are therefore tenants who pay rent to a landlord; a landlord
+       lives rent-free in a home they own and collects from everyone else's. */
+    int na = w->n_agents;
+    int order[MAX_AGENTS]; int no = 0;
+    for (int i = 0; i < na; i++) if (w->agents[i].alive) order[no++] = i;
+    /* selection sort the top slice by money (descending) — plenty fast at this n */
+    int n_landlords = no / 8; if (n_landlords < 3) n_landlords = 3; if (n_landlords > no) n_landlords = no;
+    for (int s = 0; s < n_landlords; s++) {
+        int best = s;
+        for (int t = s + 1; t < no; t++)
+            if (w->agents[order[t]].needs.money > w->agents[order[best]].needs.money) best = t;
+        int tmp = order[s]; order[s] = order[best]; order[best] = tmp;
+    }
+    for (int b = 0; b < w->n_buildings; b++) {
+        if (w->buildings[b].type != T_HOME) continue;
+        /* prefer a landlord who already lives here, else deed it to a random landlord */
+        int owner = -1;
+        for (int s = 0; s < n_landlords; s++)
+            if (w->agents[order[s]].home_id == b) { owner = w->agents[order[s]].id; break; }
+        if (owner < 0) owner = w->agents[order[rng_int(r, n_landlords)]].id;
+        w->buildings[b].owner_id = owner;
+    }
+
+    int alive = 0;
+    for (int i = 0; i < w->n_agents; i++) alive += w->agents[i].alive;
+    w->econ.food_stock = alive * FOOD_PER_CAPITA * FOOD_START_DAYS;
+    w->econ.food_price = 1.0; w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
+    w->econ.gdp_day = 0.0; w->econ.gdp_prev = 0.0;
 }
 
 Agent *world_agent_at(World *w, int tx, int ty, double radius) {
@@ -476,22 +548,31 @@ static void do_socialize(World *w, Agent *a) {
 static void execute_action(World *w, Agent *a) {
     Needs *n = &a->needs;
     switch (a->action) {
-        case A_EAT:
-            if (n->money >= MEAL_PRICE) { n->money -= MEAL_PRICE; n->hunger = clampd(n->hunger + 0.6, 0, 1); }
-            else if (n->hunger < NEED_CRITICAL) n->hunger = clampd(n->hunger + 0.3, 0, 1);
-            break;
+        case A_EAT: {
+            double price = MEAL_PRICE * w->econ.food_price;
+            if (w->econ.food_stock > 0.0 && n->money >= price) {   /* the larder is settled daily */
+                n->money -= price;
+                n->hunger = clampd(n->hunger + 0.6, 0, 1);
+            } else if (n->hunger < NEED_CRITICAL) {   /* scavenge when the larder's bare or you're broke */
+                n->hunger = clampd(n->hunger + 0.25, 0, 1);
+            }
+            break; }
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
-        case A_WORK:    n->money += WAGE_PER_SHIFT; n->energy = clampd(n->energy - 0.1, 0, 1);
+        case A_WORK:    n->money += WAGE_PER_SHIFT * w->econ.wage_mult;
+                        n->energy = clampd(n->energy - 0.1, 0, 1);
                         n->meaning = clampd(n->meaning + 0.05, 0, 1);
-                        a->reputation = (float)clampd(a->reputation + 0.004, -1, 1); break;
+                        a->reputation = (float)clampd(a->reputation + 0.004, -1, 1);
+                        break;   /* production & food output are settled daily in economy_daily */
         case A_SOCIALIZE: do_socialize(w, a); break;
-        case A_DRINK:   if (n->money >= DRINK_PRICE) { n->money -= DRINK_PRICE;
-                            n->social = clampd(n->social + 0.3, 0, 1); do_socialize(w, a); } break;
+        case A_DRINK: { double price = DRINK_PRICE * w->econ.goods_price;
+                        if (n->money >= price) { n->money -= price;
+                            n->social = clampd(n->social + 0.3, 0, 1); do_socialize(w, a); } break; }
         case A_PRAY:    n->meaning = clampd(n->meaning + 0.4, 0, 1); n->safety = clampd(n->safety + 0.1, 0, 1);
                         a->reputation = (float)clampd(a->reputation + 0.004, -1, 1); break;
-        case A_SHOP:    if (n->money >= LUXURY_PRICE) { n->money -= LUXURY_PRICE;
-                            n->belonging = clampd(n->belonging + 0.2, 0, 1); } break;
+        case A_SHOP: {  double price = LUXURY_PRICE * w->econ.goods_price;
+                        if (n->money >= price) { n->money -= price;
+                            n->belonging = clampd(n->belonging + 0.2, 0, 1); } break; }
         case A_CRIME: {
             Agent *target = nearest_other(w, a, 6);
             crime_attempt(w, a, target, choose_crime_kind(w, a, target));
