@@ -59,15 +59,17 @@ cell a dark tile-tinted background with a brighter CP437 glyph: `,` grass,
 glyphs with a tileset image (implies ASCII/tile view). Assets are **not
 bundled** (licensing) — each name resolves to a file under the tileset dir
 (`CSIM_TILESET_DIR`, default `./tilesets`); if the file is missing, the game
-prints where to get it and falls back to font glyphs. Cell size is per-set
-(default 16), overridable with `CSIM_TILESET_CELL`.
+prints where to get it and falls back to font glyphs. Sheet geometry is per-set
+— cell px (default 16), inter-tile spacing, and outer margin — overridable with
+`CSIM_TILESET_CELL` / `CSIM_TILESET_SPACE` / `CSIM_TILESET_MARGIN` (so spaced
+sheets like Kenney's line up).
 - **CC0, CP437 grid:** `camashu` — [DorfFortressTileSet](https://github.com/Camashu/DorfFortressTileSet)
 - **DF-wiki CP437 (verify each license):** `curses` `phoebus` `anikki` — [tileset repository](https://dwarffortresswiki.org/Tileset_repository)
 - **CC0, semantic sprites:** `kenney` `kenney-indoor` `kenney-caves` `kenney-1bit` — [Kenney via OpenGameArt](https://opengameart.org/content/roguelikerpg-pack-1700-tiles)
 
 CP437 sheets map each tile to its code-page-437 glyph (tinted). Semantic packs
-map each tile *type* to a sprite cell (placeholder layout — adjust per sheet;
-spaced sheets like Kenney's may need per-set spacing added).
+map each tile *type* to a sprite cell (placeholder layout — adjust the indices
+per sheet).
 
 Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
 `CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·

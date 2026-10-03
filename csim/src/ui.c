@@ -58,19 +58,21 @@ static const char *ascii_glyph(TileType t){
  * Assets are NOT bundled (licensing); each name resolves to a file under the
  * tileset dir (CSIM_TILESET_DIR, default "tilesets"). If missing we print where
  * to get it and fall back to font glyphs. A path ending in .png is used directly
- * (treated as a CP437 sheet). Cell size is per-set (default 16), overridable
- * with CSIM_TILESET_CELL. */
+ * (treated as a CP437 sheet). Geometry is per-set: cell px (default 16), gap
+ * between tiles, and outer margin — override with CSIM_TILESET_CELL / _SPACE /
+ * _MARGIN (handles spaced sheets like Kenney's). */
 enum { TSK_CP437, TSK_SEMANTIC };
-typedef struct { const char *name; int kind; const char *file; int cell; const char *url; const char *license; } TsEntry;
+/* cell = tile px; space = gap between tiles; margin = outer border px. */
+typedef struct { const char *name; int kind; const char *file; int cell, space, margin; const char *url; const char *license; } TsEntry;
 static const TsEntry TSETS[] = {
-  {"camashu",       TSK_CP437,    "camashu.png",          16, "https://github.com/Camashu/DorfFortressTileSet",                "CC0"},
-  {"curses",        TSK_CP437,    "curses.png",           16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"phoebus",       TSK_CP437,    "phoebus.png",          16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"anikki",        TSK_CP437,    "anikki.png",           16, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"kenney",        TSK_SEMANTIC, "kenney_roguelike.png", 16, "https://opengameart.org/content/roguelikerpg-pack-1700-tiles",  "CC0"},
-  {"kenney-indoor", TSK_SEMANTIC, "kenney_indoor.png",    16, "https://opengameart.org/content/roguelike-indoor-pack",         "CC0"},
-  {"kenney-caves",  TSK_SEMANTIC, "kenney_caves.png",     16, "https://opengameart.org/content/roguelike-caves-dungeons-pack", "CC0"},
-  {"kenney-1bit",   TSK_SEMANTIC, "kenney_1bit.png",      16, "https://opengameart.org/content/1-bit-pack",                    "CC0"},
+  {"camashu",       TSK_CP437,    "camashu.png",          16,0,0, "https://github.com/Camashu/DorfFortressTileSet",                "CC0"},
+  {"curses",        TSK_CP437,    "curses.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"phoebus",       TSK_CP437,    "phoebus.png",          16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"anikki",        TSK_CP437,    "anikki.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"kenney",        TSK_SEMANTIC, "kenney_roguelike.png", 16,1,0, "https://opengameart.org/content/roguelikerpg-pack-1700-tiles",  "CC0"},
+  {"kenney-indoor", TSK_SEMANTIC, "kenney_indoor.png",    16,1,0, "https://opengameart.org/content/roguelike-indoor-pack",         "CC0"},
+  {"kenney-caves",  TSK_SEMANTIC, "kenney_caves.png",     16,1,0, "https://opengameart.org/content/roguelike-caves-dungeons-pack", "CC0"},
+  {"kenney-1bit",   TSK_SEMANTIC, "kenney_1bit.png",      16,1,0, "https://opengameart.org/content/1-bit-pack",                    "CC0"},
 };
 static const int N_TSETS = (int)(sizeof(TSETS)/sizeof(TSETS[0]));
 
@@ -123,24 +125,28 @@ int run_ui(World *w){
     int selected=-1, list_scroll=0;
 
     /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
-    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_cols=16;
+    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_space=0, ts_margin=0, ts_cols=16;
     { const char *tsname=getenv("CSIM_TILESET");
       if(tsname && tsname[0] && G->load_tex){
         char path[600]; const TsEntry *ent=NULL; int direct=0;
         if(strchr(tsname,'/')||strstr(tsname,".png")){ snprintf(path,sizeof(path),"%s",tsname); direct=1; }
         else for(int i=0;i<N_TSETS;i++) if(!strcmp(tsname,TSETS[i].name)){ ent=&TSETS[i]; break; }
         const char *dir=getenv("CSIM_TILESET_DIR"); if(!dir) dir="tilesets";
-        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind; ts_cell=ent->cell; }
-        { const char *cs=getenv("CSIM_TILESET_CELL"); if(cs){ int c=atoi(cs); if(c>0) ts_cell=c; } }
+        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind;
+                 ts_cell=ent->cell; ts_space=ent->space; ts_margin=ent->margin; }
+        { const char *e; if((e=getenv("CSIM_TILESET_CELL"))){ int c=atoi(e); if(c>0) ts_cell=c; }
+          if((e=getenv("CSIM_TILESET_SPACE"))){ int c=atoi(e); if(c>=0) ts_space=c; }
+          if((e=getenv("CSIM_TILESET_MARGIN"))){ int c=atoi(e); if(c>=0) ts_margin=c; } }
         if(!ent && !direct){
             fprintf(stderr,"unknown tileset '%s'. options:",tsname);
             for(int i=0;i<N_TSETS;i++) fprintf(stderr," %s",TSETS[i].name);
             fprintf(stderr,"  (or a path to a .png)\n");
         } else {
             int tw=0,th=0; ts_tex=G->load_tex(path,&tw,&th);
-            if(ts_tex){ ts_cols = ts_cell>0 ? tw/ts_cell : 16; if(ts_cols<1) ts_cols=1; ascii=1;
-                fprintf(stderr,"[tileset] %s  %dx%d  %dpx cells  %d cols  (%s)\n",
-                        path,tw,th,ts_cell,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
+            if(ts_tex){ int stride=ts_cell+ts_space;
+                ts_cols = stride>0 ? (tw - ts_margin + ts_space)/stride : 16; if(ts_cols<1) ts_cols=1; ascii=1;
+                fprintf(stderr,"[tileset] %s  %dx%d  %dpx cells  space %d  margin %d  %d cols  (%s)\n",
+                        path,tw,th,ts_cell,ts_space,ts_margin,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
             } else {
                 fprintf(stderr,"[tileset] not found: %s — using font glyphs.\n", path);
                 if(ent) fprintf(stderr,"          get it (%s): %s\n", ent->license, ent->url);
@@ -287,15 +293,17 @@ int run_ui(World *w){
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=cp437_for(t2); col=code%ts_cols; row=code/ts_cols; tint=shade(tile_col(t2),70); }
                     else { semantic_cell(t2,&col,&row); if(col<0) continue; tint=COL_WHITE; }
+                    int stride=ts_cell+ts_space, srcx=ts_margin+col*stride, srcy=ts_margin+row*stride;
                     float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
-                    G->draw_tex(ts_tex, col*ts_cell,row*ts_cell,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
                 }
                 for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=a->is_police?2:1; col=code%ts_cols; row=code/ts_cols; tint=gfx_rgb(a->r,a->g,a->b); }
                     else { col=9; row=0; tint=COL_WHITE; }   /* a 'person' cell (placeholder) */
+                    int stride=ts_cell+ts_space, srcx=ts_margin+col*stride, srcy=ts_margin+row*stride;
                     float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
-                    G->draw_tex(ts_tex, col*ts_cell,row*ts_cell,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cell,ts_cell, (int)sx,(int)sy,iw,iw, tint);
                 }
             } else {
                 for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
