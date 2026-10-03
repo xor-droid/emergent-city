@@ -447,6 +447,10 @@ int run_ui(World *w){
                 float sx,sy; w2s(&cam,tx*TILE_PX+TILE_PX*0.5f,ty*TILE_PX+TILE_PX*0.5f,&sx,&sy);
                 G->circle((int)sx,(int)sy,TURF_RADIUS*TILE_PX*cam.zoom*0.5f,gfx_rgba(f->r,f->g,f->b,48));
             }
+            float wpulse=0.5f+0.5f*sinf((float)(now_sec()*4.5));   /* 0..1 war-line throb */
+            int walpha=120+(int)(wpulse*135);                      /* 120..255 */
+            int wthick=1+(int)(wpulse*2.5f);                       /* 1..3 px half-width */
+            GfxColor wcol=gfx_rgba(255,60,40,walpha);
             for(int i=0;i<w->n_factions;i++){ Faction *f=&w->factions[i];
                 if(!f->active||f->war_with<=i) continue;   /* draw each warring pair once */
                 Faction *g=&w->factions[f->war_with];
@@ -459,10 +463,11 @@ int run_ui(World *w){
                     float ax,ay,bx,by;
                     w2s(&cam,la->x*TILE_PX+TILE_PX*0.5f,la->y*TILE_PX+TILE_PX*0.5f,&ax,&ay);
                     w2s(&cam,lb->x*TILE_PX+TILE_PX*0.5f,lb->y*TILE_PX+TILE_PX*0.5f,&bx,&by);
-                    for(int o=-1;o<=1;o++){ G->line((int)ax,(int)ay+o,(int)bx,(int)by+o,gfx_rgba(255,60,40,235));
-                                            G->line((int)ax+o,(int)ay,(int)bx+o,(int)by,gfx_rgba(255,60,40,235)); }
-                    G->circle((int)ax,(int)ay,US(5),gfx_rgba(255,60,40,235));
-                    G->circle((int)bx,(int)by,US(5),gfx_rgba(255,60,40,235));
+                    for(int o=-wthick;o<=wthick;o++){ G->line((int)ax,(int)ay+o,(int)bx,(int)by+o,wcol);
+                                                      G->line((int)ax+o,(int)ay,(int)bx+o,(int)by,wcol); }
+                    float er=US(4)+wpulse*US(6);                   /* pulsing endpoint markers */
+                    G->circle((int)ax,(int)ay,er,wcol);
+                    G->circle((int)bx,(int)by,er,wcol);
                 }
             }
         } else if(overlay==3){                            /* recolor citizens by cultural group */
