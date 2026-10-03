@@ -110,6 +110,40 @@ void world_populate(World *w, int n) {
     }
 }
 
+Agent *world_agent_by_id(World *w, int id) {
+    for (int i = 0; i < w->n_agents; i++) if (w->agents[i].id == id) return &w->agents[i];
+    return NULL;
+}
+
+/* Spawn + register one new citizen at (tx,ty) (God Mode). Returns id or -1. */
+int world_spawn_agent(World *w, int tx, int ty) {
+    if (w->n_agents >= MAX_AGENTS) return -1;
+    Rng *r = &w->rng;
+    Agent *a = &w->agents[w->n_agents];
+    memset(a, 0, sizeof(*a));
+    a->id = w->next_id++;
+    a->alive = 1;
+    snprintf(a->name, sizeof(a->name), "%s %s", FIRST_NAMES[rng_int(r, 40)], LAST_NAMES[rng_int(r, 28)]);
+    a->age = (int)clampd(rng_gauss(r, 35, 14), 16, 90);
+    a->home_id = random_building(w, T_HOME);
+    a->x = (tx >= 0 && tx < WORLD_W) ? tx : rng_int(r, WORLD_W);
+    a->y = (ty >= 0 && ty < WORLD_H) ? ty : rng_int(r, WORLD_H);
+    a->tx = -1; a->ty = -1;
+    double wr = rng_double(r);
+    TileType wtype = wr < 0.6 ? T_WORK : wr < 0.85 ? T_SHOP : wr < 0.95 ? T_BAR : T_CHURCH;
+    a->workplace_id = random_building(w, wtype);
+    a->faction_id = -1;
+    a->needs.hunger = a->needs.energy = a->needs.safety = 1.0;
+    a->needs.social = a->needs.meaning = a->needs.belonging = 1.0;
+    a->needs.money = clampd(rng_gauss(r, START_MONEY_MEAN, START_MONEY_SD), 0, 1e9);
+    personality_random(&a->pers, r);
+    a->action = A_WANDER;
+    w->n_agents++;
+    char t[96]; snprintf(t, sizeof(t), "%s appeared in the city", a->name);
+    events_post(w, EV_BIRTH, a->id, -1, a->x, a->y, 0.4, t);
+    return a->id;
+}
+
 Agent *world_agent_at(World *w, int tx, int ty, double radius) {
     Agent *best = NULL; double bd = radius * radius;
     for (int i = 0; i < w->n_agents; i++) {

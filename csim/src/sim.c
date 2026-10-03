@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static double clampd(double v, double lo, double hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -263,4 +264,43 @@ int building_nearest(const World *w, int fx, int fy, TileType type) {
         if (best < 0 || d < bestd) { best = i; bestd = d; }
     }
     return best;
+}
+
+/* ── .env loader (does not override already-set env vars) ─────────────────── */
+static void strip(char *s) {
+    char *p = s; while (*p == ' ' || *p == '\t') p++;
+    if (p != s) memmove(s, p, strlen(p) + 1);
+    size_t L = strlen(s);
+    while (L && (s[L-1] == '\n' || s[L-1] == '\r' || s[L-1] == ' ' || s[L-1] == '\t')) s[--L] = '\0';
+}
+void dotenv_load(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+        strip(line);
+        if (!line[0] || line[0] == '#') continue;
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char *key = line, *val = eq + 1;
+        strip(key); strip(val);
+        /* drop surrounding quotes */
+        size_t vl = strlen(val);
+        if (vl >= 2 && ((val[0] == '"' && val[vl-1] == '"') || (val[0] == '\'' && val[vl-1] == '\''))) {
+            val[vl-1] = '\0'; val++;
+        }
+        if (key[0]) setenv(key, val, 0);  /* 0 = don't overwrite existing */
+    }
+    fclose(f);
+}
+void dotenv_autoload(void) {
+    const char *explicit_path = getenv("CSIM_ENV");
+    if (explicit_path && explicit_path[0]) { dotenv_load(explicit_path); return; }
+    /* search upward: run from build/, csim/, or the project root */
+    const char *cands[] = {".env", "../.env", "../../.env", "../../../.env"};
+    for (int i = 0; i < 4; i++) {
+        FILE *f = fopen(cands[i], "r");
+        if (f) { fclose(f); dotenv_load(cands[i]); return; }
+    }
 }

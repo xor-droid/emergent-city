@@ -16,6 +16,12 @@
 /* notcurses blitter selection (set from --blit / CSIM_NCBLIT; "default" auto). */
 extern const char *g_blit;
 
+/* ── God Mode (shared by both renderers) ─────────────────────────────────── */
+enum { G_SMITE, G_BLESS, G_STARVE, G_INCITE, G_SPAWN, G_GANG, G_CULT, G_RIOT, G_NTOOLS };
+extern const char *GOD_TOOL_NAME[G_NTOOLS];
+/* Apply the selected tool at world tile (tx,ty); writes a short status line. */
+void god_apply(World *w, int tool, int tx, int ty, char *flash, int flashn);
+
 /* Backend-neutral tile color (RGB). */
 void tile_rgb(TileType t, unsigned char *r, unsigned char *g, unsigned char *b);
 

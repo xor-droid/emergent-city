@@ -81,7 +81,8 @@ int main(int argc, char **argv) {
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
-    llm_init();   /* enabled only if OPENROUTER_API_KEY is set */
+    dotenv_autoload();   /* pick up the project .env (OPENROUTER_* vars) */
+    llm_init();          /* enabled only if OPENROUTER_API_KEY is set */
 
     int rc;
     if (!strcmp(backend, "raylib")) rc = run_raylib(&w);

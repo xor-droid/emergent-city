@@ -10,7 +10,8 @@ int main(void) {
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
-    llm_init();   /* set OPENROUTER_API_KEY to enable Qwen consults */
+    dotenv_autoload();   /* pick up the project .env */
+    llm_init();          /* set OPENROUTER_API_KEY to enable Qwen consults */
     int start = w.n_agents;
 
     int police = 0;

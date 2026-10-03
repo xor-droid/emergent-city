@@ -278,6 +278,12 @@ void world_tick(World *w, double dt_seconds);
 int  world_is_night(const World *w);
 int  world_alive(const World *w);
 Agent *world_agent_at(World *w, int tx, int ty, double radius);
+Agent *world_agent_by_id(World *w, int id);
+int  world_spawn_agent(World *w, int tx, int ty);   /* returns new agent id, or -1 */
+
+/* ── .env loader (python-dotenv-style; does not override existing env) ──────── */
+void dotenv_load(const char *path);     /* load one file if it exists */
+void dotenv_autoload(void);             /* try CSIM_ENV, ./.env, ../.env, ../../.env */
 
 /* ── Save / load (JSON via cJSON if available; no-op stubs otherwise) ─────── */
 int  world_save(const World *w, const char *path);   /* 1 ok, 0 fail */
