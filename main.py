@@ -33,10 +33,11 @@ from llm.decision_router import DecisionRouter
 from utils.logger import setup_logging
 
 
-# Minimum window-size change (px) to honor as a real resize. Kept just above the
-# WSLg decoration echo (~6-7px) so manual dragging updates smoothly without
-# triggering a set_mode feedback loop.
-RESIZE_EPS = 12
+# Minimum window-size change (px) to honor as a real resize. On the X11 driver
+# set_mode returns the exact size (no echo), so this can be tiny — just enough
+# to skip zero/no-op events — which keeps the surface tracking a drag with no
+# uncovered (black/gray) edge.
+RESIZE_EPS = 2
 
 
 def main() -> int:
@@ -44,11 +45,18 @@ def main() -> int:
     setup_logging()
     log = logging.getLogger("emergent_city")
 
+    # Prefer the X11 (Xwayland) driver: under WSLg the native Wayland window has
+    # no draggable decorations, so it can't be resized. X11 gives standard
+    # resizable decorations and returns the exact requested size (no echo).
+    # Override by setting SDL_VIDEODRIVER in the environment.
+    os.environ.setdefault("SDL_VIDEODRIVER", "x11")
+
     if config.RANDOM_SEED is not None:
         random.seed(config.RANDOM_SEED)
         log.info("Seeded RNG with %d", config.RANDOM_SEED)
 
     pygame.init()
+    log.info("SDL video driver: %s", pygame.display.get_driver())
     pygame.display.set_caption(config.WINDOW_TITLE)
     screen = pygame.display.set_mode(
         (config.WINDOW_WIDTH, config.WINDOW_HEIGHT),
@@ -145,6 +153,7 @@ def main() -> int:
             elif event.type == pygame.VIDEORESIZE:
                 w, h = event.size
                 cw, ch = screen.get_size()
+                log.info("VIDEORESIZE event: %dx%d (current %dx%d)", w, h, cw, ch)
                 # Ignore only the tiny OS decoration echo (WSLg reports the
                 # surface back a few px off after each set_mode, which would
                 # otherwise become a resize feedback loop). RESIZE_EPS is kept
