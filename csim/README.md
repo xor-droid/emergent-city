@@ -48,10 +48,12 @@ Two best-of-breed renderers: a GPU window (raylib) and a terminal renderer
 Controls (raylib): drag/arrows pan, wheel zoom, Space pause, 1/2/3 speed.
 notcurses: arrows pan, Space pause, 1/2/3 speed, q quit.
 
-`--blit` (notcurses only): `default|pixel|sextant|quad|half|braille|ascii`
-(flag > `CSIM_NCBLIT` env > `default`). True pixel graphics need a capable
-terminal **outside tmux** (Kitty/WezTerm/foot/recent Windows Terminal); tmux
-falls back to sextants.
+`--blit` (notcurses only): `sextant` (default) `|quad|half|braille|ascii|pixel|auto`
+(flag > `CSIM_NCBLIT` env). Default is **sextant** (2x3 sub-cell, high-res, and
+composes safely with the HUD/panels). `pixel` is **opt-in/experimental**: true
+terminal pixel graphics (Kitty/Sixel) look best but share the text plane, which
+aborts on some terminals — use it only if your terminal renders it cleanly.
+`auto` lets notcurses negotiate the best blitter.
 
 Backend dependencies:
 - **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers

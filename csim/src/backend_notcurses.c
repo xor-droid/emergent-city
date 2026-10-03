@@ -37,11 +37,15 @@ int run_notcurses(World *w) {
     if (!nc) { fprintf(stderr, "notcurses_init failed\n"); return 1; }
     struct ncplane *std = notcurses_stdplane(nc);
 
-    ncblitter_e blit = NCBLIT_DEFAULT;
+    /* Default to sextants: high-res AND composes with the HUD/panel text on the
+     * std plane. NCBLIT_DEFAULT can auto-pick PIXEL graphics, which abort when
+     * drawn on the same plane as text — so pixel is opt-in via --blit pixel. */
+    ncblitter_e blit = NCBLIT_3x2;
     if (g_blit) {
         if(!strcmp(g_blit,"sextant"))blit=NCBLIT_3x2; else if(!strcmp(g_blit,"quad"))blit=NCBLIT_2x2;
         else if(!strcmp(g_blit,"half"))blit=NCBLIT_2x1; else if(!strcmp(g_blit,"braille"))blit=NCBLIT_BRAILLE;
         else if(!strcmp(g_blit,"ascii"))blit=NCBLIT_1x1; else if(!strcmp(g_blit,"pixel"))blit=NCBLIT_PIXEL;
+        else if(!strcmp(g_blit,"auto"))blit=NCBLIT_DEFAULT;
     }
 
     const int W = WORLD_W*PXT, H = WORLD_H*PXT;
