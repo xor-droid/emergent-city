@@ -204,15 +204,16 @@ POLICE_PATROL_INTENSITY = 6
 # Max remembered relationships per agent (LRU)
 MAX_RELATIONSHIPS = 40
 
-# Daily relationship decay if no interaction (toward 0)
-RELATIONSHIP_DECAY = 0.005
+# Daily relationship decay if no interaction (toward 0). Raised so unmaintained
+# friendships gradually lapse rather than accumulating forever.
+RELATIONSHIP_DECAY = 0.010
 
 # Affinity gain per pleasant interaction
 INTERACTION_AFFINITY_DELTA = 0.04
 
 # Affinity (roughly -1..1) at/above which two agents count as friends,
 # and at/below which they count as rivals.
-FRIENDSHIP_AFFINITY_THRESHOLD = 0.30
+FRIENDSHIP_AFFINITY_THRESHOLD = 0.40
 RIVALRY_AFFINITY_THRESHOLD = -0.30
 
 

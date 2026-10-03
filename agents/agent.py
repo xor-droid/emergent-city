@@ -369,10 +369,12 @@ class Agent:
         if not nearby:
             return
         other = world.rng.choice(nearby)
-        delta = world.rng.uniform(-0.10, 0.25)
-        # Compatibility nudge
+        # Near-neutral random roll (was +0.075-biased, which made friendship
+        # nearly inevitable for anyone who met repeatedly). Personality
+        # compatibility now dominates, so only agents who click become friends.
+        delta = world.rng.uniform(-0.15, 0.18)
         compat = 1.0 - abs(self.personality.agreeableness - other.personality.agreeableness)
-        delta += (compat - 0.5) * 0.10
+        delta += (compat - 0.5) * 0.30
         self.relationships.adjust(other.id, delta)
         other.relationships.adjust(self.id, delta * 0.8)
         self.needs.social = min(1.0, self.needs.social + 0.15)
