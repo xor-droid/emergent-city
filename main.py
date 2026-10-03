@@ -152,13 +152,12 @@ def main() -> int:
 
             elif event.type == pygame.VIDEORESIZE:
                 w, h = event.size
-                cw, ch = screen.get_size()
-                log.info("VIDEORESIZE event: %dx%d (current %dx%d)", w, h, cw, ch)
-                # Ignore only the tiny OS decoration echo (WSLg reports the
-                # surface back a few px off after each set_mode, which would
-                # otherwise become a resize feedback loop). RESIZE_EPS is kept
-                # just above that echo (~6-7px) so real drags update smoothly.
-                if abs(w - cw) > RESIZE_EPS or abs(h - ch) > RESIZE_EPS:
+                # Compare against the camera's current viewport (the size we
+                # last actually applied) — NOT screen.get_size(), which on the
+                # x11 driver already reports the new window size, making the
+                # delta always ~0 and skipping the resize. Updating the camera
+                # here is what lets the newly exposed area get drawn.
+                if abs(w - camera.screen_w) > RESIZE_EPS or abs(h - camera.screen_h) > RESIZE_EPS:
                     apply_resize(w, h)
 
             elif event.type == pygame.KEYDOWN:
