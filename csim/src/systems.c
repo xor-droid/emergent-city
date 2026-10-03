@@ -481,7 +481,7 @@ void crime_daily(World *w) {
         int want = 3 + gap / 6;         /* people to add today (steady trickle + shortfall) */
         int added = 0, guard = 0;
         while (added < want && guard++ < want + 6) {
-            if (rng_double(&w->rng) < 0.40) {      /* ~40% of arrivals are young families with kids */
+            if (rng_double(&w->rng) < get_family_share()) {   /* some arrivals are young families with kids */
                 added += world_spawn_family(w);
                 continue;
             }

@@ -124,6 +124,19 @@ static double g_years_per_day = YEARS_PER_DAY;
 void   set_years_per_day(double y) { if (y > 0.0) g_years_per_day = y; }
 double get_years_per_day(void) { return g_years_per_day; }
 
+/* immigration demographics (tunable at startup) */
+static double g_family_share    = FAMILY_SHARE;
+static int    g_family_kids_min = FAMILY_KIDS_MIN;
+static int    g_family_kids_max = FAMILY_KIDS_MAX;
+void set_family_share(double f) { if (f >= 0.0 && f <= 1.0) g_family_share = f; }
+void set_family_kids(int lo, int hi) {
+    if (lo < 0) lo = 0; if (hi < lo) hi = lo;
+    g_family_kids_min = lo; g_family_kids_max = hi;
+}
+double get_family_share(void)    { return g_family_share; }
+int    get_family_kids_min(void) { return g_family_kids_min; }
+int    get_family_kids_max(void) { return g_family_kids_max; }
+
 int life_stage(const Agent *a) {
     if (a->age <= AGE_CHILD_MAX) return LS_CHILD;
     if (a->age < AGE_ADULT)      return LS_YOUTH;

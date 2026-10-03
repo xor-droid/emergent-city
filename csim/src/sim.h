@@ -122,6 +122,9 @@ enum { LANG_COMMON, LANG_HIGH, LANG_COASTAL, LANG_OLD, LANG_COUNT };
 #define AGE_MORTALITY   60     /* old-age death risk begins to climb here */
 #define AGE_MAXLIFE     100    /* hard upper bound */
 #define POP_TARGET      150    /* living-population the city immigrates toward */
+#define FAMILY_SHARE    0.40   /* fraction of immigrant arrivals that are young families */
+#define FAMILY_KIDS_MIN 1      /* kids per immigrant family (min) */
+#define FAMILY_KIDS_MAX 3      /* kids per immigrant family (max) */
 enum { LS_CHILD, LS_YOUTH, LS_ADULT, LS_ELDER };
 #define IS_MINOR(a) ((a)->age < AGE_WORK)
 
@@ -404,6 +407,11 @@ void kinship_daily(World *w);               /* courtship -> marriage, pregnancy 
 void lifecycle_daily(World *w);             /* old-age mortality, on day change */
 void set_years_per_day(double y);           /* aging pace (CSIM_YEARS_PER_DAY / --years-per-day) */
 double get_years_per_day(void);
+void set_family_share(double f);            /* immigrant family share + kids-per-family (startup knobs) */
+void set_family_kids(int lo, int hi);
+double get_family_share(void);
+int    get_family_kids_min(void);
+int    get_family_kids_max(void);
 int   life_stage(const Agent *a);           /* LS_CHILD/YOUTH/ADULT/ELDER */
 const char *life_stage_name(const Agent *a);
 void economy_setup(World *w);               /* assign occupations + landlords */

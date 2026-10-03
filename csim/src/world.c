@@ -300,7 +300,7 @@ int world_spawn_family(World *w) {
     mum->culture = dad->culture; mum->language = dad->language;
     if (dad->faith != FAITH_NONE) mum->faith = dad->faith;
     int count = 2;
-    int nkids = rng_int_incl(r, 1, 3);
+    int nkids = rng_int_incl(r, get_family_kids_min(), get_family_kids_max());
     for (int k = 0; k < nkids; k++) {
         int cid = spawn_child(w, mum, dad);
         if (cid < 0) break;
