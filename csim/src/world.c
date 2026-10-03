@@ -376,7 +376,6 @@ void economy_setup(World *w) {
     }
 
     w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
-    w->econ.gdp_day = 0.0; w->econ.gdp_prev = 0.0;
 }
 
 Agent *world_agent_at(World *w, int tx, int ty, double radius) {

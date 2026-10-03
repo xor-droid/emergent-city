@@ -71,8 +71,8 @@ int main(void) {
           if (count_properties(&w, a->id) > 0) landlords++;
           if (a->debt > 0.5) { indebted++; debt_sum += a->debt; }
       }
-      printf("economy: goods_price=%.2fx  wage=%.2fx  GDP/day=%.0f  landlords=%d  indebted=%d  total_debt=%.0f\n",
-             w.econ.goods_price, w.econ.wage_mult, w.econ.gdp_prev,
+      printf("economy: goods_price=%.2fx  wage=%.2fx  landlords=%d  indebted=%d  total_debt=%.0f\n",
+             w.econ.goods_price, w.econ.wage_mult,
              landlords, indebted, debt_sum);
     }
     printf("factions:");

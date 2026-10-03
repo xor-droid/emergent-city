@@ -94,8 +94,7 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 #define ESCALATE_T2 10
 #define ESCALATE_T3 22
 
-/* ── Economy: production, markets, land, credit ────────────────────────────── */
-#define GOODS_PER_WORKER  12.0    /* value a worker adds to GDP per day */
+/* ── Economy: markets, land, credit ────────────────────────────────────────── */
 #define RENT_TO_LANDLORD  6.0     /* daily rent a tenant pays their landlord */
 #define LOAN_AMOUNT       25.0    /* emergency micro-loan when destitute */
 #define DEBT_CEILING      200.0   /* no more credit past this */
@@ -249,12 +248,10 @@ typedef struct {
     int owner_id;           /* landlord who owns this building (-1 none) */
 } Building;
 
-/* City-wide economy: markets, prevailing wages, output. */
+/* City-wide economy: markets, prevailing wages. */
 typedef struct {
     double goods_price;     /* luxury/drink price multiplier */
     double wage_mult;       /* prevailing wage multiplier */
-    double gdp_day;         /* value produced so far today (accumulates) */
-    double gdp_prev;        /* yesterday's completed GDP (for display) */
 } Economy;
 
 typedef struct {

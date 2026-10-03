@@ -579,13 +579,12 @@ void jail_tick(World *w) {
 /* ── Economy ─────────────────────────────────────────────────────────────── */
 void economy_daily(World *w) {
     Economy *e = &w->econ;
-    int alive = 0, workers = 0; double money_sum = 0;
+    int alive = 0; double money_sum = 0;
 
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
         alive++;
-        if (a->occupation != OCC_NONE) workers++;
 
         /* ── rent: a tenant pays their landlord; the rent is transferred, not burned ── */
         if (a->home_id >= 0) {
@@ -647,7 +646,4 @@ void economy_daily(World *w) {
     double avg_money = alive ? money_sum / alive : 0.0;
     e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */
     e->wage_mult   = clampd(0.6 + e->goods_price * 0.5, 0.6, 1.6); /* wages chase the cost of living */
-
-    e->gdp_prev = workers * GOODS_PER_WORKER;                     /* day's output */
-    e->gdp_day  = 0.0;
 }
