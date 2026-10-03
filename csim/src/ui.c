@@ -523,33 +523,34 @@ int run_ui(World *w){
 
         /* ── legend (bottom-left) ── */
         if(show_legend){
-            int rows=(LEGEND_N+1)/2, rh=US(16), lw=US(168), lh=US(20)+rows*rh;
+            int rows=(LEGEND_N+1)/2, rh=US(23), colw=US(102), lw=US(16)+2*colw, lh=US(32)+rows*rh;
             int lx=US(10), ly=Hs-lh-US(10);
-            G->fill_rect(lx,ly,lw,lh,gfx_rgba(24,22,30,225));
-            G->rect_lines(lx,ly,lw,lh,gfx_rgb(60,56,70));
-            G->text("LEGEND  [L]",lx+US(8),ly+US(5),US(11),COL_GOLD);
+            G->fill_rect(lx,ly,lw,lh,gfx_rgba(22,20,28,236));
+            G->rect_lines(lx,ly,lw,lh,gfx_rgb(64,60,76));
+            G->text("LEGEND  [L]",lx+US(10),ly+US(8),US(13),COL_GOLD);
+            int sw=US(18);
             for(int i=0;i<LEGEND_N;i++){ int col=i%2, row=i/2;
-                int ex=lx+US(8)+col*US(80), ey=ly+US(22)+row*rh;
-                TileType lt=LEGEND[i].type; int sw=US(12), sh=US(12);
-                /* legend swatch matches the current render: block colors, or in ASCII
-                 * mode the tileset tile (if loaded) / the ASCII glyph. */
+                int ex=lx+US(10)+col*colw, ey=ly+US(30)+row*rh;
+                TileType lt=LEGEND[i].type;
+                /* swatch matches the current render: block colors, or in ASCII mode
+                 * the tileset tile (if loaded) / the ASCII glyph. */
                 if(ascii && ts_tex){
                     int tc,tr; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=cp437_for(lt); tc=code%ts_cols; tr=code/ts_cols; tint=shade(tile_col(lt),70); }
                     else { semantic_cell(ts_sem,lt,&tc,&tr); if(tc<0){tc=0;tr=0;} tint=COL_WHITE; }
-                    G->fill_rect(ex,ey,sw,sh,gfx_rgb(20,18,24));
+                    G->fill_rect(ex,ey,sw,sw,gfx_rgb(20,18,24));
                     int srcx=ts_margin+tc*(ts_cw+ts_space), srcy=ts_margin+tr*(ts_ch+ts_space);
-                    G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, ex,ey,sw,sh, tint);
+                    G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, ex,ey,sw,sw, tint);
                 } else if(ascii){
                     const char *g=ascii_glyph(lt);
-                    G->fill_rect(ex,ey,sw,sh,gfx_rgb(20,18,24));
-                    if(g&&g[0]){ int gs=US(11), tw=G->text_w(g,gs);
-                        G->text(g, ex+(sw-tw)/2, ey+(sh-gs)/2, gs, shade(tile_col(lt),70)); }
+                    G->fill_rect(ex,ey,sw,sw,gfx_rgb(20,18,24));
+                    if(g&&g[0]){ int gs=US(15), tw=G->text_w(g,gs);
+                        G->text(g, ex+(sw-tw)/2, ey+(sw-gs)/2, gs, shade(tile_col(lt),70)); }
                 } else {
-                    G->fill_rect(ex,ey,US(10),US(10),tile_col(lt));
-                    G->rect_lines(ex,ey,US(10),US(10),gfx_rgba(10,8,14,180));
+                    G->fill_rect(ex,ey,sw,sw,tile_col(lt));
+                    G->rect_lines(ex,ey,sw,sw,gfx_rgba(10,8,14,180));
                 }
-                G->text(LEGEND[i].label,ex+US(16),ey-US(1),US(11),gfx_rgb(225,220,210)); }
+                G->text(LEGEND[i].label,ex+sw+US(7),ey+US(3),US(13),gfx_rgb(228,222,212)); }
         }
 
         G->present();
