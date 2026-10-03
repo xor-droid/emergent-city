@@ -232,6 +232,30 @@ void events_post(World *w, EventKind k, int actor, int target,
     e->text[sizeof(e->text) - 1] = '\0';
     w->ev_head = (w->ev_head + 1) % EVENT_RING;
     if (w->ev_count < EVENT_RING) w->ev_count++;
+
+    /* stamp "crime heat" onto the danger map for violent events (drives the heat
+       overlay); city-wide notices at (0,0) are skipped */
+    int violent = (k == EV_CRIME || k == EV_CRIME_FAILED || k == EV_DEATH ||
+                   k == EV_WAR   || k == EV_WANTED);
+    if (violent && (x > 0 || y > 0) && x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H) {
+        int add = (int)(importance * 90) + 20;
+        for (int dy = -2; dy <= 2; dy++)
+            for (int dx = -2; dx <= 2; dx++) {
+                int nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) continue;
+                int fall = add - (abs(dx) + abs(dy)) * (add / 5);
+                if (fall <= 0) continue;
+                int v = w->danger_[nx][ny] + fall;
+                w->danger_[nx][ny] = (uint8_t)(v > 255 ? 255 : v);
+            }
+    }
+}
+
+/* fade the crime-heat map a little (called daily) */
+void danger_decay(World *w) {
+    for (int x = 0; x < WORLD_W; x++)
+        for (int y = 0; y < WORLD_H; y++)
+            w->danger_[x][y] = (uint8_t)(w->danger_[x][y] * 82 / 100);
 }
 const WorldEvent *events_recent(const World *w, int i) {
     if (i < 0 || i >= w->ev_count) return NULL;

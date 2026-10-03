@@ -39,6 +39,15 @@ static GfxColor tile_col(TileType t){ unsigned char r,g,b; tile_rgb(t,&r,&g,&b);
 static GfxColor shade(GfxColor c,int d){ return gfx_rgba(clampb(c.r+d),clampb(c.g+d),clampb(c.b+d),c.a); }
 
 static double now_sec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec*1e-9; }
+static GfxColor culture_col(unsigned char c){
+    switch(c){ case CUL_HARBOR:  return gfx_rgb(60,180,190);
+               case CUL_HILL:    return gfx_rgb(180,140,70);
+               case CUL_OLDTOWN: return gfx_rgb(175,110,205);
+               default:          return gfx_rgb(235,150,60); }   /* newcomers */
+}
+static const char *overlay_name(int o){
+    switch(o){ case 1:return "CRIME HEAT"; case 2:return "FACTION TURF"; case 3:return "CULTURE"; default:return "off"; }
+}
 
 static char building_glyph(TileType t){
     switch(t){ case T_HOME:return 'H'; case T_SHOP:return '$'; case T_WORK:return 'O';
@@ -145,6 +154,9 @@ int run_ui(World *w){
     int paused=0; float speed=1.0f;
     int god=0, tool=G_SMITE;
     int show_right=1, show_jail=0, show_factions=0, show_legend=1, show_crime=0;
+    int show_city=0, overlay=0;   /* city dashboard (E); map overlay cycle (O): heat/turf/culture */
+    { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%4; } }
+    if(getenv("CSIM_CITY")) show_city=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
 
@@ -245,6 +257,8 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_C)) show_crime=!show_crime;
         if(G->key_pressed(GFX_KEY_L)) show_legend=!show_legend;
         if(G->key_pressed(GFX_KEY_A)) ascii=!ascii;
+        if(G->key_pressed(GFX_KEY_E)) show_city=!show_city;
+        if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%4;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
             if(god){ if(k<G_NTOOLS) tool=k; }
             else if(k==0) speed=1; else if(k==1) speed=5; else if(k==2) speed=20;
@@ -411,6 +425,44 @@ int run_ui(World *w){
             }
         }
 
+        /* ── map overlays (toggle O): crime heat / faction turf / culture ── */
+        if(overlay==1){                                   /* crime heat from the danger_ grid */
+            for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
+                int d=w->danger_[x][y]; if(d<=8) continue;
+                float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                int al=d*150/255; if(al>170)al=170;
+                G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(235,45,20,al));
+            }
+        } else if(overlay==2){                            /* faction turf blobs + war lines */
+            for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i];
+                if(!a->alive||a->faction_id<0) continue;
+                Faction *f=&w->factions[a->faction_id]; if(f->is_cult) continue;
+                int tx=(a->turf_x||a->turf_y)?a->turf_x:(int)a->x, ty=(a->turf_x||a->turf_y)?a->turf_y:(int)a->y;
+                float sx,sy; w2s(&cam,tx*TILE_PX+TILE_PX*0.5f,ty*TILE_PX+TILE_PX*0.5f,&sx,&sy);
+                G->circle((int)sx,(int)sy,TURF_RADIUS*TILE_PX*cam.zoom*0.5f,gfx_rgba(f->r,f->g,f->b,26));
+            }
+            for(int i=0;i<w->n_factions;i++){ Faction *f=&w->factions[i];
+                if(!f->active||f->war_with<=i) continue;   /* draw each warring pair once */
+                Agent *la=f->leader_id>=0?world_agent_by_id(w,f->leader_id):NULL;
+                Faction *g=&w->factions[f->war_with];
+                Agent *lb=g->leader_id>=0?world_agent_by_id(w,g->leader_id):NULL;
+                if(la&&la->alive&&lb&&lb->alive){
+                    float ax,ay,bx,by;
+                    w2s(&cam,la->x*TILE_PX+TILE_PX*0.5f,la->y*TILE_PX+TILE_PX*0.5f,&ax,&ay);
+                    w2s(&cam,lb->x*TILE_PX+TILE_PX*0.5f,lb->y*TILE_PX+TILE_PX*0.5f,&bx,&by);
+                    G->line((int)ax,(int)ay,(int)bx,(int)by,gfx_rgba(255,70,50,220));
+                }
+            }
+        } else if(overlay==3){                            /* recolor citizens by cultural group */
+            for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
+                float sx,sy; w2s(&cam,a->x*TILE_PX+TILE_PX*0.5f,a->y*TILE_PX+TILE_PX*0.5f,&sx,&sy);
+                float rr=ts*0.34f; if(rr<1.8f)rr=1.8f;
+                G->circle((int)sx,(int)sy,rr,culture_col(a->culture));
+            }
+        }
+        if(overlay){ snprintf(buf,sizeof(buf),"OVERLAY [O]: %s",overlay_name(overlay));
+            G->text(buf,US(8),hudH+US(6),US(13),gfx_rgb(255,220,120)); }
+
         /* ── selection marker: a pulsing yellow reticle on the selected citizen ── */
         if(selected>=0){ Agent *sa=world_agent_by_id(w,selected);
             if(sa&&sa->alive){
@@ -497,8 +549,52 @@ int run_ui(World *w){
                     G->text(buf,px+US(260),yy,US(12),COL_RED); }
                 else G->text(f->is_cult?"cult":"gang",px+US(260),yy,US(12),gfx_rgb(200,180,150));
                 snprintf(buf,sizeof(buf),"%d",f->members); G->text(buf,px+US(360),yy,US(12),COL_WHITE);
-                if(ldr) snprintf(buf,sizeof(buf),"%.16s",ldr->name); else snprintf(buf,sizeof(buf),"-");
-                G->text(buf,px+US(450),yy,US(12),COL_GRAY); yy+=US(22); }
+                if(f->war_with>=0){ snprintf(buf,sizeof(buf),"vs %.12s  k%d",w->factions[f->war_with].name,f->casualties);
+                    G->text(buf,px+US(450),yy,US(12),COL_RED); }
+                else { if(ldr) snprintf(buf,sizeof(buf),"%.16s",ldr->name); else snprintf(buf,sizeof(buf),"-");
+                    G->text(buf,px+US(450),yy,US(12),COL_GRAY); }
+                yy+=US(22); }
+        }
+
+        /* ── city dashboard: aggregate economy / culture / governance  [E] ── */
+        if(show_city){
+            int pw=US(372), ph=US(430), px=W/2-pw/2, py=hudH+US(18);
+            G->fill_rect(px,py,pw,ph,gfx_rgba(20,20,28,240)); G->rect_lines(px,py,pw,ph,COL_GOLD);
+            int yy=py+US(12), lx=px+US(14);
+            G->text("CITY DASHBOARD  [E]",lx,yy,US(15),COL_GOLD); yy+=US(24);
+            int alive=0,relig=0,common=0,landl=0,indebt=0,married=0,injured=0,wanted=0;
+            double money=0,debt=0,edu=0;
+            int faith[FAITH_COUNT]={0}, lang[LANG_COUNT]={0};
+            for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
+                alive++; money+=a->needs.money; edu+=a->education;
+                faith[a->faith]++; lang[a->language]++;
+                if(a->faith!=FAITH_NONE) relig++;
+                if(a->language==LANG_COMMON) common++;
+                if(a->debt>0.5){ indebt++; debt+=a->debt; }
+                if(a->spouse_id>=0) married++;
+                if(a->injury>0.05f) injured++;
+                if(a->wanted) wanted++;
+                if(count_properties(w,a->id)>0) landl++;
+            }
+            int wars=0,war_cas=0;
+            for(int i=0;i<w->n_factions;i++){ if(w->factions[i].war_with>i) wars++; war_cas+=w->factions[i].casualties; }
+            GfxColor hd=gfx_rgb(150,200,230), tx=gfx_rgb(214,210,200);
+            #define ROW(...) do{ snprintf(buf,sizeof(buf),__VA_ARGS__); G->text(buf,lx,yy,US(12),tx); yy+=US(18);}while(0)
+            G->text("POPULATION",lx,yy,US(12),hd); yy+=US(18);
+            ROW("Alive %d    Married %d    Injured %d",alive,married,injured);
+            ROW("Avg wealth %.0f    Wanted %d",alive?money/alive:0,wanted);
+            yy+=US(6); G->text("ECONOMY",lx,yy,US(12),hd); yy+=US(18);
+            ROW("Goods price %.2fx    Wage %.2fx",w->econ.goods_price,w->econ.wage_mult);
+            ROW("Landlords %d    In debt %d (%.0f)",landl,indebt,debt);
+            yy+=US(6); G->text("CULTURE",lx,yy,US(12),hd); yy+=US(18);
+            ROW("Avg education %.0f%%    Religious %d/%d",alive?edu/alive*100:0,relig,alive);
+            ROW("Common tongue %d/%d",common,alive);
+            { int bf=1; for(int i=2;i<FAITH_COUNT;i++) if(faith[i]>faith[bf]) bf=i;
+              ROW("Top faith: %s (%d)   Cults' Mystic %d",faith_name((unsigned char)bf),faith[bf],faith[FAITH_MYSTIC]); }
+            yy+=US(6); G->text("GOVERNANCE",lx,yy,US(12),hd); yy+=US(18);
+            ROW("Faction wars %d    War deaths %d",wars,war_cas);
+            ROW("Police crackdown: %s",w->crackdown_days>0?"ON":"off");
+            #undef ROW
         }
 
         /* ── crime watch: live crimes + who's on the run (with lie-low cooldown) ── */
@@ -645,6 +741,14 @@ int run_ui(World *w){
                     G->rect_lines(ex,ey,sw,sw,gfx_rgba(10,8,14,180));
                 }
                 G->text(LEGEND[i].label,ex+sw+US(7),ey+US(3),US(13),gfx_rgb(228,222,212)); }
+        }
+
+        /* ── controls hint (bottom, with the legend) ── */
+        if(show_legend){
+            const char *keys="E city   O overlay   F factions   C crime   J jail   Tab feed   G god   L legend   Space pause   Q quit";
+            int tw=G->text_w(keys,US(11));
+            int hx=W/2-tw/2; if(hx<US(8)) hx=US(8);
+            G->text(keys,hx,Hs-US(17),US(11),gfx_rgb(158,154,148));
         }
 
         G->present();

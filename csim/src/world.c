@@ -790,7 +790,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); danger_decay(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

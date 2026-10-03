@@ -363,6 +363,7 @@ const char *tile_name(TileType t);
 void             events_post(World *w, EventKind k, int actor, int target,
                              int x, int y, double importance, const char *text);
 const WorldEvent *events_recent(const World *w, int i); /* i=0 newest; NULL past end */
+void danger_decay(World *w);          /* fade the crime-heat (danger_) map; call daily */
 const char       *event_kind_name(EventKind k);
 
 /* ── Crime / wanted / jail ───────────────────────────────────────────────── */
