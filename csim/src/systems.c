@@ -160,7 +160,7 @@ static void do_deal(World *w, Agent *d) {
     cust->addiction = (float)clampd(cust->addiction + 0.07, 0, 1);
     cust->needs.social = clampd(cust->needs.social + 0.15, 0, 1);  /* the high */
     cust->dealer_id = d->id;
-    d->crimes_committed++; tally(w, "dealing");
+    d->crimes_committed++; d->reputation = (float)clampd(d->reputation - 0.03, -1, 1); tally(w, "dealing");
     char t[96]; snprintf(t, sizeof(t), "%s sold drugs to %s ($%.0f)", d->name, cust->name, price);
     events_post(w, EV_CRIME, d->id, cust->id, (int)d->x, (int)d->y, 0.45, t);
     if (civ && rng_double(&w->rng) < 0.3) mark_wanted(w, d, "dealing");
@@ -207,6 +207,7 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
     }
     if (rng_double(&w->rng) < chance) {
         victim->alive = 0; w->deaths++; tally(w, "murder"); k->crimes_committed++;
+        k->reputation = (float)clampd(k->reputation - 0.15, -1, 1);
         k->needs.meaning = clampd(k->needs.meaning + 0.3, 0, 1);  /* the thrill */
         k->needs.safety  = clampd(k->needs.safety  + 0.2, 0, 1);
         for (int i = 0; i < w->n_agents; i++) {   /* terror nearby */
@@ -287,6 +288,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
             }
         }
         perp->crimes_committed++;
+        perp->reputation = (float)clampd(perp->reputation - 0.03 * crime_severity(kind), -1, 1);
         if ((perp->crime_role == CR_CAREER || perp->crime_role == CR_DEALER) && perp->crime_skill < 0.95)
             perp->crime_skill += 0.02f;
         tally(w, kind);
@@ -316,7 +318,7 @@ void assign_crime_roles(World *w) {
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
-        a->dealer_id = -1;
+        a->dealer_id = -1; a->status = 2;   /* default tier: Citizen */
         if (rng_double(&w->rng) < KILLER_CHANCE) { a->crime_role = CR_KILLER;
             a->crime_skill = 0.4f + (float)rng_double(&w->rng) * 0.4f; continue; }
         if (a->is_police) continue;
@@ -387,7 +389,7 @@ void crime_daily(World *w) {
         if (id >= 0) {
             Agent *a = world_agent_by_id(w, id);
             if (a) {
-                a->dealer_id = -1;
+                a->dealer_id = -1; a->status = 2;
                 if (rng_double(&w->rng) < KILLER_CHANCE * 4) { a->crime_role = CR_KILLER; a->crime_skill = 0.4f; }
                 else {
                     if (rng_double(&w->rng) < USER_FRACTION) a->addiction = (float)rng_range(&w->rng, 0.25, 0.75);
@@ -520,6 +522,20 @@ int factions_raise(World *w, int is_cult, int cx, int cy) {
 static const char *JAIL_GANG_NAMES[JAIL_GANGS] = { "the Yard Kings", "Cellblock Crew", "the Lifers" };
 const char *jail_gang_name(int g) { return (g >= 1 && g <= JAIL_GANGS) ? JAIL_GANG_NAMES[g-1] : "-"; }
 
+/* honorific derived from role, reputation and social tier */
+const char *status_title(const Agent *a) {
+    if (a->is_police) return "Officer";
+    if (a->crime_role == CR_KINGPIN) return "Kingpin";
+    if (a->reputation < -0.4f) return "Notorious";
+    switch (a->status) {
+        case 0:  return "Destitute";
+        case 1:  return "Struggling";
+        case 3:  return "Esteemed";
+        case 4:  return "Magnate";
+        default: return "Citizen";
+    }
+}
+
 void jail_tick(World *w) {
     /* recruit inmates with a criminal bent into a jail gang */
     for (int i = 0; i < w->n_agents; i++) {
@@ -565,6 +581,17 @@ void economy_daily(World *w) {
         a->needs.money = clampd(a->needs.money - cost, 0.0, 1e9);
         if (a->addiction > 0.0f) a->addiction = (float)clampd(a->addiction - 0.015, 0, 1);  /* habit fades without use */
         if (a->injury > 0.0f) a->injury = (float)clampd(a->injury - 0.08, 0, 2);            /* wounds slowly heal */
+        a->reputation = (float)clampd(a->reputation + (a->reputation > 0 ? -0.01 : 0.01), -1, 1);  /* drift to neutral */
+        /* recompute social tier from wealth + reputation + role */
+        int tier = 2;
+        if (a->needs.money > 400) tier++;
+        if (a->needs.money > 1000) tier++;
+        if (a->needs.money < LOW_MONEY) tier--;
+        if (a->reputation > 0.3f) tier++;
+        if (a->reputation < -0.3f) tier--;
+        if (a->crime_role == CR_KINGPIN) tier++;
+        if (tier < 0) tier = 0; if (tier > 4) tier = 4;
+        a->status = (unsigned char)tier;
         /* ambient: becoming destitute (can't afford a meal) */
         if (a->needs.money < MEAL_PRICE && !a->broke_flagged) {
             a->broke_flagged = 1;

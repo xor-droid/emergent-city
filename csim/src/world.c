@@ -382,11 +382,13 @@ static void execute_action(World *w, Agent *a) {
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
         case A_WORK:    n->money += WAGE_PER_SHIFT; n->energy = clampd(n->energy - 0.1, 0, 1);
-                        n->meaning = clampd(n->meaning + 0.05, 0, 1); break;
+                        n->meaning = clampd(n->meaning + 0.05, 0, 1);
+                        a->reputation = (float)clampd(a->reputation + 0.004, -1, 1); break;
         case A_SOCIALIZE: do_socialize(w, a); break;
         case A_DRINK:   if (n->money >= DRINK_PRICE) { n->money -= DRINK_PRICE;
                             n->social = clampd(n->social + 0.3, 0, 1); do_socialize(w, a); } break;
-        case A_PRAY:    n->meaning = clampd(n->meaning + 0.4, 0, 1); n->safety = clampd(n->safety + 0.1, 0, 1); break;
+        case A_PRAY:    n->meaning = clampd(n->meaning + 0.4, 0, 1); n->safety = clampd(n->safety + 0.1, 0, 1);
+                        a->reputation = (float)clampd(a->reputation + 0.004, -1, 1); break;
         case A_SHOP:    if (n->money >= LUXURY_PRICE) { n->money -= LUXURY_PRICE;
                             n->belonging = clampd(n->belonging + 0.2, 0, 1); } break;
         case A_CRIME: {

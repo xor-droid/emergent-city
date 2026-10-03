@@ -190,6 +190,8 @@ typedef struct {
     int   turf_x, turf_y;       /* a dealer's territory centre */
     float injury;               /* 0=healthy .. 1=fatal (from assaults) */
     unsigned char jail_gang;    /* 0=none, else jail-gang id (while incarcerated) */
+    float reputation;           /* -1 disreputable .. +1 esteemed (civic standing) */
+    unsigned char status;       /* 0..4 social tier, recomputed daily */
 
     int wanted;
     int wanted_ticks;
@@ -303,6 +305,7 @@ void assign_crime_roles(World *w);   /* post-populate: pick career/dealer/kingpi
 void crime_daily(World *w);          /* role mobility (emergence) + immigration, on day change */
 void jail_tick(World *w);            /* jail gangs + shankings, on day change */
 const char *jail_gang_name(int g);
+const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

@@ -531,7 +531,7 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(348), ph=US(416);
+                int pw=US(348), ph=US(436);
                 G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
                 G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
                 int yy=hudH+US(10);
@@ -543,6 +543,8 @@ int run_ui(World *w){
                   TileType tt=(ax>=0&&ax<WORLD_W&&ay>=0&&ay<WORLD_H)?(TileType)w->tile[ax][ay]:T_GRASS;
                   snprintf(buf,sizeof(buf),"On %s  (%d,%d)",tile_name(tt),ax,ay);
                   G->text(buf,US(12),yy,US(13),gfx_rgb(200,196,186)); yy+=US(20); }
+                snprintf(buf,sizeof(buf),"%s   rep %+d",status_title(a),(int)(a->reputation*100));
+                G->text(buf,US(12),yy,US(13), a->reputation<-0.2f?COL_RED:a->reputation>0.3f?COL_GREEN:gfx_rgb(210,205,195)); yy+=US(20);
                 if(a->is_police){ G->text("POLICE",US(12),yy,US(13),gfx_rgb(120,180,230)); yy+=US(20); }
                 if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED: %.24s",a->wanted_for); G->text(buf,US(12),yy,US(13),COL_RED); yy+=US(20); }
                 if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED: %.24s",a->jailed_for); G->text(buf,US(12),yy,US(13),COL_AMBER); yy+=US(20); }
