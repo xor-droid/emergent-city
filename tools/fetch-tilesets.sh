@@ -2,9 +2,10 @@
 # Fetch the CC0 tilesets that csim supports into csim/tilesets/.
 #
 # Assets are NOT committed to the repo (see .gitignore) — run this once to
-# populate them. Only CC0 sets are fetched (Camashu CP437 + Kenney sprites).
-# The DF-wiki sets (curses/phoebus/anikki) have varied licenses; fetch those
-# yourself after checking each set's terms.
+# populate them. Fetches the CC0 sets (Camashu CP437 + Kenney sprites) and
+# DawnLike (CC-BY 4.0 — credit DawnBringer & DragonDePlatino; composited into a
+# per-type atlas). The DF-wiki sets (curses/phoebus/anikki) have varied
+# licenses; fetch those yourself after checking each set's terms.
 #
 #   tools/fetch-tilesets.sh
 #
@@ -54,6 +55,18 @@ fetch_zip "https://opengameart.org/sites/default/files/Roguelike%20pack.zip"    
 fetch_zip "https://opengameart.org/sites/default/files/Roguelike%20Indoor%20pack.zip" kenney_indoor.png    "sheet.*transparent|transparent.*sheet" "transparent"
 fetch_zip "https://opengameart.org/sites/default/files/Roguelike%20Cave%20pack.zip"   kenney_caves.png     "sheet.*transparent|transparent.*sheet" "transparent"
 fetch_zip "https://opengameart.org/sites/default/files/1bitpack_kenney_1.1.zip"        kenney_1bit.png      "colou?red.*transparent|transparent.*colou?red" "transparent"
+
+# DawnLike — CC-BY 4.0 (credit DawnBringer & DragonDePlatino). Many small files,
+# so composite one tile per type into a canonical atlas (dawnlike.png) with PIL.
+echo ">> dawnlike.png  (CC-BY 4.0 — credit DawnBringer & DragonDePlatino)"
+if python3 -c "import PIL" 2>/dev/null; then
+  if curl -fsSL "https://opengameart.org/sites/default/files/DawnLike_5.zip" -o "$tmp/dl.zip"; then
+    rm -rf "$tmp/dl"; mkdir -p "$tmp/dl"; unzip -oq "$tmp/dl.zip" -d "$tmp/dl"
+    SRC="$tmp/dl" OUT="$dst/dawnlike.png" python3 "$root/tools/_dawnlike_atlas.py" || echo "   !! composite failed"
+  else echo "   !! download failed"; fi
+else
+  echo "   !! python3 + Pillow required for dawnlike; skipped"
+fi
 
 echo
 echo "Fetched into $dst:"

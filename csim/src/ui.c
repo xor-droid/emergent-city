@@ -62,17 +62,19 @@ static const char *ascii_glyph(TileType t){
  * between tiles, and outer margin — override with CSIM_TILESET_CELL / _SPACE /
  * _MARGIN (handles spaced sheets like Kenney's). */
 enum { TSK_CP437, TSK_SEMANTIC };
+enum { SEM_KENNEY, SEM_CANON };   /* semantic layout: raw Kenney sheet vs our canonical composite */
 /* cell = tile px; space = gap between tiles; margin = outer border px. */
-typedef struct { const char *name; int kind; const char *file; int cell, space, margin; const char *url; const char *license; } TsEntry;
+typedef struct { const char *name; int kind, sem; const char *file; int cell, space, margin; const char *url; const char *license; } TsEntry;
 static const TsEntry TSETS[] = {
-  {"camashu",       TSK_CP437,    "camashu.png",          16,0,0, "https://github.com/Camashu/DorfFortressTileSet",                "CC0"},
-  {"curses",        TSK_CP437,    "curses.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"phoebus",       TSK_CP437,    "phoebus.png",          16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"anikki",        TSK_CP437,    "anikki.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
-  {"kenney",        TSK_SEMANTIC, "kenney_roguelike.png", 16,1,0, "https://opengameart.org/content/roguelikerpg-pack-1700-tiles",  "CC0"},
-  {"kenney-indoor", TSK_SEMANTIC, "kenney_indoor.png",    16,1,0, "https://opengameart.org/content/roguelike-indoor-pack",         "CC0"},
-  {"kenney-caves",  TSK_SEMANTIC, "kenney_caves.png",     16,1,0, "https://opengameart.org/content/roguelike-caves-dungeons-pack", "CC0"},
-  {"kenney-1bit",   TSK_SEMANTIC, "kenney_1bit.png",      16,1,0, "https://opengameart.org/content/1-bit-pack",                    "CC0"},
+  {"camashu",       TSK_CP437,   0,         "camashu.png",          16,0,0, "https://github.com/Camashu/DorfFortressTileSet",                "CC0"},
+  {"curses",        TSK_CP437,   0,         "curses.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"phoebus",       TSK_CP437,   0,         "phoebus.png",          16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"anikki",        TSK_CP437,   0,         "anikki.png",           16,0,0, "https://dwarffortresswiki.org/Tileset_repository",              "varies-verify"},
+  {"dawnlike",      TSK_SEMANTIC,SEM_CANON, "dawnlike.png",         16,0,0, "https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181", "CC-BY-4.0"},
+  {"kenney",        TSK_SEMANTIC,SEM_KENNEY,"kenney_roguelike.png", 16,1,0, "https://opengameart.org/content/roguelikerpg-pack-1700-tiles",  "CC0"},
+  {"kenney-indoor", TSK_SEMANTIC,SEM_KENNEY,"kenney_indoor.png",    16,1,0, "https://opengameart.org/content/roguelike-indoor-pack",         "CC0"},
+  {"kenney-caves",  TSK_SEMANTIC,SEM_KENNEY,"kenney_caves.png",     16,1,0, "https://opengameart.org/content/roguelike-caves-dungeons-pack", "CC0"},
+  {"kenney-1bit",   TSK_SEMANTIC,SEM_KENNEY,"kenney_1bit.png",      16,1,0, "https://opengameart.org/content/1-bit-pack",                    "CC0"},
 };
 static const int N_TSETS = (int)(sizeof(TSETS)/sizeof(TSETS[0]));
 
@@ -83,11 +85,18 @@ static int cp437_for(TileType t){
         case T_SHOP:return '$'; case T_WORK:return 'O'; case T_BAR:return 'B';
         case T_CHURCH:return '+'; case T_POLICE:return 'P'; default:return '.'; }
 }
-/* Semantic sprite cell (col,row). Best-effort for the Kenney *roguelike* sheet;
- * other semantic sheets have different layouts, so this is approximate. These
- * environment sheets have no canonical per-building-type tile (or any person
- * sprite), so picks are representative, not exact. col<0 = skip (bg only). */
-static void semantic_cell(TileType t, int *col, int *row){
+/* Semantic sprite cell (col,row). SEM_CANON = our composite atlas, one column
+ * per type in a fixed order (built by tools/fetch-tilesets.sh from DawnLike).
+ * SEM_KENNEY = best-effort cells in the raw Kenney roguelike sheet (approximate:
+ * environment sheets lack per-type/person tiles). col<0 = skip (bg only). */
+static void semantic_cell(int sem, TileType t, int *col, int *row){
+    if(sem==SEM_CANON){ *row=0;
+        switch(t){ case T_HOME:*col=0;break; case T_SHOP:*col=1;break; case T_WORK:*col=2;break;
+            case T_BAR:*col=3;break; case T_CHURCH:*col=4;break; case T_POLICE:*col=5;break;
+            case T_PARK:*col=6;break; case T_WATER:*col=7;break; case T_ROAD:*col=8;break;
+            default:*col=10;break; /* grass tile */ }
+        return;
+    }
     switch(t){
         case T_HOME:  *col=13; *row=2; break;   /* door */
         case T_SHOP:  *col=20; *row=1; break;
@@ -135,7 +144,7 @@ int run_ui(World *w){
     int selected=-1, list_scroll=0;
 
     /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
-    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_cell=16, ts_space=0, ts_margin=0;
+    void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_sem=SEM_KENNEY, ts_cell=16, ts_space=0, ts_margin=0;
     int ts_cols=16, ts_cw=16, ts_ch=16;   /* cols + cell width/height, derived from the image */
     { const char *tsname=getenv("CSIM_TILESET");
       if(tsname && tsname[0] && G->load_tex){
@@ -143,7 +152,7 @@ int run_ui(World *w){
         if(strchr(tsname,'/')||strstr(tsname,".png")){ snprintf(path,sizeof(path),"%s",tsname); direct=1; }
         else for(int i=0;i<N_TSETS;i++) if(!strcmp(tsname,TSETS[i].name)){ ent=&TSETS[i]; break; }
         const char *dir=getenv("CSIM_TILESET_DIR"); if(!dir) dir="tilesets";
-        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind;
+        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind; ts_sem=ent->sem;
                  ts_cell=ent->cell; ts_space=ent->space; ts_margin=ent->margin; }
         { const char *e; if((e=getenv("CSIM_TILESET_CELL"))){ int c=atoi(e); if(c>0) ts_cell=c; }
           if((e=getenv("CSIM_TILESET_SPACE"))){ int c=atoi(e); if(c>=0) ts_space=c; }
@@ -312,7 +321,7 @@ int run_ui(World *w){
                     TileType t2=(TileType)w->tile[x][y];
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=cp437_for(t2); col=code%ts_cols; row=code/ts_cols; tint=shade(tile_col(t2),70); }
-                    else { semantic_cell(t2,&col,&row); if(col<0) continue; tint=COL_WHITE; }
+                    else { semantic_cell(ts_sem,t2,&col,&row); if(col<0) continue; tint=COL_WHITE; }
                     int srcx=ts_margin+col*(ts_cw+ts_space), srcy=ts_margin+row*(ts_ch+ts_space);
                     float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
                     G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, (int)sx,(int)sy,iw,iw, tint);
@@ -320,7 +329,8 @@ int run_ui(World *w){
                 for(int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
                     int col,row; GfxColor tint;
                     if(ts_kind==TSK_CP437){ int code=a->is_police?2:1; col=code%ts_cols; row=code/ts_cols; tint=gfx_rgb(a->r,a->g,a->b); }
-                    else { col=23; row=8; tint=COL_WHITE; }  /* no person sprite on env sheets — a small marker */
+                    else if(ts_sem==SEM_CANON){ col=9; row=0; tint=COL_WHITE; }  /* composite person tile */
+                    else { col=23; row=8; tint=COL_WHITE; }  /* Kenney: no person sprite — a small marker */
                     int srcx=ts_margin+col*(ts_cw+ts_space), srcy=ts_margin+row*(ts_ch+ts_space);
                     float sx,sy; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&sx,&sy);
                     G->draw_tex(ts_tex, srcx,srcy,ts_cw,ts_ch, (int)sx,(int)sy,iw,iw, tint);

@@ -62,8 +62,9 @@ bundled** (licensing) — fetch the CC0 ones with `tools/fetch-tilesets.sh` (int
 dir (`CSIM_TILESET_DIR`, default `./tilesets`), and a missing file prints where
 to get it and falls back to font glyphs.
 - **CC0, CP437 grid:** `camashu` — [DorfFortressTileSet](https://github.com/Camashu/DorfFortressTileSet)
-- **DF-wiki CP437 (verify each license):** `curses` `phoebus` `anikki` — [tileset repository](https://dwarffortresswiki.org/Tileset_repository)
-- **CC0, semantic sprites:** `kenney` `kenney-indoor` `kenney-caves` `kenney-1bit` — [Kenney via OpenGameArt](https://opengameart.org/content/roguelikerpg-pack-1700-tiles)
+- **DF-wiki CP437 (verify each license):** `curses` `phoebus` `anikki` — [tileset repository](https://dwarffortresswiki.org/Tileset_repository). Download the tileset *sheet* image (a 16×16 glyph grid), not a screenshot.
+- **CC-BY 4.0, per-type sprites:** `dawnlike` — [DawnLike](https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181) by DawnBringer & DragonDePlatino. The fetch script composites one tile per type into `dawnlike.png`. **Attribution required** if you distribute.
+- **CC0, sprites (approx mapping):** `kenney` `kenney-indoor` `kenney-caves` `kenney-1bit` — [Kenney via OpenGameArt](https://opengameart.org/content/roguelikerpg-pack-1700-tiles)
 
 **Cell geometry is native/automatic.** CP437 sheets are always a 16×16 grid, so
 the cell size (even non-square, e.g. Camashu's 20×24) is derived from the image.
@@ -71,9 +72,10 @@ Semantic sheets use their per-set cell + 1px spacing. Override anything with
 `CSIM_TILESET_CELL` / `CSIM_TILESET_SPACE` / `CSIM_TILESET_MARGIN`.
 
 CP437 sheets map each tile to its code-page-437 glyph (tinted) — the authentic
-DF look, **recommended** (`camashu`). Semantic (Kenney) sheets are *environment*
-tilesets with no canonical per-type tile and no person sprite, so the
-tile-type→sprite mapping is approximate/representative.
+DF look, **recommended** (`camashu`). `dawnlike` gives real **per-type sprites**
+(doors/jars/trees/characters) via a composited atlas. The Kenney sheets are
+*environment* tilesets with no canonical per-type tile and no person sprite, so
+their mapping is approximate.
 
 Env: `CSIM_UI=N` UI scale (default auto from monitor height — ~2.0 on 4K) ·
 `CSIM_ZOOM=N` initial zoom · `CSIM_ASCII=1` start in ASCII mode ·

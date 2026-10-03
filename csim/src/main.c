@@ -19,7 +19,8 @@ static void usage(const char *argv0) {
     printf("     the tileset dir; if missing, prints where to get it and uses font glyphs):\n");
     printf("       CC0 CP437 grid: camashu\n");
     printf("       DF-wiki CP437 (verify license): curses, phoebus, anikki\n");
-    printf("       CC0 semantic sprites: kenney, kenney-indoor, kenney-caves, kenney-1bit\n");
+    printf("       CC-BY per-type sprites: dawnlike\n");
+    printf("       CC0 sprites (approx mapping): kenney, kenney-indoor, kenney-caves, kenney-1bit\n");
     printf("     dir=CSIM_TILESET_DIR (default ./tilesets); cell px=CSIM_TILESET_CELL (default 16).\n");
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
     printf("            j jail, f factions, l legend, a ASCII(Dwarf-Fortress) mode,\n");
