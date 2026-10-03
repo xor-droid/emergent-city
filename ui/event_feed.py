@@ -37,11 +37,21 @@ class EventFeed:
         bus = getattr(self.world, "events", None)
         if bus is None:
             return []
-        # Try common attribute names defensively
-        for attr in ("recent", "log", "items", "events", "_events"):
+        # Preferred: the bus exposes a recent(n) accessor.
+        recent = getattr(bus, "recent", None)
+        if callable(recent):
+            try:
+                return list(recent(self.MAX_LINES))
+            except Exception:
+                pass
+        # Fallback: pull from a list/deque-style attribute.
+        for attr in ("log", "items", "events", "_events"):
             data = getattr(bus, attr, None)
-            if isinstance(data, list):
-                return data[-self.MAX_LINES:]
+            if data is not None and not callable(data):
+                try:
+                    return list(data)[-self.MAX_LINES:]
+                except TypeError:
+                    continue
         return []
 
     @staticmethod

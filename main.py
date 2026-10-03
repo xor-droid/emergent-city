@@ -115,12 +115,13 @@ def main() -> int:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     paused = not paused
-                elif event.key == pygame.K_1:
-                    speed_index = 0
-                elif event.key == pygame.K_2:
-                    speed_index = 1
-                elif event.key == pygame.K_3:
-                    speed_index = 2
+                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3,
+                                   pygame.K_4, pygame.K_5, pygame.K_6):
+                    num = event.key - pygame.K_1  # 0..5
+                    if god.active:
+                        god.select_tool(num)       # pick a God Mode tool
+                    elif num < 3:
+                        speed_index = num          # 1/2/3 = speed when not in God Mode
                 elif event.key == pygame.K_f:
                     followed_agent_id = panel.selected_agent_id
                 elif event.key == pygame.K_g:
@@ -136,14 +137,17 @@ def main() -> int:
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
-                    panel.handle_click(event.pos)
+                    if god.active:
+                        god.apply_click(event.pos, camera)
+                    else:
+                        panel.handle_click(event.pos)
                 elif event.button == 4:
                     camera.zoom_at(event.pos, +0.1)
                 elif event.button == 5:
                     camera.zoom_at(event.pos, -0.1)
 
             elif event.type == pygame.MOUSEMOTION:
-                if event.buttons[0] and not panel.is_open:
+                if event.buttons[0] and not panel.is_open and not god.active:
                     camera.pan(-event.rel[0], -event.rel[1])
 
         # ── Camera follow

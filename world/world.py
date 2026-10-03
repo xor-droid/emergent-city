@@ -12,7 +12,7 @@ import config
 from world.tile_map import TileMap, District
 from world.buildings import BuildingRegistry, BuildingType
 from world.economy import Economy
-from world.events import EventBus
+from world.events import EventBus, WorldEvent
 from world.time_system import TimeSystem
 from agents.agent import Agent
 from agents.factions import FactionSystem
@@ -81,6 +81,32 @@ class World:
 
     def get_agent(self, aid: int) -> Optional[Agent]:
         return self._agents_by_id.get(aid)
+
+    def spawn_agent(self, x: Optional[int] = None, y: Optional[int] = None) -> Optional[Agent]:
+        """Spawn and register a single new citizen (used by God Mode).
+
+        Picks a random residence as the agent's home; if (x, y) is given and
+        walkable, the agent starts there instead of at the home perimeter.
+        Returns the new Agent, or None if there's nowhere to house them.
+        """
+        residences = self.buildings.residences()
+        if not residences:
+            return None
+        home = self.rng.choice(residences)
+        agent = Agent.spawn(aid=self._next_agent_id, home=home, rng=self.rng, world=self)
+        if (x is not None and y is not None
+                and self.tile_map.in_bounds(int(x), int(y))
+                and self.tile_map.is_walkable(int(x), int(y))):
+            agent.x, agent.y = int(x), int(y)
+        home.residents.append(agent.id)
+        self.agents.append(agent)
+        self._agents_by_id[agent.id] = agent
+        self._next_agent_id += 1
+        self.events.post(WorldEvent(
+            kind="birth", actor_id=agent.id, location=(agent.x, agent.y),
+            importance=0.4, text=f"{agent.name} appeared in the city",
+        ))
+        return agent
 
     # ── Tick ──────────────────────────────────────────────────────────────────
     def tick(self, dt_seconds: float) -> None:
