@@ -9,12 +9,35 @@ a raylib renderer.
 ## Layout
 ```
 csim/
-  src/rng.h            PCG32 deterministic PRNG (header-only)
-  src/sim.h / sim.c    the ported core (no graphics deps)
-  src/main_headless.c  runs the core and prints a report (plain gcc, no deps)
-  src/main.c           raylib renderer (tiles + agents + HUD, pan/zoom)
-  CMakeLists.txt       builds both; fetches raylib if not installed
+  src/rng.h             PCG32 deterministic PRNG (header-only)
+  src/sim.h / sim.c     the ported core (no graphics deps)
+  src/viz.h / viz.c     shared render helpers (tile colors, HUD string)
+  src/main.c            entry point + --backend dispatch
+  src/main_headless.c   runs the core and prints a report (plain gcc, no deps)
+  src/backend_raylib.c  raylib renderer (GPU window)
+  src/backend_sdl2.c    SDL2 + SDL_ttf renderer
+  src/backend_tui.c     ncurses 256-color ASCII renderer (runs over SSH)
+  CMakeLists.txt        builds whichever backends are available
 ```
+
+## Rendering backends (one binary, pick at runtime)
+```sh
+./build/csim --backend raylib   # GPU window (default)
+./build/csim --backend sdl2     # SDL2 window
+./build/csim --backend tui      # ncurses ASCII, in the terminal
+./build/csim --help             # shows which backends were compiled in
+```
+CMake compiles whichever backends it finds; a backend that wasn't built prints
+how to enable it. Controls (raylib/sdl2): drag/arrows pan, wheel zoom, Space
+pause, 1/2/3 speed. TUI: arrows pan, Space pause, 1/2/3 speed, q quit.
+
+Backend dependencies:
+- **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers
+  (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`).
+- **sdl2** — `sudo apt install libsdl2-dev libsdl2-ttf-dev`.
+- **tui** — `sudo apt install libncurses-dev` (usually already present).
+  For a *richer* TUI (true-color, sub-cell sextant/braille blitting, even images),
+  **notcurses** (`libnotcurses-dev`) is the upgrade path.
 
 ## Build & run the headless core (no dependencies)
 Proves the port works with just a C compiler + libm:

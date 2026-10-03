@@ -2,3 +2,4 @@ build/
 csim
 csim_headless
 *.o
+*.png
