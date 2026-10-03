@@ -216,6 +216,12 @@ int run_ui(World *w){
     }
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
+    int shot_frames=120; { const char *sf=getenv("CSIM_SHOT_FRAMES"); if(sf){ int n=atoi(sf); if(n>0) shot_frames=n; } }
+    /* pre-roll the sim N game-days at headless speed (no render) so the window opens
+       on an evolved city — lets screenshots show accumulated crime heat / wars */
+    { const char *wd=getenv("CSIM_WARMDAYS"); if(wd){ int days=atoi(wd);
+        long ticks=(long)(days*24*SECONDS_PER_HOUR/0.25);
+        for(long i=0;i<ticks;i++) world_tick(w,0.25); } }
     if(getenv("CSIM_DEMO")){ god=1; if(w->n_agents>0){ selected=w->agents[0].id;
         for(int i=0;i<w->n_agents;i++) if(w->agents[i].crime_role!=CR_CITIZEN){ selected=w->agents[i].id; break; }
         follow=1; } }
@@ -439,18 +445,24 @@ int run_ui(World *w){
                 Faction *f=&w->factions[a->faction_id]; if(f->is_cult) continue;
                 int tx=(a->turf_x||a->turf_y)?a->turf_x:(int)a->x, ty=(a->turf_x||a->turf_y)?a->turf_y:(int)a->y;
                 float sx,sy; w2s(&cam,tx*TILE_PX+TILE_PX*0.5f,ty*TILE_PX+TILE_PX*0.5f,&sx,&sy);
-                G->circle((int)sx,(int)sy,TURF_RADIUS*TILE_PX*cam.zoom*0.5f,gfx_rgba(f->r,f->g,f->b,26));
+                G->circle((int)sx,(int)sy,TURF_RADIUS*TILE_PX*cam.zoom*0.5f,gfx_rgba(f->r,f->g,f->b,48));
             }
             for(int i=0;i<w->n_factions;i++){ Faction *f=&w->factions[i];
                 if(!f->active||f->war_with<=i) continue;   /* draw each warring pair once */
-                Agent *la=f->leader_id>=0?world_agent_by_id(w,f->leader_id):NULL;
                 Faction *g=&w->factions[f->war_with];
+                /* endpoints: each faction's leader, or any surviving member if the leader's gone */
+                Agent *la=f->leader_id>=0?world_agent_by_id(w,f->leader_id):NULL;
                 Agent *lb=g->leader_id>=0?world_agent_by_id(w,g->leader_id):NULL;
-                if(la&&la->alive&&lb&&lb->alive){
+                if(!la||!la->alive){ la=NULL; for(int k=0;k<w->n_agents;k++) if(w->agents[k].alive&&w->agents[k].faction_id==i){la=&w->agents[k];break;} }
+                if(!lb||!lb->alive){ lb=NULL; for(int k=0;k<w->n_agents;k++) if(w->agents[k].alive&&w->agents[k].faction_id==f->war_with){lb=&w->agents[k];break;} }
+                if(la&&lb){
                     float ax,ay,bx,by;
                     w2s(&cam,la->x*TILE_PX+TILE_PX*0.5f,la->y*TILE_PX+TILE_PX*0.5f,&ax,&ay);
                     w2s(&cam,lb->x*TILE_PX+TILE_PX*0.5f,lb->y*TILE_PX+TILE_PX*0.5f,&bx,&by);
-                    G->line((int)ax,(int)ay,(int)bx,(int)by,gfx_rgba(255,70,50,220));
+                    for(int o=-1;o<=1;o++){ G->line((int)ax,(int)ay+o,(int)bx,(int)by+o,gfx_rgba(255,60,40,235));
+                                            G->line((int)ax+o,(int)ay,(int)bx+o,(int)by,gfx_rgba(255,60,40,235)); }
+                    G->circle((int)ax,(int)ay,US(5),gfx_rgba(255,60,40,235));
+                    G->circle((int)bx,(int)by,US(5),gfx_rgba(255,60,40,235));
                 }
             }
         } else if(overlay==3){                            /* recolor citizens by cultural group */
@@ -772,7 +784,7 @@ int run_ui(World *w){
             if(fcount>=60+bench){ double el=now_sec()-bench_t0;
                 printf("[bench] %-7s %d frames / %.3fs = %.1f FPS\n", G->name, bench, el, bench/el);
                 fflush(stdout); break; }
-        } else if(shot && ++frame==120){ if(G->screenshot) G->screenshot(shot); break; }
+        } else if(shot && ++frame==shot_frames){ if(G->screenshot) G->screenshot(shot); break; }
     }
     if(ts_tex && G->free_tex) G->free_tex(ts_tex);
     G->shutdown();

@@ -24,10 +24,13 @@ static void usage(const char *argv0) {
     printf("     dir=CSIM_TILESET_DIR (default ./tilesets); cell px=CSIM_TILESET_CELL (default 16).\n");
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
     printf("            j jail, f factions, c crime-watch, l legend, a ASCII mode,\n");
+    printf("            e city dashboard, o overlay (heat/turf/culture),\n");
     printf("            Tab feed, Space pause, 1/2/3 speed, q/Esc quit.\n");
     printf("  Env: CSIM_UI=N ui scale (default: from monitor), CSIM_ZOOM=N zoom,\n");
     printf("       CSIM_ASCII=1 start in ASCII mode, CSIM_DEMO=1 panels,\n");
-    printf("       CSIM_SHOT=path shot, CSIM_BENCH=N fps.\n");
+    printf("       CSIM_CITY=1 dashboard, CSIM_OVERLAY=1..3 overlay,\n");
+    printf("       CSIM_WARMDAYS=N pre-roll sim N days before the window opens,\n");
+    printf("       CSIM_SHOT=name shot (to cwd), CSIM_SHOT_FRAMES=N warm-up, CSIM_BENCH=N fps.\n");
 }
 
 int main(int argc, char **argv) {
