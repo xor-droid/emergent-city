@@ -170,6 +170,9 @@ void world_populate(World *w, int n) {
         personality_random(&a->pers, r);
         a->action = A_WANDER; a->faction_id = -1;
         a->wanted_for[0] = a->jailed_for[0] = '\0';
+        a->sex = (unsigned char)rng_int(r, 2);
+        a->spouse_id = a->mother_id = a->father_id = -1;
+        a->n_children = 0; a->pregnant_ticks = 0;
         w->n_agents++;
     }
     assign_crime_roles(w);   /* career criminals, dealers, kingpins, users, a rare killer */
@@ -203,10 +206,108 @@ int world_spawn_agent(World *w, int tx, int ty) {
     a->needs.money = clampd(rng_gauss(r, START_MONEY_MEAN, START_MONEY_SD), 0, 1e9);
     personality_random(&a->pers, r);
     a->action = A_WANDER;
+    a->sex = (unsigned char)rng_int(r, 2);
+    a->spouse_id = a->mother_id = a->father_id = -1;
+    a->n_children = 0; a->pregnant_ticks = 0;
     w->n_agents++;
     char t[96]; snprintf(t, sizeof(t), "%s appeared in the city", a->name);
     events_post(w, EV_BIRTH, a->id, -1, a->x, a->y, 0.4, t);
     return a->id;
+}
+
+/* ── kinship & births ───────────────────────────────────────────────────────
+   The city marries fond, familiar, eligible couples and raises children from
+   them.  Called once per game-day from world_tick. */
+
+/* Append a newborn carrying the father's surname and the family's home. */
+static int spawn_child(World *w, Agent *mum, Agent *dad) {
+    if (w->n_agents >= MAX_AGENTS) return -1;
+    Rng *r = &w->rng;
+    Agent *a = &w->agents[w->n_agents];
+    memset(a, 0, sizeof(*a));
+    a->id = w->next_id++;
+    a->alive = 1;
+    /* given name + father's surname (fallback to mother's) */
+    const char *sur = strrchr(dad->name, ' ');
+    if (!sur) sur = strrchr(mum->name, ' ');
+    snprintf(a->name, sizeof(a->name), "%s%s", FIRST_NAMES[rng_int(r, 40)],
+             sur ? sur : " Doe");
+    a->age = 0;
+    a->sex = (unsigned char)rng_int(r, 2);
+    a->home_id = mum->home_id >= 0 ? mum->home_id : dad->home_id;
+    if (a->home_id >= 0) { a->x = w->buildings[a->home_id].x; a->y = w->buildings[a->home_id].y; }
+    else { a->x = mum->x; a->y = mum->y; }
+    a->tx = -1; a->ty = -1;
+    a->workplace_id = -1;                 /* children don't work yet */
+    a->faction_id = -1;
+    a->mother_id = mum->id; a->father_id = dad->id;
+    a->spouse_id = -1;
+    a->dealer_id = -1;
+    a->status = 2;
+    a->needs.hunger = a->needs.energy = a->needs.safety = 1.0;
+    a->needs.social = a->needs.meaning = a->needs.belonging = 1.0;
+    a->needs.money = 0;
+    personality_random(&a->pers, r);
+    a->action = A_WANDER;
+    w->n_agents++;
+    char t[112]; snprintf(t, sizeof(t), "%.20s and %.20s had a child, %.24s",
+                          mum->name, dad->name, a->name);
+    events_post(w, EV_BIRTH, a->id, mum->id, a->x, a->y, 0.7, t);
+    return a->id;
+}
+
+void kinship_daily(World *w) {
+    Rng *r = &w->rng;
+    int n0 = w->n_agents;   /* freeze: newborns this tick are not courted/born again */
+
+    /* ── courtship -> marriage ── */
+    for (int i = 0; i < n0; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->spouse_id >= 0 || a->age < MARRY_MIN_AGE) continue;
+        if (a->arrested_ticks > 0) continue;
+        /* pick the fondest, most familiar eligible opposite-sex partner */
+        int best = -1; double bestaff = MARRY_AFFINITY;
+        for (int k = 0; k < a->rels.n; k++) {
+            Relation *rl = &a->rels.rel[k];
+            if (rl->affinity < bestaff || rl->familiarity < MARRY_FAMILIAR) continue;
+            Agent *o = world_agent_by_id(w, rl->other_id);
+            if (!o || !o->alive || o->spouse_id >= 0) continue;
+            if (o->age < MARRY_MIN_AGE || o->sex == a->sex) continue;
+            if (o->arrested_ticks > 0) continue;
+            best = rl->other_id; bestaff = rl->affinity;
+        }
+        if (best < 0) continue;
+        if (rng_double(r) >= MARRY_CHANCE) continue;
+        Agent *o = world_agent_by_id(w, best);
+        a->spouse_id = o->id; o->spouse_id = a->id;
+        /* the pair settles into one home and warms to each other */
+        if (a->home_id >= 0) o->home_id = a->home_id;
+        else if (o->home_id >= 0) a->home_id = o->home_id;
+        rel_adjust(&a->rels, o->id, 0.2); rel_adjust(&o->rels, a->id, 0.2);
+        a->reputation += 0.03f; o->reputation += 0.03f;
+        char t[112]; snprintf(t, sizeof(t), "%.24s and %.24s got married", a->name, o->name);
+        events_post(w, EV_MARRIAGE, a->id, o->id, (int)a->x, (int)a->y, 0.75, t);
+    }
+
+    /* ── conception & birth (mother carries the pregnancy) ── */
+    for (int i = 0; i < n0; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->sex != 0) continue;         /* mothers only */
+        if (a->pregnant_ticks > 0) {                     /* advance an existing pregnancy */
+            if (--a->pregnant_ticks == 0) {
+                Agent *dad = world_agent_by_id(w, a->spouse_id);
+                if (dad && dad->alive) {
+                    int cid = spawn_child(w, a, dad);
+                    if (cid >= 0) { a->n_children++; dad->n_children++; }
+                }
+            }
+            continue;
+        }
+        if (a->spouse_id < 0 || a->age > FERTILE_MAX_AGE || a->n_children >= MAX_CHILDREN) continue;
+        Agent *dad = world_agent_by_id(w, a->spouse_id);
+        if (!dad || !dad->alive) continue;
+        if (rng_double(r) < CONCEIVE_CHANCE) a->pregnant_ticks = GESTATION_DAYS;
+    }
 }
 
 Agent *world_agent_at(World *w, int tx, int ty, double radius) {
@@ -486,6 +587,8 @@ void world_tick(World *w, double dt_seconds) {
 
         if (needs_is_dying(&a->needs)) {
             a->alive = 0; w->deaths++;
+            if (a->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, a->spouse_id);
+                if (sp) sp->spouse_id = -1; a->spouse_id = -1; a->pregnant_ticks = 0; }
             char t[96];
             const char *reason = a->needs.hunger <= 0.01 ? "starvation" : "exhaustion";
             snprintf(t, sizeof(t), "%s died (%s)", a->name, reason);
@@ -511,7 +614,7 @@ void world_tick(World *w, double dt_seconds) {
 
     crime_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

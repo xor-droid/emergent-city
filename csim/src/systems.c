@@ -207,6 +207,8 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
     }
     if (rng_double(&w->rng) < chance) {
         victim->alive = 0; w->deaths++; tally(w, "murder"); k->crimes_committed++;
+        if (victim->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, victim->spouse_id);
+            if (sp) sp->spouse_id = -1; victim->spouse_id = -1; victim->pregnant_ticks = 0; }
         k->reputation = (float)clampd(k->reputation - 0.15, -1, 1);
         k->needs.meaning = clampd(k->needs.meaning + 0.3, 0, 1);  /* the thrill */
         k->needs.safety  = clampd(k->needs.safety  + 0.2, 0, 1);
@@ -232,6 +234,8 @@ static void apply_injury(World *w, Agent *v, double amt, const char *cause, Agen
     v->injury = (float)clampd(v->injury + amt, 0, 2);
     if (v->injury >= INJURY_FATAL) {
         v->alive = 0; w->deaths++;
+        if (v->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, v->spouse_id);
+            if (sp) sp->spouse_id = -1; v->spouse_id = -1; v->pregnant_ticks = 0; }
         char t[96];
         if (by) snprintf(t, sizeof(t), "%.26s died of injuries from %.26s (%s)", v->name, by->name, cause);
         else    snprintf(t, sizeof(t), "%.30s died of their injuries (%s)", v->name, cause);

@@ -94,6 +94,16 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 #define ESCALATE_T2 10
 #define ESCALATE_T3 22
 
+/* ── Marriage / kinship / births ───────────────────────────────────────────── */
+#define MARRY_MIN_AGE    20      /* minimum age to wed */
+#define MARRY_AFFINITY   0.45    /* affinity with a partner needed to wed */
+#define MARRY_FAMILIAR   0.4     /* familiarity needed to wed */
+#define MARRY_CHANCE     0.22    /* daily chance a willing, eligible couple weds */
+#define FERTILE_MAX_AGE  45      /* mothers stop conceiving past this */
+#define CONCEIVE_CHANCE  0.16    /* daily chance a married fertile couple conceives */
+#define GESTATION_DAYS   4       /* game-days of pregnancy before a birth */
+#define MAX_CHILDREN     6       /* soft cap per mother */
+
 /* ── Factions ────────────────────────────────────────────────────────────── */
 #define FACTION_RADIUS 8
 
@@ -121,6 +131,7 @@ typedef enum {
 typedef enum {
     EV_CRIME, EV_CRIME_FAILED, EV_ARREST, EV_WANTED, EV_LAID_LOW,
     EV_DEATH, EV_BIRTH, EV_FRIENDS, EV_QUARREL, EV_FACTION, EV_HARDSHIP,
+    EV_MARRIAGE,
     EV_KIND_COUNT
 } EventKind;
 
@@ -192,6 +203,13 @@ typedef struct {
     unsigned char jail_gang;    /* 0=none, else jail-gang id (while incarcerated) */
     float reputation;           /* -1 disreputable .. +1 esteemed (civic standing) */
     unsigned char status;       /* 0..4 social tier, recomputed daily */
+
+    /* ── kinship & family ── */
+    unsigned char sex;          /* 0=female, 1=male */
+    int   spouse_id;            /* -1 none */
+    int   mother_id, father_id; /* -1 unknown */
+    int   n_children;
+    int   pregnant_ticks;       /* >0 = gestating (days remaining); females only */
 
     int wanted;
     int wanted_ticks;
@@ -306,6 +324,7 @@ void crime_daily(World *w);          /* role mobility (emergence) + immigration,
 void jail_tick(World *w);            /* jail gangs + shankings, on day change */
 const char *jail_gang_name(int g);
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
+void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

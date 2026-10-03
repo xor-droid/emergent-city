@@ -43,8 +43,10 @@ int main(void) {
 
     /* friendship + faction summary */
     int alive = 0, total_friends = 0, max_friends = 0, in_faction = 0;
+    int married = 0, pregnant = 0, born = 0;
     for (int k = 0; k < w.n_agents; k++) {
         Agent *a = &w.agents[k];
+        if (a->mother_id >= 0) born++;    /* born into the city during the run */
         if (!a->alive) continue;
         alive++;
         int fr = 0;
@@ -53,11 +55,15 @@ int main(void) {
         total_friends += fr;
         if (fr > max_friends) max_friends = fr;
         if (a->faction_id != -1) in_faction++;
+        if (a->spouse_id >= 0) married++;
+        if (a->pregnant_ticks > 0) pregnant++;
     }
     printf("\nalive=%d/%d  deaths=%d  crimes=%d  llm_enabled=%d  llm_calls=%d\n",
            alive, start, w.deaths, w.crimes, llm_enabled(), llm_total_calls());
     printf("avg friends/agent=%.1f (max %d)   agents in a faction=%d\n",
            alive ? (double)total_friends / alive : 0.0, max_friends, in_faction);
+    printf("family: married=%d (couples %d)  pregnant=%d  children born=%d\n",
+           married, married / 2, pregnant, born);
     printf("factions:");
     for (int i = 0; i < w.n_factions; i++)
         if (w.factions[i].active && w.factions[i].members)

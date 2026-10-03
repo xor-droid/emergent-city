@@ -436,7 +436,11 @@ int run_ui(World *w){
             G->text("EVENT FEED [Tab]",panelX+US(10),US(30),US(13),COL_GOLD);
             int yy=US(50);
             for(int i=0;i<feedLines && i<w->ev_count;i++){ const WorldEvent *e=events_recent(w,i); if(!e)break;
-                snprintf(buf,sizeof(buf),"%.44s",e->text); G->text(buf,panelX+US(10),yy,US(12),gfx_rgb(220,215,205)); yy+=US(15); }
+                GfxColor fc = e->kind==EV_MARRIAGE?gfx_rgb(240,200,120)
+                            : e->kind==EV_BIRTH?gfx_rgb(170,220,170)
+                            : e->kind==EV_DEATH?gfx_rgb(230,160,160)
+                            : gfx_rgb(220,215,205);
+                snprintf(buf,sizeof(buf),"%.44s",e->text); G->text(buf,panelX+US(10),yy,US(12),fc); yy+=US(15); }
             G->line(panelX+US(8),feedBottom+US(8),W-US(8),feedBottom+US(8),gfx_rgb(80,76,90));
             snprintf(buf,sizeof(buf),"CITIZENS (%d)",nlist); G->text(buf,panelX+US(10),feedBottom+US(14),US(13),COL_GOLD);
             for(int r=0;r<listRows && (list_scroll+r)<nlist;r++){ int idx=list_scroll+r;
@@ -531,7 +535,7 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(348), ph=US(436);
+                int pw=US(348), ph=US(455);
                 G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
                 G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
                 int yy=hudH+US(10);
@@ -545,6 +549,11 @@ int run_ui(World *w){
                   G->text(buf,US(12),yy,US(13),gfx_rgb(200,196,186)); yy+=US(20); }
                 snprintf(buf,sizeof(buf),"%s   rep %+d",status_title(a),(int)(a->reputation*100));
                 G->text(buf,US(12),yy,US(13), a->reputation<-0.2f?COL_RED:a->reputation>0.3f?COL_GREEN:gfx_rgb(210,205,195)); yy+=US(20);
+                { char sp[40]="single";
+                  if(a->spouse_id>=0){ Agent *s=world_agent_by_id(w,a->spouse_id); if(s) snprintf(sp,sizeof(sp),"m. %.20s",s->name); }
+                  snprintf(buf,sizeof(buf),"%s  %s  kids %d%s", a->sex?"M":"F", sp, a->n_children,
+                           a->pregnant_ticks>0?"  (expecting)":"");
+                  G->text(buf,US(12),yy,US(12), a->pregnant_ticks>0?gfx_rgb(230,180,220):gfx_rgb(200,196,186)); yy+=US(19); }
                 if(a->is_police){ G->text("POLICE",US(12),yy,US(13),gfx_rgb(120,180,230)); yy+=US(20); }
                 if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED: %.24s",a->wanted_for); G->text(buf,US(12),yy,US(13),COL_RED); yy+=US(20); }
                 if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED: %.24s",a->jailed_for); G->text(buf,US(12),yy,US(13),COL_AMBER); yy+=US(20); }
