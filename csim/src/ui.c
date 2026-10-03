@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 const GfxBackend *G = NULL;
 
@@ -148,12 +149,10 @@ int run_ui(World *w){
     int ts_cols=16, ts_cw=16, ts_ch=16;   /* cols + cell width/height, derived from the image */
     { const char *tsname=getenv("CSIM_TILESET");
       if(tsname && tsname[0] && G->load_tex){
-        char path[600]; const TsEntry *ent=NULL; int direct=0;
-        if(strchr(tsname,'/')||strstr(tsname,".png")){ snprintf(path,sizeof(path),"%s",tsname); direct=1; }
+        char path[1200]=""; const TsEntry *ent=NULL; int direct=0;
+        if(strchr(tsname,'/')||strstr(tsname,".png")) direct=1;
         else for(int i=0;i<N_TSETS;i++) if(!strcmp(tsname,TSETS[i].name)){ ent=&TSETS[i]; break; }
-        const char *dir=getenv("CSIM_TILESET_DIR"); if(!dir) dir="tilesets";
-        if(ent){ snprintf(path,sizeof(path),"%s/%s",dir,ent->file); ts_kind=ent->kind; ts_sem=ent->sem;
-                 ts_cell=ent->cell; ts_space=ent->space; ts_margin=ent->margin; }
+        if(ent){ ts_kind=ent->kind; ts_sem=ent->sem; ts_cell=ent->cell; ts_space=ent->space; ts_margin=ent->margin; }
         { const char *e; if((e=getenv("CSIM_TILESET_CELL"))){ int c=atoi(e); if(c>0) ts_cell=c; }
           if((e=getenv("CSIM_TILESET_SPACE"))){ int c=atoi(e); if(c>=0) ts_space=c; }
           if((e=getenv("CSIM_TILESET_MARGIN"))){ int c=atoi(e); if(c>=0) ts_margin=c; } }
@@ -162,7 +161,23 @@ int run_ui(World *w){
             for(int i=0;i<N_TSETS;i++) fprintf(stderr," %s",TSETS[i].name);
             fprintf(stderr,"  (or a path to a .png)\n");
         } else {
-            int tw=0,th=0; ts_tex=G->load_tex(path,&tw,&th);
+            /* search cwd- and executable-relative dirs so it works whether launched
+             * from csim/ or csim/build/. Existence-check first to avoid loader spam. */
+            char cand[8][640]; int nc=0;
+            if(direct){ snprintf(cand[nc++],sizeof(cand[0]),"%.600s",tsname); }
+            else {
+                char exe[400]=""; ssize_t rn=readlink("/proc/self/exe",exe,sizeof(exe)-1);
+                if(rn>0){ exe[rn]=0; char*s=strrchr(exe,'/'); if(s)*s=0; } else exe[0]=0;
+                const char *envd=getenv("CSIM_TILESET_DIR");
+                if(envd) snprintf(cand[nc++],sizeof(cand[0]),"%.400s/%.120s",envd,ent->file);
+                snprintf(cand[nc++],sizeof(cand[0]),"tilesets/%.120s",ent->file);
+                snprintf(cand[nc++],sizeof(cand[0]),"../tilesets/%.120s",ent->file);
+                if(exe[0]){ snprintf(cand[nc++],sizeof(cand[0]),"%.400s/tilesets/%.120s",exe,ent->file);
+                            snprintf(cand[nc++],sizeof(cand[0]),"%.400s/../tilesets/%.120s",exe,ent->file); }
+            }
+            int tw=0,th=0;
+            for(int i=0;i<nc && !ts_tex;i++){ FILE*fp=fopen(cand[i],"rb");
+                if(fp){ fclose(fp); ts_tex=G->load_tex(cand[i],&tw,&th); if(ts_tex) snprintf(path,sizeof(path),"%.600s",cand[i]); } }
             if(ts_tex){ ascii=1;
                 if(ts_kind==TSK_CP437){
                     /* CP437 is always a 16x16 grid — derive the (possibly non-square) native cell. */
@@ -177,8 +192,8 @@ int run_ui(World *w){
                 fprintf(stderr,"[tileset] %s  img %dx%d  cell %dx%d  space %d  margin %d  cols %d  (%s)\n",
                         path,tw,th,ts_cw,ts_ch,ts_space,ts_margin,ts_cols, ts_kind==TSK_CP437?"cp437":"semantic");
             } else {
-                fprintf(stderr,"[tileset] not found: %s — using font glyphs.\n", path);
-                if(ent) fprintf(stderr,"          get it (%s): %s\n", ent->license, ent->url);
+                fprintf(stderr,"[tileset] '%s' not found (looked under ./tilesets, ../tilesets, and <exe>/../tilesets) — using font glyphs.\n", tsname);
+                if(ent) fprintf(stderr,"          get it (%s): %s   or set CSIM_TILESET_DIR\n", ent->license, ent->url);
             }
         }
       }
