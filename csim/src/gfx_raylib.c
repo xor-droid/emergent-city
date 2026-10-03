@@ -15,10 +15,12 @@ static int rl_key(int k){
     }
 }
 
+#include <stdlib.h>
 static int  rl_init(const char *title,int w,int h){
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT);
+    int bench = getenv("CSIM_BENCH") != NULL;
+    SetConfigFlags(bench ? FLAG_WINDOW_RESIZABLE : (FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT));
     SetTraceLogLevel(LOG_WARNING);
-    InitWindow(w,h,title); SetTargetFPS(60);
+    InitWindow(w,h,title); SetTargetFPS(bench ? 0 : 60);   /* 0 = uncapped */
     return IsWindowReady()?0:1;
 }
 static void rl_shutdown(void){ CloseWindow(); }

@@ -40,7 +40,7 @@ static int gl_init(const char *title,int w,int h){
     if(!glfwInit()) return 1;
     win = glfwCreateWindow(w,h,title,NULL,NULL);
     if(!win){ glfwTerminate(); return 1; }
-    glfwMakeContextCurrent(win); glfwSwapInterval(1);
+    glfwMakeContextCurrent(win); glfwSwapInterval(getenv("CSIM_BENCH")?0:1);
     glfwSetKeyCallback(win,key_cb); glfwSetMouseButtonCallback(win,mbtn_cb); glfwSetScrollCallback(win,scroll_cb);
     return 0;
 }

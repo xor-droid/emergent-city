@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 #include "stb_image_write.h"
 
 static SDL_Window   *win = NULL;
@@ -34,6 +35,7 @@ static int sd_init(const char *title,int w,int h){
     ren = SDL_CreateRenderer(win, NULL);
     if(!ren){ SDL_Log("CreateRenderer: %s", SDL_GetError()); return 1; }
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+    if(!getenv("CSIM_BENCH")) SDL_SetRenderVSync(ren, 1);  /* cap to refresh; uncapped for benchmarks */
     return 0;
 }
 static void sd_shutdown(void){ if(ren)SDL_DestroyRenderer(ren); if(win)SDL_DestroyWindow(win); SDL_Quit(); }

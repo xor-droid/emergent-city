@@ -66,6 +66,10 @@ int run_ui(World *w){
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
     if(getenv("CSIM_DEMO")){ god=1; show_jail=1; show_factions=1; }
+    /* benchmark mode: uncapped (backends disable vsync when CSIM_BENCH is set),
+     * sim paused, measure FPS over N frames after a 60-frame warmup. */
+    int bench=0; { const char *bs=getenv("CSIM_BENCH"); if(bs){ bench=atoi(bs); if(bench<1) bench=1; } }
+    long fcount=0; double bench_t0=0;
 
     static int ids[MAX_AGENTS];
     double prev=now_sec(), facc=0; int frames=0, fps=0;
@@ -156,7 +160,7 @@ int run_ui(World *w){
         /* ── advance sim ── */
         double t=now_sec(), dt=t-prev; prev=t; if(dt>0.1) dt=0.1;
         facc+=dt; frames++; if(facc>=0.5){ fps=(int)(frames/facc); frames=0; facc=0; }
-        if(!paused && dt>0) world_tick(w, (float)(dt*speed));
+        if(!paused && dt>0 && !bench) world_tick(w, (float)(dt*speed));
 
         /* ── render world ── */
         G->begin(gfx_rgb(18,16,22));
@@ -326,7 +330,13 @@ int run_ui(World *w){
         }
 
         G->present();
-        if(shot && ++frame==120){ if(G->screenshot) G->screenshot(shot); break; }
+        fcount++;
+        if(bench){
+            if(fcount==60) bench_t0=now_sec();
+            if(fcount>=60+bench){ double el=now_sec()-bench_t0;
+                printf("[bench] %-7s %d frames / %.3fs = %.1f FPS\n", G->name, bench, el, bench/el);
+                fflush(stdout); break; }
+        } else if(shot && ++frame==120){ if(G->screenshot) G->screenshot(shot); break; }
     }
     G->shutdown();
     return 0;
