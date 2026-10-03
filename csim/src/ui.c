@@ -270,7 +270,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_T)) show_tune=!show_tune;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
             if(god){ if(k<G_NTOOLS) tool=k; }
-            else if(k==0) speed=1; else if(k==1) speed=5; else if(k==2) speed=20;
+            else if(k<6) speed=(float)(k+1);   /* keys 1-6 -> 1x..6x */
         }
         int navstep=0;
         if(G->key_pressed(GFX_KEY_DOWN)) navstep=1;

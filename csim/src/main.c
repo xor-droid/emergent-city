@@ -25,7 +25,7 @@ static void usage(const char *argv0) {
     printf("  Controls: drag/wheel pan+zoom, click a citizen to inspect, g god mode,\n");
     printf("            j jail, f factions, c crime-watch, l legend, a ASCII mode,\n");
     printf("            e city dashboard, o overlay (heat/turf/culture),\n");
-    printf("            Tab feed, Space pause, 1/2/3 speed, q/Esc quit.\n");
+    printf("            Tab feed, Space pause, 1-6 speed (1x-6x), q/Esc quit.\n");
     printf("  Env: CSIM_UI=N ui scale (default: from monitor), CSIM_ZOOM=N zoom,\n");
     printf("       CSIM_ASCII=1 start in ASCII mode, CSIM_DEMO=1 panels,\n");
     printf("       CSIM_CITY=1 dashboard, CSIM_OVERLAY=1..3 overlay,\n");
