@@ -59,6 +59,16 @@ Backend dependencies:
 - **raylib** — fetched+built by CMake (no apt package); needs GL/X11 dev headers
   (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`).
 - **notcurses** — `sudo apt install libnotcurses-dev`.
+  - **Known issue:** Debian/Ubuntu's notcurses **3.0.17** has an input-parser
+    assertion (`process_escape`, `in.c`) that aborts on Kitty-protocol terminals
+    (Kitty/Ghostty/WezTerm). Workaround: build notcurses from source in Release
+    mode (defines `NDEBUG`, disabling the assert):
+    ```sh
+    sudo apt install libunistring-dev libdeflate-dev
+    cmake -B build -S . -DCSIM_FETCH_NOTCURSES=ON && cmake --build build -j1
+    ```
+    Or, with the system package, launch under a plainer terminfo:
+    `TERM=xterm-256color ./build/csim --backend notcurses`.
 
 Note: build single-threaded in this project — `cmake --build build -j1`.
 
