@@ -1,8 +1,7 @@
-/* viz.h — rendering helpers + backend entry point.
+/* viz.h — shared rendering helpers (tile colors, legend, HUD, God Mode).
  *
- * The raylib renderer implements run_raylib(World*). Whether raylib is compiled
- * is decided by CMake (HAVE_RAYLIB); if not, a stub (in main.c) prints how to
- * enable it.
+ * The windowed UI lives in ui.c behind the gfx.h interface; these helpers are
+ * backend-neutral and used by it.
  */
 #ifndef VIZ_H
 #define VIZ_H
@@ -37,8 +36,5 @@ int tile_shade_jitter(int x, int y, int range);
 /* Compose the HUD status line shared by both backends. */
 void hud_string(const World *w, char *buf, int n, float speed, int paused,
                 int fps, const char *backend);
-
-/* Renderer entry point. Returns 0 on clean exit, nonzero if unavailable. */
-int run_raylib(World *w);
 
 #endif /* VIZ_H */

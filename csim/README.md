@@ -27,29 +27,45 @@ csim/
   src/world.c           worldgen, population, tick orchestration, save/load
   src/sim.h             full data model + API (no graphics deps)
   src/viz.h / viz.c     render helpers (tile colors, legend, HUD string)
-  src/main.c            entry point
+  src/gfx.h             gfx abstraction (drawing + input + backend vtable)
+  src/ui.c              the whole UI, written ONCE against gfx.h
+  src/gfx_raylib.c      backend: raylib
+  src/gfx_sdl3.c        backend: SDL3 (SDL_Renderer + debug text)
+  src/gfx_glfw.c        backend: GLFW + legacy OpenGL (+ stb_easy_font)
+  src/stb_*.h           vendored single-header libs (font, PNG write)
+  src/main.c            entry point + --backend selection
   src/main_headless.c   runs the core and prints a report (plain gcc, no deps)
-  src/backend_raylib.c  raylib renderer (GPU window)
-  CMakeLists.txt        builds raylib (fetched)
+  CMakeLists.txt        builds raylib (fetched) + sdl3/glfw (if installed)
 ```
 
-## Rendering (raylib GPU window)
+## Rendering (one UI, three windowed backends)
+The entire UI lives in `ui.c`, written once against the `gfx.h` interface, so
+the backends can't drift. Pick one at runtime:
 ```sh
-./build/csim            # run (raylib is the only/default backend)
-./build/csim --help     # controls + env vars
+./build/csim                     # raylib (default)
+./build/csim --backend sdl3      # SDL3
+./build/csim --backend glfw      # GLFW + OpenGL
+./build/csim --help              # lists compiled-in backends + controls
 ```
-Controls: drag/arrows pan · wheel zoom · click a citizen to inspect · `g` god
-mode · `j` jail · `f` factions · `l` legend · `Tab` feed · Space pause ·
-`1`/`2`/`3` speed · Esc quit. Zoom in and buildings show a type glyph:
-`H` home, `$` shop, `O` office, `B` bar, `+` church, `P` police.
+Controls: drag (right-mouse) pan · wheel zoom · click a citizen to inspect ·
+`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `l` legend · `Tab`
+feed · arrows/PgUp/PgDn browse list · Space pause · `1`/`2`/`3` speed · Esc.
+Zoom in and buildings show a type glyph: `H` home, `$` shop, `O` office,
+`B` bar, `+` church, `P` police.
 
 Env: `CSIM_ZOOM=N` initial zoom · `CSIM_DEMO=1` open panels · `CSIM_SHOT=path`
 dump a screenshot.
 
-Dependency: **raylib** is fetched + built by CMake (no apt package); it needs
-GL/X11 dev headers (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev
-libxcursor-dev libxi-dev`). Under WSL, run GUI apps with `export DISPLAY=:0`
-(WSLg provides the X server).
+Dependencies:
+- **raylib** (always on, default) — fetched + built by CMake; needs GL/X11 dev
+  headers (`libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev
+  libxcursor-dev libxi-dev`).
+- **SDL3** — `sudo apt install libsdl3-dev` (enables `--backend sdl3`).
+- **GLFW** — `sudo apt install libglfw3-dev` (enables `--backend glfw`).
+
+CMake compiles in whichever are present; missing ones are simply unavailable at
+runtime. Under WSL, run GUI apps with `export DISPLAY=:0` (WSLg provides the
+X server).
 
 Note: build single-threaded in this project — `cmake --build build -j1`.
 
