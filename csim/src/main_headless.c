@@ -88,6 +88,20 @@ int main(void) {
       printf("\ngovernance: wars active=%d  war casualties=%d  crackdown=%s\n",
              wars, war_cas, w.crackdown_days > 0 ? "ON" : "off");
     }
+    { int faith[FAITH_COUNT] = {0}, lang[LANG_COUNT] = {0}; double edu_sum = 0; int na = 0;
+      for (int k = 0; k < w.n_agents; k++) {
+          Agent *a = &w.agents[k];
+          if (!a->alive) continue;
+          na++; faith[a->faith]++; lang[a->language]++; edu_sum += a->education;
+      }
+      printf("culture: avg education=%.0f%%  religious=%d/%d  Common-tongue=%d/%d\n",
+             na ? edu_sum / na * 100 : 0, na - faith[FAITH_NONE], na, lang[LANG_COMMON], na);
+      printf("  faith:");
+      for (int i = 0; i < FAITH_COUNT; i++) if (faith[i]) printf(" %s=%d", faith_name((unsigned char)i), faith[i]);
+      printf("\n  tongues:");
+      for (int i = 0; i < LANG_COUNT; i++) if (lang[i]) printf(" %s=%d", language_name((unsigned char)i), lang[i]);
+      printf("\n");
+    }
     int ehist[EV_KIND_COUNT] = {0};
     for (int i = 0; i < w.ev_count; i++) {
         const WorldEvent *e = events_recent(&w, i);

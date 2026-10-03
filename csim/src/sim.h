@@ -104,6 +104,15 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 enum { OCC_NONE, OCC_LABORER, OCC_SHOPKEEP, OCC_BARKEEP,
        OCC_CLERGY, OCC_OFFICER, OCC_COUNT };
 
+/* ── Culture: religion, cultural group, language, education ─────────────────── */
+enum { FAITH_NONE, FAITH_ORTHODOX, FAITH_REFORMED, FAITH_OLD, FAITH_MYSTIC, FAITH_COUNT };
+enum { CUL_HARBOR, CUL_HILL, CUL_OLDTOWN, CUL_NEWCOMER, CUL_COUNT };
+enum { LANG_COMMON, LANG_HIGH, LANG_COASTAL, LANG_OLD, LANG_COUNT };
+#define CONVERT_CHANCE    0.08   /* daily chance a searching soul adopts a devout friend's faith */
+#define ASSIMILATE_CHANCE 0.05   /* daily chance a minority-language agent picks up the Common tongue */
+#define EDU_YOUTH_GAIN    0.02    /* daily schooling gain for the young */
+#define EDU_ADULT_AGE     18      /* schooling stops counting past this age */
+
 /* ── Marriage / kinship / births ───────────────────────────────────────────── */
 #define MARRY_MIN_AGE    20      /* minimum age to wed */
 #define MARRY_AFFINITY   0.45    /* affinity with a partner needed to wed */
@@ -235,6 +244,12 @@ typedef struct {
     /* ── economy ── */
     unsigned char occupation;   /* OCC_* derived from workplace */
     double debt;                /* outstanding credit (accrues daily interest) */
+
+    /* ── culture ── */
+    unsigned char faith;        /* FAITH_* religion followed */
+    unsigned char culture;      /* CUL_* cultural group */
+    unsigned char language;     /* LANG_* mother tongue */
+    float education;            /* 0..1 schooling / literacy */
 
     int wanted;
     int wanted_ticks;
@@ -372,9 +387,14 @@ void law_daily(World *w);            /* crackdowns when crime surges, on day cha
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
-void economy_setup(World *w);               /* assign occupations + landlords, seed the larder */
+void economy_setup(World *w);               /* assign occupations + landlords */
 int  count_properties(const World *w, int owner_id);  /* homes a landlord owns */
 const char *occupation_name(unsigned char occ);
+void culture_setup(World *w);               /* assign faith/culture/language/education */
+void culture_daily(World *w);               /* conversion, assimilation, schooling (diffusion) */
+const char *faith_name(unsigned char f);
+const char *culture_name(unsigned char c);
+const char *language_name(unsigned char l);
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);

@@ -34,6 +34,7 @@ int world_alive(const World *w) {
 
 /* ── Generation ──────────────────────────────────────────────────────────── */
 static unsigned char occ_for(World *w, Agent *a);
+static void culture_assign(World *w, Agent *a);
 
 static void place_building(World *w, int x, int y, TileType t, int cap) {
     if (w->n_buildings >= MAX_BUILDINGS) return;
@@ -182,6 +183,7 @@ void world_populate(World *w, int n) {
     assign_crime_roles(w);   /* career criminals, dealers, kingpins, users, a rare killer */
     factions_populate(w);    /* enlist members into gangs/cults so factions are real actors */
     economy_setup(w);        /* occupations, landlords/tenants */
+    culture_setup(w);        /* faith, cultural group, language, schooling */
 }
 
 Agent *world_agent_by_id(World *w, int id) {
@@ -218,6 +220,9 @@ int world_spawn_agent(World *w, int tx, int ty) {
     if (a->workplace_id >= 0 && w->buildings[a->workplace_id].type == T_POLICE) a->is_police = 1;
     a->occupation = occ_for(w, a);
     a->debt = 0.0;
+    culture_assign(w, a);
+    /* newcomers bring diversity: often a foreign tongue they'll assimilate over time */
+    if (rng_double(r) < 0.6) { a->culture = CUL_NEWCOMER; a->language = (unsigned char)rng_int_incl(r, 1, LANG_COUNT - 1); }
     w->n_agents++;
     char t[96]; snprintf(t, sizeof(t), "%s appeared in the city", a->name);
     events_post(w, EV_BIRTH, a->id, -1, a->x, a->y, 0.4, t);
@@ -253,6 +258,11 @@ static int spawn_child(World *w, Agent *mum, Agent *dad) {
     a->spouse_id = -1;
     a->dealer_id = -1;
     a->status = 2;
+    /* children inherit the family's culture, tongue and faith; schooling starts at 0 */
+    a->culture = mum->culture;
+    a->language = mum->language;
+    a->faith = mum->faith != FAITH_NONE ? mum->faith : dad->faith;
+    a->education = 0.0f;
     a->needs.hunger = a->needs.energy = a->needs.safety = 1.0;
     a->needs.social = a->needs.meaning = a->needs.belonging = 1.0;
     a->needs.money = 0;
@@ -377,6 +387,88 @@ void economy_setup(World *w) {
     }
 
     w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
+}
+
+/* ── culture: religion, cultural group, language, schooling ───────────────────── */
+
+const char *faith_name(unsigned char f) {
+    static const char *n[FAITH_COUNT] = { "Secular","Orthodox","Reformed","Old Faith","Mystic" };
+    return f < FAITH_COUNT ? n[f] : "?";
+}
+const char *culture_name(unsigned char c) {
+    static const char *n[CUL_COUNT] = { "Harborfolk","Hill Clans","Old-town","Newcomers" };
+    return c < CUL_COUNT ? n[c] : "?";
+}
+const char *language_name(unsigned char l) {
+    static const char *n[LANG_COUNT] = { "Common","High Tongue","Coastal","Old Speech" };
+    return l < LANG_COUNT ? n[l] : "?";
+}
+
+/* each culture has a native tongue and a leaning faith */
+static unsigned char culture_tongue(unsigned char c) {
+    switch (c) { case CUL_HARBOR: return LANG_COASTAL; case CUL_HILL: return LANG_HIGH;
+                 case CUL_OLDTOWN: return LANG_OLD;    default: return LANG_COMMON; }
+}
+static unsigned char culture_faith(unsigned char c) {
+    switch (c) { case CUL_HARBOR: return FAITH_REFORMED; case CUL_HILL: return FAITH_ORTHODOX;
+                 case CUL_OLDTOWN: return FAITH_OLD;     default: return FAITH_MYSTIC; }
+}
+
+/* assign one agent's cultural attributes (shared by populate, spawn, birth fallback) */
+static void culture_assign(World *w, Agent *a) {
+    Rng *r = &w->rng;
+    double roll = rng_double(r);
+    a->culture = roll < 0.40 ? CUL_HARBOR : roll < 0.70 ? CUL_OLDTOWN
+               : roll < 0.90 ? CUL_HILL : CUL_NEWCOMER;
+    /* the Common tongue is the city's lingua franca; many speak it over their native one */
+    a->language = rng_double(r) < 0.55 ? LANG_COMMON : culture_tongue(a->culture);
+    /* the devout take their culture's faith; the rest are secular */
+    a->faith = pers_faith(&a->pers) > 0.55 && rng_double(r) < 0.8
+             ? culture_faith(a->culture) : FAITH_NONE;
+    a->education = (float)clampd(rng_gauss(r, 0.5, 0.2), 0.0, 1.0);
+}
+
+void culture_setup(World *w) {
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive) continue;
+        culture_assign(w, a);
+        /* cult members share the Mystic faith (the cult is their religion) */
+        if (a->faction_id >= 0 && w->factions[a->faction_id].is_cult) a->faith = FAITH_MYSTIC;
+    }
+}
+
+/* diffusion on day change: schooling of the young, religious conversion through
+   friendship, and assimilation into the Common tongue. */
+void culture_daily(World *w) {
+    Rng *r = &w->rng;
+    int n0 = w->n_agents;
+    for (int i = 0; i < n0; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive) continue;
+
+        /* schooling: the young grow literate */
+        if (a->age < EDU_ADULT_AGE && a->education < 1.0f)
+            a->education = (float)clampd(a->education + EDU_YOUTH_GAIN, 0, 1);
+
+        /* conversion: a searching soul takes up a devout friend's faith */
+        if (a->needs.meaning < 0.4 && rng_double(r) < CONVERT_CHANCE) {
+            for (int k = 0; k < a->rels.n; k++) {
+                if (a->rels.rel[k].affinity < FRIENDSHIP_AFFINITY) continue;
+                Agent *f = world_agent_by_id(w, a->rels.rel[k].other_id);
+                if (!f || !f->alive || f->faith == FAITH_NONE || f->faith == a->faith) continue;
+                a->faith = f->faith;
+                a->needs.meaning = clampd(a->needs.meaning + 0.25, 0, 1);
+                char t[96]; snprintf(t, sizeof(t), "%.26s converted to the %s faith", a->name, faith_name(a->faith));
+                events_post(w, EV_FACTION, a->id, f->id, (int)a->x, (int)a->y, 0.35, t);
+                break;
+            }
+        }
+
+        /* assimilation: pick up the Common tongue over time (schooling speeds it) */
+        if (a->language != LANG_COMMON && rng_double(r) < ASSIMILATE_CHANCE * (0.5 + a->education))
+            a->language = LANG_COMMON;
+    }
 }
 
 Agent *world_agent_at(World *w, int tx, int ty, double radius) {
@@ -515,6 +607,12 @@ static void do_socialize(World *w, Agent *a) {
     double delta = rng_range(&w->rng, -0.15, 0.18);
     double compat = 1.0 - fabs(a->pers.a - o->pers.a);
     delta += (compat - 0.5) * 0.30;
+    /* cultural homophily: a shared tongue/culture/faith eases a bond; a language
+       barrier or sectarian difference strains it (communication shapes society) */
+    if (a->language == o->language) delta += 0.08; else delta -= 0.10;
+    if (a->culture == o->culture)   delta += 0.05;
+    if (a->faith != FAITH_NONE && o->faith != FAITH_NONE)
+        delta += (a->faith == o->faith) ? 0.04 : -0.03;
     rel_adjust(&a->rels, o->id, delta);
     rel_adjust(&o->rels, a->id, delta * 0.8);
     a->needs.social = clampd(a->needs.social + 0.2, 0, 1);
@@ -551,16 +649,20 @@ static void execute_action(World *w, Agent *a) {
             break;
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
-        case A_WORK:    n->money += WAGE_PER_SHIFT * w->econ.wage_mult;
+        case A_WORK:    /* the educated command better pay (human capital) */
+                        n->money += WAGE_PER_SHIFT * w->econ.wage_mult * (0.7 + a->education * 0.6);
                         n->energy = clampd(n->energy - 0.1, 0, 1);
                         n->meaning = clampd(n->meaning + 0.05, 0, 1);
                         a->reputation = (float)clampd(a->reputation + 0.004, -1, 1);
-                        break;   /* production & food output are settled daily in economy_daily */
+                        break;
         case A_SOCIALIZE: do_socialize(w, a); break;
         case A_DRINK: { double price = DRINK_PRICE * w->econ.goods_price;
                         if (n->money >= price) { n->money -= price;
                             n->social = clampd(n->social + 0.3, 0, 1); do_socialize(w, a); } break; }
-        case A_PRAY:    n->meaning = clampd(n->meaning + 0.4, 0, 1); n->safety = clampd(n->safety + 0.1, 0, 1);
+        case A_PRAY:    /* the faithful draw more meaning from worship than the secular */
+                        n->meaning = clampd(n->meaning + (a->faith != FAITH_NONE ? 0.45 : 0.25), 0, 1);
+                        n->safety = clampd(n->safety + 0.1, 0, 1);
+                        if (a->faith != FAITH_NONE) n->belonging = clampd(n->belonging + 0.08, 0, 1);
                         a->reputation = (float)clampd(a->reputation + 0.004, -1, 1); break;
         case A_SHOP: {  double price = LUXURY_PRICE * w->econ.goods_price;
                         if (n->money >= price) { n->money -= price;
@@ -688,7 +790,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

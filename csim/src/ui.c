@@ -538,7 +538,7 @@ int run_ui(World *w){
         if(selected>=0){
             Agent *a=world_agent_by_id(w,selected);
             if(a && a->alive){
-                int pw=US(348), ph=US(495);
+                int pw=US(348), ph=US(533);
                 G->fill_rect(0,hudH,pw,ph,gfx_rgba(22,20,28,236));
                 G->rect_lines(0,hudH,pw,ph,gfx_rgb(64,60,76));
                 int yy=hudH+US(10);
@@ -563,6 +563,10 @@ int run_ui(World *w){
                   G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(19); }
                 if(a->debt>0.5){ snprintf(buf,sizeof(buf),"Debt %.0f",a->debt);
                   G->text(buf,US(12),yy,US(12), a->debt>DEBT_CEILING*0.75?COL_RED:COL_AMBER); yy+=US(19); }
+                { snprintf(buf,sizeof(buf),"%.14s  %.12s  edu %d%%",culture_name(a->culture),language_name(a->language),(int)(a->education*100));
+                  G->text(buf,US(12),yy,US(12),gfx_rgb(190,200,210)); yy+=US(19); }
+                { snprintf(buf,sizeof(buf),"Faith: %s",faith_name(a->faith));
+                  G->text(buf,US(12),yy,US(12), a->faith!=FAITH_NONE?gfx_rgb(220,200,140):COL_GRAY); yy+=US(19); }
                 if(a->is_police){ G->text("POLICE",US(12),yy,US(13),gfx_rgb(120,180,230)); yy+=US(20); }
                 if(a->wanted){ snprintf(buf,sizeof(buf),"WANTED: %.24s",a->wanted_for); G->text(buf,US(12),yy,US(13),COL_RED); yy+=US(20); }
                 if(a->arrested_ticks>0){ snprintf(buf,sizeof(buf),"JAILED: %.24s",a->jailed_for); G->text(buf,US(12),yy,US(13),COL_AMBER); yy+=US(20); }
