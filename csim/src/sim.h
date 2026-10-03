@@ -414,6 +414,10 @@ int    get_family_kids_min(void);
 int    get_family_kids_max(void);
 void set_pop_target(int t);                 /* living-population target immigration aims for */
 int  get_pop_target(void);
+void   set_fixed_step(int on);              /* GUI: fixed-timestep (deterministic) vs variable dt */
+int    get_fixed_step(void);
+void   set_fixed_dt(double d);
+double get_fixed_dt(void);
 int   life_stage(const Agent *a);           /* LS_CHILD/YOUTH/ADULT/ELDER */
 const char *life_stage_name(const Agent *a);
 void economy_setup(World *w);               /* assign occupations + landlords */

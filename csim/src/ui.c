@@ -234,6 +234,7 @@ int run_ui(World *w){
 
     static int ids[MAX_AGENTS];
     double prev=now_sec(), facc=0; int frames=0, fps=0;
+    double simacc=0;   /* fixed-timestep accumulator (sim-seconds), when get_fixed_step() */
     char buf[128];
     int running=1;
 
@@ -309,7 +310,7 @@ int run_ui(World *w){
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
         /* live tuning panel geometry (shared by click-handling + draw) */
-        int tuneRows=5, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tuneRows=6, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
         int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
         int tuneBW=US(26), tuneBH=US(24);
         int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
@@ -327,6 +328,7 @@ int run_ui(World *w){
                     case 2:{ double v=get_family_share()+dir*0.05; if(v<0)v=0; if(v>1)v=1; set_family_share(v);} break;
                     case 3: set_family_kids(get_family_kids_min()+dir, get_family_kids_max()); break;
                     case 4: set_family_kids(get_family_kids_min(), get_family_kids_max()+dir); break;
+                    case 5: set_fixed_step(!get_fixed_step()); break;   /* toggle */
                 } }
                 break;
             }
@@ -356,7 +358,19 @@ int run_ui(World *w){
         /* ── advance sim ── */
         double t=now_sec(), dt=t-prev; prev=t; if(dt>0.1) dt=0.1;
         facc+=dt; frames++; if(facc>=0.5){ fps=(int)(frames/facc); frames=0; facc=0; }
-        if(!paused && dt>0 && !bench) world_tick(w, (float)(dt*speed));
+        if(!paused && dt>0 && !bench){
+            if(get_fixed_step()){
+                /* deterministic: accumulate real time (scaled by speed) and run
+                   whole fixed steps — same step sequence as headless */
+                simacc += dt*speed;
+                double fdt=get_fixed_dt(); if(fdt<=0) fdt=0.25;
+                int guard=0;
+                while(simacc>=fdt && guard++<100000){ world_tick(w,(float)fdt); simacc-=fdt; }
+            } else {
+                simacc=0;                     /* variable (real-time) stepping */
+                world_tick(w,(float)(dt*speed));
+            }
+        }
 
         /* follow the selected citizen (smoothly track them as they move) */
         if(follow && selected>=0){ Agent *fa=world_agent_by_id(w,selected);
@@ -649,13 +663,14 @@ int run_ui(World *w){
             G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
             G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
             G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
-            const char *tlab[5]={"Aging yr/day","Pop target","Family share","Kids min","Kids max"};
-            char tv[5][24];
+            const char *tlab[6]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep"};
+            char tv[6][24];
             snprintf(tv[0],24,"%.1f",get_years_per_day());
             snprintf(tv[1],24,"%d",get_pop_target());
             snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
             snprintf(tv[3],24,"%d",get_family_kids_min());
             snprintf(tv[4],24,"%d",get_family_kids_max());
+            snprintf(tv[5],24,"%s",get_fixed_step()?"Fixed":"Variable");
             for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
                 G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
                 G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));

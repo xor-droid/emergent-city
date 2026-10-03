@@ -33,6 +33,9 @@ static void usage(const char *argv0) {
     printf("  --family-share F   fraction of immigrants that are young families (0..1, default 0.4).\n");
     printf("  --family-kids-min N / --family-kids-max N  kids per immigrant family (default 1..3).\n");
     printf("  --pop-target N     living-population immigration aims for (default 150).\n");
+    printf("  --fixed-step [--fixed-dt N]  deterministic fixed-timestep for the GUI (default:\n");
+    printf("                     variable wall-clock; headless is always fixed). Reproducible\n");
+    printf("                     from the seed (with LLM off). --variable-step forces the default.\n");
     printf("  (all of the above are also live-adjustable in-window with the T tuning panel)\n");
     printf("  Env: CSIM_YEARS_PER_DAY, CSIM_FAMILY_SHARE, CSIM_FAMILY_KIDS_MIN/MAX, CSIM_POP_TARGET,\n");
     printf("       CSIM_WARMDAYS=N pre-roll sim N days before the window opens,\n");
@@ -44,6 +47,8 @@ int main(int argc, char **argv) {
     double fshare = -1.0;          /* immigrant family share; <0 = unset */
     int fkmin = -1, fkmax = -1;    /* kids per immigrant family; <0 = unset */
     int ptarget = -1;              /* living-population target; <0 = unset */
+    int fixedstep = -1;            /* GUI fixed-timestep: -1 unset, 0 off, 1 on */
+    double fixeddt = -1.0;         /* fixed step size; <0 = unset */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
@@ -56,6 +61,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--family-kids-max=", 18)) { fkmax = atoi(argv[i] + 18); }
         else if (!strcmp(argv[i], "--pop-target") && i + 1 < argc) { ptarget = atoi(argv[++i]); }
         else if (!strncmp(argv[i], "--pop-target=", 13)) { ptarget = atoi(argv[i] + 13); }
+        else if (!strcmp(argv[i], "--fixed-step")) { fixedstep = 1; }
+        else if (!strcmp(argv[i], "--variable-step")) { fixedstep = 0; }
+        else if (!strcmp(argv[i], "--fixed-dt") && i + 1 < argc) { fixeddt = atof(argv[++i]); fixedstep = (fixedstep < 0) ? 1 : fixedstep; }
+        else if (!strncmp(argv[i], "--fixed-dt=", 11)) { fixeddt = atof(argv[i] + 11); fixedstep = (fixedstep < 0) ? 1 : fixedstep; }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -78,6 +87,10 @@ int main(int argc, char **argv) {
                         fkmax >= 0 ? fkmax : get_family_kids_max());
     if (ptarget < 0) { const char *e = getenv("CSIM_POP_TARGET"); if (e) ptarget = atoi(e); }
     if (ptarget >= 0) set_pop_target(ptarget);
+    if (fixeddt < 0.0) { const char *e = getenv("CSIM_FIXED_DT"); if (e) fixeddt = atof(e); }
+    if (fixeddt > 0.0) set_fixed_dt(fixeddt);
+    if (fixedstep < 0) { const char *e = getenv("CSIM_FIXED_STEP"); if (e) fixedstep = atoi(e); }
+    if (fixedstep >= 0) set_fixed_step(fixedstep);
 
     G = gfx_raylib();
 

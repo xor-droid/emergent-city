@@ -141,6 +141,16 @@ static int g_pop_target = POP_TARGET;
 void set_pop_target(int t) { if (t >= 0) g_pop_target = t; }
 int  get_pop_target(void)  { return g_pop_target; }
 
+/* GUI stepping: 0 = variable wall-clock dt (default, real-time, not reproducible),
+   1 = fixed-timestep accumulator (deterministic, frame-rate-independent). Headless
+   always uses its own fixed loop and ignores this. */
+static int    g_fixed_step = 0;
+static double g_fixed_dt    = 0.25;   /* fixed sim-step size (matches headless DT) */
+void   set_fixed_step(int on) { g_fixed_step = on ? 1 : 0; }
+int    get_fixed_step(void)   { return g_fixed_step; }
+void   set_fixed_dt(double d)  { if (d > 0.0) g_fixed_dt = d; }
+double get_fixed_dt(void)      { return g_fixed_dt; }
+
 int life_stage(const Agent *a) {
     if (a->age <= AGE_CHILD_MAX) return LS_CHILD;
     if (a->age < AGE_ADULT)      return LS_YOUTH;
