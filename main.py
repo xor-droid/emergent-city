@@ -110,6 +110,19 @@ def main() -> int:
     except (ValueError, AttributeError, OSError):
         pass  # not on the main thread / unsupported platform
 
+    # ── Resize: rebuild the display at (w, h) and repoint widgets + camera so
+    # the view redraws larger. Used by VIDEORESIZE and the resize trigger file.
+    resize_trigger = os.environ.get("EMERGENT_RESIZE_TRIGGER", "")
+
+    def apply_resize(w: int, h: int) -> None:
+        nonlocal screen
+        screen = pygame.display.set_mode((w, h), pygame.DOUBLEBUF | pygame.RESIZABLE)
+        nw, nh = screen.get_size()
+        camera.resize(nw, nh)
+        for widget in (renderer, hud, feed, panel):
+            widget.screen = screen
+        log.info("Resized window to %dx%d (actual %dx%d)", w, h, nw, nh)
+
     log.info(
         "World ready: %dx%d tiles, %d citizens. Running.",
         world.width, world.height, len(world.agents),
@@ -131,11 +144,7 @@ def main() -> int:
                 # loop. Honor only real (user) resizes, then rebuild the display
                 # and repoint every widget at the new surface so drawing follows.
                 if abs(w - cw) > 24 or abs(h - ch) > 24:
-                    screen = pygame.display.set_mode((w, h), pygame.DOUBLEBUF | pygame.RESIZABLE)
-                    nw, nh = screen.get_size()
-                    camera.resize(nw, nh)
-                    for widget in (renderer, hud, feed, panel):
-                        widget.screen = screen
+                    apply_resize(w, h)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
@@ -208,6 +217,15 @@ def main() -> int:
         god.draw_indicator(screen)
 
         pygame.display.flip()
+
+        if resize_trigger and os.path.exists(resize_trigger):
+            try:
+                spec = open(resize_trigger).read().strip()
+                os.remove(resize_trigger)
+                rw, rh = (int(v) for v in spec.lower().split("x"))
+                apply_resize(rw, rh)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Resize trigger failed: %s", e)
 
         if shot_trigger and os.path.exists(shot_trigger):
             try:
