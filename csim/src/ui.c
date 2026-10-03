@@ -155,8 +155,10 @@ int run_ui(World *w){
     int god=0, tool=G_SMITE;
     int show_right=1, show_jail=0, show_factions=0, show_legend=1, show_crime=0;
     int show_city=0, overlay=0;   /* city dashboard (E); map overlay cycle (O): heat/turf/culture */
+    int show_tune=0;              /* live tuning panel (T): aging pace, pop target, family knobs */
     { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%4; } }
     if(getenv("CSIM_CITY")) show_city=1;
+    if(getenv("CSIM_TUNE")) show_tune=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
 
@@ -265,6 +267,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_A)) ascii=!ascii;
         if(G->key_pressed(GFX_KEY_E)) show_city=!show_city;
         if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%4;
+        if(G->key_pressed(GFX_KEY_T)) show_tune=!show_tune;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
             if(god){ if(k<G_NTOOLS) tool=k; }
             else if(k==0) speed=1; else if(k==1) speed=5; else if(k==2) speed=20;
@@ -305,7 +308,30 @@ int run_ui(World *w){
             if(!dragging){ pmx=mx; pmy=my; dragging=1; }
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
-        if(G->mouse_pressed(GFX_MBTN_LEFT)){
+        /* live tuning panel geometry (shared by click-handling + draw) */
+        int tuneRows=5, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
+        int tuneBW=US(26), tuneBH=US(24);
+        int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
+        int tuneClick=0;
+        if(show_tune && G->mouse_pressed(GFX_MBTN_LEFT) &&
+           mx>=tunePX && mx<=tunePX+tunePW && my>=tunePY && my<=tunePY+tunePH){
+            tuneClick=1;
+            for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
+                if(my<ry || my>ry+tuneBH) continue;
+                int dir = (mx>=tuneMinusX && mx<=tuneMinusX+tuneBW) ? -1
+                        : (mx>=tunePlusX  && mx<=tunePlusX +tuneBW) ?  1 : 0;
+                if(dir){ switch(i){
+                    case 0:{ double v=get_years_per_day()+dir*0.5; if(v<0.1)v=0.1; if(v>60)v=60; set_years_per_day(v);} break;
+                    case 1:{ int v=get_pop_target()+dir*10; if(v<0)v=0; set_pop_target(v);} break;
+                    case 2:{ double v=get_family_share()+dir*0.05; if(v<0)v=0; if(v>1)v=1; set_family_share(v);} break;
+                    case 3: set_family_kids(get_family_kids_min()+dir, get_family_kids_max()); break;
+                    case 4: set_family_kids(get_family_kids_min(), get_family_kids_max()+dir); break;
+                } }
+                break;
+            }
+        }
+        if(G->mouse_pressed(GFX_MBTN_LEFT) && !tuneClick){
             if(overPanel && my>=listTop){
                 int row=list_scroll+(my-listTop)/rowh;
                 int trackX=W-US(6), trackY=listTop, trackH=listRows*rowh;
@@ -618,6 +644,29 @@ int run_ui(World *w){
             #undef ROW
         }
 
+        /* ── live tuning panel [T]: adjust sim knobs while running ── */
+        if(show_tune){
+            G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
+            G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
+            G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
+            const char *tlab[5]={"Aging yr/day","Pop target","Family share","Kids min","Kids max"};
+            char tv[5][24];
+            snprintf(tv[0],24,"%.1f",get_years_per_day());
+            snprintf(tv[1],24,"%d",get_pop_target());
+            snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
+            snprintf(tv[3],24,"%d",get_family_kids_min());
+            snprintf(tv[4],24,"%d",get_family_kids_max());
+            for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
+                G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
+                G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));
+                G->text("-",tuneMinusX+US(9),ry+US(2),US(16),COL_WHITE);
+                G->text(tv[i],tuneMinusX+tuneBW+US(9),ry+US(3),US(13),COL_GOLD);
+                G->fill_rect(tunePlusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));
+                G->text("+",tunePlusX+US(8),ry+US(2),US(16),COL_WHITE);
+            }
+            G->text("click -/+ to adjust (applies live)",tunePX+US(12),tunePY+tunePH-US(18),US(10),COL_GRAY);
+        }
+
         /* ── crime watch: live crimes + who's on the run (with lie-low cooldown) ── */
         if(show_crime){
             int nwanted=0; for(int i=0;i<w->n_agents;i++) if(w->agents[i].alive && w->agents[i].wanted) nwanted++;
@@ -766,7 +815,7 @@ int run_ui(World *w){
 
         /* ── controls hint (bottom, with the legend) ── */
         if(show_legend){
-            const char *keys="E city   O overlay   F factions   C crime   J jail   Tab feed   G god   L legend   Space pause   Q quit";
+            const char *keys="E city   T tune   O overlay   F factions   C crime   J jail   Tab feed   G god   L legend   Space pause   Q quit";
             int tw=G->text_w(keys,US(11));
             int hx=W/2-tw/2; if(hx<US(8)) hx=US(8);
             G->text(keys,hx,Hs-US(17),US(11),gfx_rgb(158,154,148));

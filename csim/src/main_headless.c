@@ -12,6 +12,7 @@ int main(void) {
     { const char *e = getenv("CSIM_FAMILY_SHARE"); if (e) set_family_share(atof(e)); }
     { const char *lo = getenv("CSIM_FAMILY_KIDS_MIN"), *hi = getenv("CSIM_FAMILY_KIDS_MAX");
       if (lo || hi) set_family_kids(lo ? atoi(lo) : get_family_kids_min(), hi ? atoi(hi) : get_family_kids_max()); }
+    { const char *e = getenv("CSIM_POP_TARGET"); if (e) set_pop_target(atoi(e)); }
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);

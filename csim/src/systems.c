@@ -476,8 +476,9 @@ void crime_daily(World *w) {
        old age and crime thin the ranks. Based on the ALIVE count (dead slots are
        reclaimed), so a high-turnover run doesn't quietly depopulate. */
     int alive = world_alive(w);
-    if (alive < POP_TARGET) {
-        int gap = POP_TARGET - alive;
+    int pop_target = get_pop_target();
+    if (alive < pop_target) {
+        int gap = pop_target - alive;
         int want = 3 + gap / 6;         /* people to add today (steady trickle + shortfall) */
         int added = 0, guard = 0;
         while (added < want && guard++ < want + 6) {

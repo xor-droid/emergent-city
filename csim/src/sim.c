@@ -137,6 +137,10 @@ double get_family_share(void)    { return g_family_share; }
 int    get_family_kids_min(void) { return g_family_kids_min; }
 int    get_family_kids_max(void) { return g_family_kids_max; }
 
+static int g_pop_target = POP_TARGET;
+void set_pop_target(int t) { if (t >= 0) g_pop_target = t; }
+int  get_pop_target(void)  { return g_pop_target; }
+
 int life_stage(const Agent *a) {
     if (a->age <= AGE_CHILD_MAX) return LS_CHILD;
     if (a->age < AGE_ADULT)      return LS_YOUTH;
