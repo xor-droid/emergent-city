@@ -120,13 +120,11 @@ void hud_string(const World *w, char *buf, int n, float speed, int paused,
     int alive = 0, factions = 0;
     for (int i = 0; i < w->n_agents; i++) alive += w->agents[i].alive;
     for (int i = 0; i < w->n_factions; i++) factions += (w->factions[i].active && w->factions[i].members > 0);
-    double demand = alive * FOOD_PER_CAPITA;
-    double days_supply = demand > 0 ? w->econ.food_stock / demand : 0.0;
     snprintf(buf, (size_t)n,
              "Day %d  %02d:00  Pop %d  Deaths %d  Crimes %d  Wanted %d  Jail %d  Factions %d  "
-             "Food %.0fd ($%.1fx)  GDP %.0f  [x%.0f%s]  %d FPS (%s)",
+             "GDP %.0f  [x%.0f%s]  %d FPS (%s)",
              w->day, (int)w->hour, alive, w->deaths, w->crimes,
              crime_wanted_count(w), crime_jailed_count(w), factions,
-             days_supply, w->econ.food_price, w->econ.gdp_prev,
+             w->econ.gdp_prev,
              speed, paused ? " PAUSED" : "", fps, backend);
 }

@@ -71,11 +71,8 @@ int main(void) {
           if (count_properties(&w, a->id) > 0) landlords++;
           if (a->debt > 0.5) { indebted++; debt_sum += a->debt; }
       }
-      double demand = alive * FOOD_PER_CAPITA;
-      printf("economy: food=%.0f (%.1f days)  food_price=%.2fx  goods_price=%.2fx  GDP/day=%.0f\n",
-             w.econ.food_stock, demand > 0 ? w.econ.food_stock / demand : 0.0,
-             w.econ.food_price, w.econ.goods_price, w.econ.gdp_prev);
-      printf("         landlords=%d  indebted=%d  total_debt=%.0f\n",
+      printf("economy: goods_price=%.2fx  wage=%.2fx  GDP/day=%.0f  landlords=%d  indebted=%d  total_debt=%.0f\n",
+             w.econ.goods_price, w.econ.wage_mult, w.econ.gdp_prev,
              landlords, indebted, debt_sum);
     }
     printf("factions:");

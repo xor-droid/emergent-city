@@ -133,7 +133,7 @@ built:;
     }
 
     w->hour = 8.0; w->day = 1;
-    w->econ.food_price = 1.0; w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
+    w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
     factions_seed(w);
 }
 
@@ -322,7 +322,7 @@ void kinship_daily(World *w) {
 
 const char *occupation_name(unsigned char occ) {
     static const char *n[OCC_COUNT] = {
-        "Idle","Farmer","Laborer","Shopkeeper","Barkeep","Clergy","Officer" };
+        "Idle","Laborer","Shopkeeper","Barkeep","Clergy","Officer" };
     return occ < OCC_COUNT ? n[occ] : "?";
 }
 
@@ -333,7 +333,7 @@ static unsigned char occ_for(World *w, Agent *a) {
         case T_SHOP:   return OCC_SHOPKEEP;
         case T_BAR:    return OCC_BARKEEP;
         case T_CHURCH: return OCC_CLERGY;
-        case T_WORK:   return (rng_double(&w->rng) < FARMER_SHARE) ? OCC_FARMER : OCC_LABORER;
+        case T_WORK:   return OCC_LABORER;
         default:       return OCC_LABORER;
     }
 }
@@ -375,10 +375,7 @@ void economy_setup(World *w) {
         w->buildings[b].owner_id = owner;
     }
 
-    int alive = 0;
-    for (int i = 0; i < w->n_agents; i++) alive += w->agents[i].alive;
-    w->econ.food_stock = alive * FOOD_PER_CAPITA * FOOD_START_DAYS;
-    w->econ.food_price = 1.0; w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
+    w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
     w->econ.gdp_day = 0.0; w->econ.gdp_prev = 0.0;
 }
 
@@ -548,15 +545,10 @@ static void do_socialize(World *w, Agent *a) {
 static void execute_action(World *w, Agent *a) {
     Needs *n = &a->needs;
     switch (a->action) {
-        case A_EAT: {
-            double price = MEAL_PRICE * w->econ.food_price;
-            if (w->econ.food_stock > 0.0 && n->money >= price) {   /* the larder is settled daily */
-                n->money -= price;
-                n->hunger = clampd(n->hunger + 0.6, 0, 1);
-            } else if (n->hunger < NEED_CRITICAL) {   /* scavenge when the larder's bare or you're broke */
-                n->hunger = clampd(n->hunger + 0.25, 0, 1);
-            }
-            break; }
+        case A_EAT:
+            if (n->money >= MEAL_PRICE) { n->money -= MEAL_PRICE; n->hunger = clampd(n->hunger + 0.6, 0, 1); }
+            else if (n->hunger < NEED_CRITICAL) n->hunger = clampd(n->hunger + 0.3, 0, 1);
+            break;
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
         case A_WORK:    n->money += WAGE_PER_SHIFT * w->econ.wage_mult;

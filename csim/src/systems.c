@@ -579,14 +579,13 @@ void jail_tick(World *w) {
 /* ── Economy ─────────────────────────────────────────────────────────────── */
 void economy_daily(World *w) {
     Economy *e = &w->econ;
-    int alive = 0, farmers = 0, workers = 0; double money_sum = 0;
+    int alive = 0, workers = 0; double money_sum = 0;
 
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
         alive++;
-        if (a->occupation == OCC_FARMER) farmers++;
-        else if (a->occupation != OCC_NONE) workers++;
+        if (a->occupation != OCC_NONE) workers++;
 
         /* ── rent: a tenant pays their landlord; the rent is transferred, not burned ── */
         if (a->home_id >= 0) {
@@ -644,26 +643,11 @@ void economy_daily(World *w) {
         }
     }
 
-    /* ── agriculture & markets settle for the day ── */
-    double produced = farmers * FOOD_PER_FARMER;        /* the harvest */
-    double consumed = alive  * FOOD_PER_CAPITA;         /* the city's appetite */
-    e->food_stock += produced - consumed;
-    e->food_stock *= (1.0 - FOOD_SPOILAGE);            /* some of the larder spoils */
-    if (e->food_stock < 0) e->food_stock = 0;
-    double demand = consumed;
-    double days_supply = demand > 0 ? e->food_stock / demand : 99.0;
-    e->food_price = clampd(2.5 - 0.3 * days_supply, FOOD_PRICE_MIN, FOOD_PRICE_MAX);
-
+    /* ── markets settle for the day ── */
     double avg_money = alive ? money_sum / alive : 0.0;
     e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */
     e->wage_mult   = clampd(0.6 + e->goods_price * 0.5, 0.6, 1.6); /* wages chase the cost of living */
 
-    e->gdp_prev = workers * GOODS_PER_WORKER + produced;          /* day's output: goods + harvest */
+    e->gdp_prev = workers * GOODS_PER_WORKER;                     /* day's output */
     e->gdp_day  = 0.0;
-
-    /* a famine terrorises the city when the larder runs dry */
-    if (days_supply < 1.0 && alive > 0) {
-        char t[96]; snprintf(t, sizeof(t), "Food is scarce — only %.1f days left in the larder", days_supply);
-        events_post(w, EV_HARDSHIP, -1, -1, WORLD_W/2, WORLD_H/2, 0.8, t);
-    }
 }
