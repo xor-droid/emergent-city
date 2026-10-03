@@ -180,7 +180,8 @@ void world_populate(World *w, int n) {
         w->n_agents++;
     }
     assign_crime_roles(w);   /* career criminals, dealers, kingpins, users, a rare killer */
-    economy_setup(w);        /* occupations, landlords/tenants, seed the city larder */
+    factions_populate(w);    /* enlist members into gangs/cults so factions are real actors */
+    economy_setup(w);        /* occupations, landlords/tenants */
 }
 
 Agent *world_agent_by_id(World *w, int id) {
@@ -685,8 +686,9 @@ void world_tick(World *w, double dt_seconds) {
     }
 
     crime_tick(w);
+    warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

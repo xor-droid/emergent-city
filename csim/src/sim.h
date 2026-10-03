@@ -117,6 +117,17 @@ enum { OCC_NONE, OCC_LABORER, OCC_SHOPKEEP, OCC_BARKEEP,
 /* ── Factions ────────────────────────────────────────────────────────────── */
 #define FACTION_RADIUS 8
 
+/* ── Combat, faction warfare & law (governance) ────────────────────────────── */
+#define COMBAT_INJURY       0.5    /* base injury a won fight inflicts */
+#define WAR_DECLARE_CHANCE  0.06   /* daily per-faction chance to start a war */
+#define WAR_MIN_DAYS        2
+#define WAR_MAX_DAYS        5
+#define WAR_ENGAGE_RADIUS   8      /* how near an enemy soldier must be to be attacked */
+#define WAR_ENGAGE_CHANCE   0.012  /* per-tick chance a soldier near an enemy strikes */
+#define CRACKDOWN_THRESHOLD 45     /* crimes/day that provokes a police crackdown */
+#define CRACKDOWN_DAYS      2      /* how long a crackdown lasts */
+#define CRACKDOWN_BONUS     0.15   /* extra police catch chance during a crackdown */
+
 /* Behaviorally-relevant unique traits, as a bitmask. */
 enum {
     TR_CRUEL = 1 << 0, TR_MANIPULATIVE = 1 << 1, TR_VENGEFUL = 1 << 2,
@@ -141,7 +152,7 @@ typedef enum {
 typedef enum {
     EV_CRIME, EV_CRIME_FAILED, EV_ARREST, EV_WANTED, EV_LAID_LOW,
     EV_DEATH, EV_BIRTH, EV_FRIENDS, EV_QUARREL, EV_FACTION, EV_HARDSHIP,
-    EV_MARRIAGE,
+    EV_MARRIAGE, EV_WAR,
     EV_KIND_COUNT
 } EventKind;
 
@@ -261,6 +272,9 @@ typedef struct {
     int leader_id;
     int members;
     double treasury;
+    int war_with;           /* faction id this one is at war with (-1 none) */
+    int war_days;           /* days of fighting left before a truce */
+    int casualties;         /* members lost to warfare (lifetime) */
     unsigned char r, g, b;
 } Faction;
 
@@ -296,8 +310,10 @@ typedef struct {
     /* stats for HUD / headless */
     int deaths, crimes;
     int crime_kind[CK_COUNT];   /* per-kind crime tally */
+    int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
+    int crackdown_days;         /* police crackdown time remaining (law response) */
 
-    Economy econ;               /* city-wide markets, food, wages */
+    Economy econ;               /* city-wide markets, wages */
 } World;
 
 /* ── Personality ─────────────────────────────────────────────────────────── */
@@ -346,6 +362,14 @@ void assign_crime_roles(World *w);   /* post-populate: pick career/dealer/kingpi
 void crime_daily(World *w);          /* role mobility (emergence) + immigration, on day change */
 void jail_tick(World *w);            /* jail gangs + shankings, on day change */
 const char *jail_gang_name(int g);
+
+/* ── Combat / warfare / law (governance) ───────────────────────────────────── */
+/* Resolve one violent encounter; returns 1 if the defender was killed. Shared by
+   street crime (assaults) and faction warfare. */
+int  combat_attack(World *w, Agent *att, Agent *def, const char *context, double base_injury);
+void warfare_tick(World *w);         /* warring factions' soldiers fight nearby enemies (per tick) */
+void law_daily(World *w);            /* crackdowns when crime surges, on day change */
+double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
 void economy_setup(World *w);               /* assign occupations + landlords, seed the larder */
@@ -354,6 +378,7 @@ const char *occupation_name(unsigned char occ);
 
 /* ── Factions ────────────────────────────────────────────────────────────── */
 void factions_seed(World *w);
+void factions_populate(World *w);    /* enlist crime-prone/faithful agents into gangs/cults */
 void factions_daily(World *w);
 int  factions_raise(World *w, int is_cult, int cx, int cy);  /* returns faction id or -1 */
 

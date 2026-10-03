@@ -436,7 +436,8 @@ int run_ui(World *w){
             G->text("EVENT FEED [Tab]",panelX+US(10),US(30),US(13),COL_GOLD);
             int yy=US(50);
             for(int i=0;i<feedLines && i<w->ev_count;i++){ const WorldEvent *e=events_recent(w,i); if(!e)break;
-                GfxColor fc = e->kind==EV_MARRIAGE?gfx_rgb(240,200,120)
+                GfxColor fc = e->kind==EV_WAR?gfx_rgb(255,120,90)
+                            : e->kind==EV_MARRIAGE?gfx_rgb(240,200,120)
                             : e->kind==EV_BIRTH?gfx_rgb(170,220,170)
                             : e->kind==EV_DEATH?gfx_rgb(230,160,160)
                             : gfx_rgb(220,215,205);
@@ -492,7 +493,9 @@ int run_ui(World *w){
                 Agent *ldr=f->leader_id>=0?world_agent_by_id(w,f->leader_id):NULL;
                 G->fill_rect(px+US(12),yy+US(3),US(8),US(8),gfx_rgb(f->r,f->g,f->b));
                 snprintf(buf,sizeof(buf),"%.26s",f->name); G->text(buf,px+US(26),yy,US(12),COL_WHITE);
-                G->text(f->is_cult?"cult":"gang",px+US(260),yy,US(12),gfx_rgb(200,180,150));
+                if(f->war_with>=0){ snprintf(buf,sizeof(buf),"%s war",f->is_cult?"cult":"gang");
+                    G->text(buf,px+US(260),yy,US(12),COL_RED); }
+                else G->text(f->is_cult?"cult":"gang",px+US(260),yy,US(12),gfx_rgb(200,180,150));
                 snprintf(buf,sizeof(buf),"%d",f->members); G->text(buf,px+US(360),yy,US(12),COL_WHITE);
                 if(ldr) snprintf(buf,sizeof(buf),"%.16s",ldr->name); else snprintf(buf,sizeof(buf),"-");
                 G->text(buf,px+US(450),yy,US(12),COL_GRAY); yy+=US(22); }

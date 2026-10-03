@@ -78,7 +78,16 @@ int main(void) {
     printf("factions:");
     for (int i = 0; i < w.n_factions; i++)
         if (w.factions[i].active && w.factions[i].members)
-            printf(" %s(%d)", w.factions[i].name, w.factions[i].members);
+            printf(" %s(%d%s)", w.factions[i].name, w.factions[i].members,
+                   w.factions[i].war_with >= 0 ? ",WAR" : "");
+    { int wars = 0, war_cas = 0;
+      for (int i = 0; i < w.n_factions; i++) {
+          if (w.factions[i].war_with > i) wars++;   /* count each pair once */
+          war_cas += w.factions[i].casualties;
+      }
+      printf("\ngovernance: wars active=%d  war casualties=%d  crackdown=%s\n",
+             wars, war_cas, w.crackdown_days > 0 ? "ON" : "off");
+    }
     int ehist[EV_KIND_COUNT] = {0};
     for (int i = 0; i < w.ev_count; i++) {
         const WorldEvent *e = events_recent(&w, i);

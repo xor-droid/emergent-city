@@ -64,11 +64,17 @@ double crime_cooldown_frac(const Agent *a) {
     return full > 0 ? (double)a->wanted_ticks / full : 0;
 }
 static void jail(Agent *a, const char *kind) {
-    int sentence = (int)(ARREST_DURATION * crime_severity(kind));
+    /* sentencing tiers: base scales with the offence; repeat offenders serve longer
+       (habitual-offender law), capped at roughly triple for a hardened rap sheet */
+    double repeat = 1.0 + (a->crimes_committed < 20 ? a->crimes_committed : 20) * 0.1;
+    int sentence = (int)(ARREST_DURATION * crime_severity(kind) * repeat);
     a->arrested_ticks = sentence; a->sentence_total = sentence;
     strncpy(a->jailed_for, kind, 15); a->jailed_for[15] = '\0';
     clear_wanted(a);
 }
+
+/* extra police effectiveness while a crackdown is in force (law responding to disorder) */
+double police_pressure(const World *w) { return w->crackdown_days > 0 ? CRACKDOWN_BONUS : 0.0; }
 
 static void witnesses_at(World *w, Agent *perp, int *civ, int *pol) {
     int x = (int)perp->x, y = (int)perp->y; *civ = 0; *pol = 0;
@@ -146,7 +152,7 @@ static void do_deal(World *w, Agent *d) {
     Agent *cust = find_user_near(w, d, SELL_RADIUS);
     if (!cust) return;
     int civ, pol; witnesses_at(w, d, &civ, &pol);
-    if (pol && rng_double(&w->rng) < 0.5 - d->crime_skill * 0.3) {
+    if (pol && rng_double(&w->rng) < 0.5 - d->crime_skill * 0.3 + police_pressure(w)) {
         jail(d, "dealing");
         char t[96]; snprintf(t, sizeof(t), "%s was busted dealing", d->name);
         events_post(w, EV_ARREST, d->id, cust->id, (int)d->x, (int)d->y, 0.8, t);
@@ -172,7 +178,7 @@ static void do_traffic(World *w, Agent *p) {
     if (p->crime_role == CR_KINGPIN) {
         if (p->drug_stock >= DRUG_BATCH) return;   /* only import when the stash runs low */
         int civ, pol; witnesses_at(w, p, &civ, &pol); (void)civ;
-        if (pol && rng_double(&w->rng) < 0.35 - p->crime_skill * 0.25) {
+        if (pol && rng_double(&w->rng) < 0.35 - p->crime_skill * 0.25 + police_pressure(w)) {
             jail(p, "trafficking");
             snprintf(t, sizeof(t), "%s was caught trafficking a shipment", p->name);
             events_post(w, EV_ARREST, p->id, -1, (int)p->x, (int)p->y, 0.9, t);
@@ -197,7 +203,7 @@ static void do_traffic(World *w, Agent *p) {
 static void do_murder(World *w, Agent *k, Agent *victim) {
     if (!victim || !victim->alive) return;
     int civ, pol; witnesses_at(w, k, &civ, &pol);
-    double chance = clampd(0.6 + k->crime_skill * 0.3 - civ * 0.15 - (pol ? 0.5 : 0), 0.03, 0.97);
+    double chance = clampd(0.6 + k->crime_skill * 0.3 - civ * 0.15 - (pol ? 0.5 + police_pressure(w) : 0), 0.03, 0.97);
     char t[96];
     if (pol && rng_double(&w->rng) > chance) {
         jail(k, "murder");
@@ -243,6 +249,51 @@ static void apply_injury(World *w, Agent *v, double amt, const char *cause, Agen
     }
 }
 
+/* count faction-mates of `a` within radius of (x,y) — "backup" in a fight */
+static int allies_near(World *w, const Agent *a, int x, int y, int radius) {
+    if (a->faction_id < 0) return 0;
+    int c = 0;
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *o = &w->agents[i];
+        if (!o->alive || o->id == a->id || o->faction_id != a->faction_id || o->arrested_ticks > 0) continue;
+        if (abs((int)o->x - x) <= radius && abs((int)o->y - y) <= radius) c++;
+    }
+    return c;
+}
+
+/* The shared combat primitive. Resolves one strike from `att` on `def` using
+   fighting prowess (skill, bravery, numbers) vs. the defender's. On a win the
+   defender is wounded (possibly fatally); a brave defender may wound back.
+   Used by street assaults and by faction warfare alike. Returns 1 if def died. */
+int combat_attack(World *w, Agent *att, Agent *def, const char *context, double base_injury) {
+    if (!att || !def || !att->alive || !def->alive) return 0;
+    double ax = att->x, ay = att->y;
+    double atk = 0.5 + att->crime_skill * 0.6
+               + (pers_has(&att->pers, TR_BRAVE) ? 0.2 : 0.0)
+               + pers_crime_propensity(&att->pers) * 0.3
+               + allies_near(w, att, (int)ax, (int)ay, WAR_ENGAGE_RADIUS) * 0.08
+               - att->injury * 0.4;
+    double dfn = 0.4 + def->crime_skill * 0.5
+               + (pers_has(&def->pers, TR_BRAVE) ? 0.25 : 0.0)
+               + allies_near(w, def, (int)def->x, (int)def->y, WAR_ENGAGE_RADIUS) * 0.08
+               - def->injury * 0.4;
+    double pwin = clampd(0.5 + (atk - dfn) * 0.4, 0.1, 0.92);
+    rel_adjust(&att->rels, def->id, -0.4); rel_adjust(&def->rels, att->id, -0.5);
+    att->reputation = (float)clampd(att->reputation - 0.02, -1, 1);
+
+    if (rng_double(&w->rng) < pwin) {
+        double amt = base_injury * (0.7 + att->crime_skill * 0.6);
+        apply_injury(w, def, amt, context, att);
+        def->needs.safety = clampd(def->needs.safety - 0.4, 0, 1);
+        return !def->alive;
+    }
+    /* the blow is turned — a game defender strikes back */
+    def->needs.safety = clampd(def->needs.safety - 0.2, 0, 1);
+    if (pers_has(&def->pers, TR_BRAVE) || def->faction_id >= 0)
+        apply_injury(w, att, base_injury * 0.5, context, def);
+    return 0;
+}
+
 void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     if (!strcmp(kind, "dealing"))     { do_deal(w, perp);          return; }
     if (!strcmp(kind, "trafficking")) { do_traffic(w, perp);       return; }
@@ -252,7 +303,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     int civ, pol; witnesses_at(w, perp, &civ, &pol);
     double skill = perp->crime_skill;
     double witw = (!strcmp(kind, "burglary")) ? 0.03 : 0.10;   /* burglary is indoors */
-    double chance = clampd(0.62 - witw * civ - (pol ? 0.55 : 0.0)
+    double chance = clampd(0.62 - witw * civ - (pol ? 0.55 + police_pressure(w) : 0.0)
                            + pers_crime_propensity(&perp->pers) * 0.12 + skill * 0.25, 0.05, 0.96);
     int success = rng_double(&w->rng) < chance;
     double importance = (!strcmp(kind,"theft")||!strcmp(kind,"vandalism")) ? 0.5 : 0.85;
@@ -270,7 +321,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         if (target) {
             if (loot > 0) target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
             target->needs.safety = clampd(target->needs.safety - (!strcmp(kind,"assault")?0.5:0.3), 0, 1);
-            if (!strcmp(kind, "assault")) apply_injury(w, target, ASSAULT_INJURY, "assault", perp);
+            if (!strcmp(kind, "assault")) combat_attack(w, perp, target, "assault", ASSAULT_INJURY);
         } else if (loot > 0) {
             /* (D) no direct target (e.g. burglary) — take it from the nearest resident
              * so stolen money is transferred, not injected into the economy */
@@ -358,6 +409,39 @@ void assign_crime_roles(World *w) {
         if(a->addiction>0.0f)nu++; }
     fprintf(stderr,"[roles] career=%d dealer=%d kingpin=%d killer=%d  users=%d  police=%d\n",
             nc,nd,nk,nkill,nu,police);
+}
+
+/* Enlist members into the seeded factions so gangs/cults are real actors (and can
+   wage war). Crime-prone citizens gravitate to gangs; the devout to cults. */
+void factions_populate(World *w) {
+    Rng *r = &w->rng;
+    int gangs[MAX_FACTIONS], cults[MAX_FACTIONS], ng = 0, ncu = 0;
+    for (int i = 0; i < w->n_factions; i++) {
+        if (!w->factions[i].active) continue;
+        if (w->factions[i].is_cult) cults[ncu++] = i; else gangs[ng++] = i;
+    }
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->is_police || a->faction_id >= 0) continue;
+        int crook = (a->crime_role == CR_CAREER || a->crime_role == CR_DEALER || a->crime_role == CR_KINGPIN);
+        double prop = pers_crime_propensity(&a->pers);
+        int fid = -1;
+        if (ng > 0 && (crook ? rng_double(r) < 0.75 : (prop > 0.5 && rng_double(r) < 0.30)))
+            fid = gangs[rng_int(r, ng)];
+        else if (ncu > 0 && pers_faith(&a->pers) > 0.6 && rng_double(r) < 0.40)
+            fid = cults[rng_int(r, ncu)];
+        if (fid < 0) continue;
+        Faction *f = &w->factions[fid];
+        a->faction_id = fid; f->members++;
+        a->needs.belonging = clampd(a->needs.belonging + 0.2, 0, 1);
+        if (f->leader_id == -1) f->leader_id = a->id;
+    }
+    /* turf: give each gang member a territory centred on their home-ish spot */
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (a->alive && a->faction_id >= 0 && !w->factions[a->faction_id].is_cult
+            && a->turf_x == 0 && a->turf_y == 0) { a->turf_x = (int)a->x; a->turf_y = (int)a->y; }
+    }
 }
 
 /* Daily: (B) role mobility/emergence + (C) a trickle of newcomers. */
@@ -459,6 +543,7 @@ static Faction *faction_create(World *w, int is_cult, const char *name,
     f->id = w->n_factions; f->active = 1; f->is_cult = is_cult;
     strncpy(f->name, name, sizeof(f->name) - 1); f->name[sizeof(f->name) - 1] = '\0';
     f->leader_id = -1; f->members = 0; f->treasury = 0;
+    f->war_with = -1; f->war_days = 0; f->casualties = 0;
     f->r = r; f->g = g; f->b = b;
     w->n_factions++;
     return f;
@@ -470,6 +555,8 @@ void factions_seed(World *w) {
     for (int i = 0; i < 6; i++) faction_create(w, 0, GANG_NAMES[i], gc[i][0], gc[i][1], gc[i][2]);
     for (int i = 0; i < 5; i++) faction_create(w, 1, CULT_NAMES[i], cc[i][0], cc[i][1], cc[i][2]);
 }
+
+void factions_war_daily(World *w);   /* defined just below */
 
 void factions_daily(World *w) {
     for (int i = 0; i < w->n_factions; i++) {
@@ -490,6 +577,108 @@ void factions_daily(World *w) {
                 events_post(w, EV_FACTION, c->id, -1, (int)c->x, (int)c->y, 0.45, t);
             }
         }
+    }
+    factions_war_daily(w);
+}
+
+/* count a faction's surviving, free members */
+static int faction_strength(World *w, int fid) {
+    if (fid < 0) return 0;
+    int c = 0;
+    for (int i = 0; i < w->n_agents; i++)
+        if (w->agents[i].alive && w->agents[i].faction_id == fid) c++;
+    return c;
+}
+
+/* Declare wars between rival factions and wind down ones that have run their
+   course. Warfare is strictly faction-vs-faction — this is a city, not a nation. */
+void factions_war_daily(World *w) {
+    char t[112];
+    for (int i = 0; i < w->n_factions; i++) {
+        Faction *f = &w->factions[i];
+        if (!f->active) continue;
+
+        /* a war in progress winds down by the day, or ends if a side is spent */
+        if (f->war_with >= 0) {
+            Faction *e = &w->factions[f->war_with];
+            if (--f->war_days <= 0 || !e->active || faction_strength(w, f->id) < 2 || faction_strength(w, e->id) < 2) {
+                if (f->id < f->war_with) {   /* announce the truce once, from the lower id */
+                    snprintf(t, sizeof(t), "Truce: %.24s and %.24s end their war", f->name, e->name);
+                    events_post(w, EV_WAR, f->leader_id, e->leader_id, 0, 0, 0.7, t);
+                }
+                f->war_with = -1; f->war_days = 0;
+                e->war_with = -1; e->war_days = 0;
+            }
+            continue;
+        }
+
+        /* otherwise a strong faction may pick a fight with a rival faction */
+        if (faction_strength(w, f->id) < 3) continue;
+        if (rng_double(&w->rng) >= WAR_DECLARE_CHANCE) continue;
+        int tries = 4, tgt = -1;
+        while (tries-- > 0) {
+            int j = rng_int(&w->rng, w->n_factions);
+            Faction *g = &w->factions[j];
+            if (j == i || !g->active || g->war_with >= 0 || faction_strength(w, j) < 3) continue;
+            /* gangs feud over turf; cults clash with gangs over the city's soul */
+            tgt = j; break;
+        }
+        if (tgt < 0) continue;
+        Faction *g = &w->factions[tgt];
+        int days = rng_int_incl(&w->rng, WAR_MIN_DAYS, WAR_MAX_DAYS);
+        f->war_with = tgt; f->war_days = days;
+        g->war_with = i;   g->war_days = days;
+        snprintf(t, sizeof(t), "WAR: %.24s declares war on %.24s", f->name, g->name);
+        events_post(w, EV_WAR, f->leader_id, g->leader_id, 0, 0, 0.9, t);
+    }
+}
+
+/* Soldiers of warring factions attack nearby enemies, every tick. The actual
+   violence runs through the shared combat primitive, same as street crime. */
+void warfare_tick(World *w) {
+    int any = 0;
+    for (int i = 0; i < w->n_factions; i++) if (w->factions[i].active && w->factions[i].war_with >= 0) { any = 1; break; }
+    if (!any) return;
+
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->faction_id < 0 || a->arrested_ticks > 0) continue;
+        Faction *f = &w->factions[a->faction_id];
+        if (!f->active || f->war_with < 0) continue;
+        if (rng_double(&w->rng) >= WAR_ENGAGE_CHANCE) continue;
+
+        /* find the nearest enemy-faction fighter in range */
+        Agent *enemy = NULL; int bd = WAR_ENGAGE_RADIUS * 2 + 1;
+        for (int k = 0; k < w->n_agents; k++) {
+            Agent *o = &w->agents[k];
+            if (!o->alive || o->faction_id != f->war_with || o->arrested_ticks > 0) continue;
+            int d = abs((int)o->x - (int)a->x) + abs((int)o->y - (int)a->y);
+            if (d <= WAR_ENGAGE_RADIUS && d < bd) { bd = d; enemy = o; }
+        }
+        if (!enemy) continue;
+
+        int killed = combat_attack(w, a, enemy, "the war", COMBAT_INJURY);
+        if (killed) {
+            f->casualties++;              /* the enemy faction lost a soldier */
+            char t[112];
+            snprintf(t, sizeof(t), "%.24s fell in the %.20s-%.20s war", enemy->name,
+                     f->name, w->factions[f->war_with].name);
+            events_post(w, EV_WAR, a->id, enemy->id, (int)enemy->x, (int)enemy->y, 0.8, t);
+        }
+    }
+}
+
+/* Law & order: a surge in crime provokes a police crackdown (temporary rise in
+   catch rates), which fades after a couple of days. On day change. */
+void law_daily(World *w) {
+    int today = w->crimes - w->crimes_prev_day;
+    w->crimes_prev_day = w->crimes;
+    if (w->crackdown_days > 0) w->crackdown_days--;
+    if (today >= CRACKDOWN_THRESHOLD && w->crackdown_days == 0) {
+        w->crackdown_days = CRACKDOWN_DAYS;
+        char t[96]; snprintf(t, sizeof(t), "Police declare a crackdown after %d crimes in a day", today);
+        events_post(w, EV_ARREST, -1, -1, WORLD_W/2, WORLD_H/2, 0.7, t);
+        fprintf(stderr, "[law] day %d: crackdown (%d crimes)\n", w->day, today);
     }
 }
 
