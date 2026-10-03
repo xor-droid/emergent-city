@@ -11,6 +11,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <math.h>
 
 const GfxBackend *G = NULL;
 
@@ -142,7 +143,7 @@ int run_ui(World *w){
     int god=0, tool=G_SMITE;
     int show_right=1, show_jail=0, show_factions=0, show_legend=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
-    int selected=-1, list_scroll=0;
+    int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
 
     /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
     void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_sem=SEM_KENNEY, ts_cell=16, ts_space=0, ts_margin=0;
@@ -200,7 +201,7 @@ int run_ui(World *w){
     }
     char flash[96]=""; double flash_until=0;
     const char *shot=getenv("CSIM_SHOT"); int frame=0;
-    if(getenv("CSIM_DEMO")){ god=1; show_jail=1; show_factions=1; if(w->n_agents>0) selected=w->agents[0].id; }
+    if(getenv("CSIM_DEMO")){ god=1; if(w->n_agents>0){ selected=w->agents[0].id; follow=1; } }
     /* benchmark mode: uncapped (backends disable vsync when CSIM_BENCH is set),
      * sim paused, measure FPS over N frames after a 60-frame warmup. */
     int bench=0; { const char *bs=getenv("CSIM_BENCH"); if(bs){ bench=atoi(bs); if(bench<1) bench=1; } }
@@ -252,11 +253,11 @@ int run_ui(World *w){
             if(ni<0)ni=0; if(ni>=nlist)ni=nlist-1;
             selIdx=ni; selected=ids[ni];
             Agent *a=world_agent_by_id(w,selected);
-            if(a){ cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; }
+            if(a){ cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; follow=1; if(cam.zoom<1.6f)cam.zoom=2.2f; }
             if(selIdx<list_scroll) list_scroll=selIdx;
             if(selIdx>=list_scroll+listRows) list_scroll=selIdx-listRows+1;
         }
-        if(G->key_pressed(GFX_KEY_ESC)) selected=-1;
+        if(G->key_pressed(GFX_KEY_ESC)){ selected=-1; follow=0; }
 
         int mx,my; G->mouse(&mx,&my);
         int overPanel = show_right && mx>=panelX;
@@ -274,7 +275,7 @@ int run_ui(World *w){
             }
         }
         if(G->mouse_down(GFX_MBTN_RIGHT)){
-            static int pmx=0,pmy=0; static int dragging=0;
+            static int pmx=0,pmy=0; static int dragging=0; follow=0;   /* manual pan stops following */
             if(!dragging){ pmx=mx; pmy=my; dragging=1; }
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
@@ -288,14 +289,15 @@ int run_ui(World *w){
                 } else if(row>=0 && row<nlist){
                     selected=ids[row];
                     Agent *a=world_agent_by_id(w,selected);
-                    if(a){ cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; }
+                    if(a){ cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; follow=1; if(cam.zoom<1.6f)cam.zoom=2.2f; }
                 }
             } else if(!overPanel){
                 float wx,wy; s2w(&cam,mx,my,&wx,&wy);
                 int tx=(int)(wx/TILE_PX), ty=(int)(wy/TILE_PX);
                 if(god){ god_apply(w,tool,tx,ty,flash,sizeof(flash)); flash_until=now_sec()+2.5; }
                 else { Agent *a=world_agent_at(w,tx,ty,5);
-                    if(a){ selected=a->id; cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; } else selected=-1; }
+                    if(a){ selected=a->id; cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; follow=1; if(cam.zoom<1.6f)cam.zoom=2.2f; }
+                    else { selected=-1; follow=0; } }
             }
         }
 
@@ -303,6 +305,11 @@ int run_ui(World *w){
         double t=now_sec(), dt=t-prev; prev=t; if(dt>0.1) dt=0.1;
         facc+=dt; frames++; if(facc>=0.5){ fps=(int)(frames/facc); frames=0; facc=0; }
         if(!paused && dt>0 && !bench) world_tick(w, (float)(dt*speed));
+
+        /* follow the selected citizen (smoothly track them as they move) */
+        if(follow && selected>=0){ Agent *fa=world_agent_by_id(w,selected);
+            if(fa&&fa->alive){ cam.tx+=(fa->x*TILE_PX-cam.tx)*0.18f; cam.ty+=(fa->y*TILE_PX-cam.ty)*0.18f; }
+            else follow=0; }
 
         /* ── render world ── */
         G->begin(ascii ? gfx_rgb(0,0,0) : gfx_rgb(18,16,22));
@@ -384,8 +391,6 @@ int run_ui(World *w){
                 float r=ts*0.34f; if(r<1.5f)r=1.5f;
                 G->circle((int)sx,(int)sy,r,gfx_rgba(0,0,0,160));
                 G->circle((int)sx,(int)sy,r*0.76f,gfx_rgb(a->r,a->g,a->b));
-                if(a->id==selected){ float bx,by; w2s(&cam,a->x*TILE_PX,a->y*TILE_PX,&bx,&by);
-                    G->rect_lines((int)bx-2,(int)by-2,iw+4,iw+4,gfx_rgb(255,255,0)); }
             }
             /* zoom-aware building glyphs */
             if(ts>=13.0f){
@@ -397,6 +402,20 @@ int run_ui(World *w){
                     int tw=G->text_w(s,fs);
                     G->text(s,(int)(sx-tw*0.5f),(int)(sy-fs*0.5f),fs,gfx_rgba(18,14,20,230));
                 }
+            }
+        }
+
+        /* ── selection marker: a pulsing yellow reticle on the selected citizen ── */
+        if(selected>=0){ Agent *sa=world_agent_by_id(w,selected);
+            if(sa&&sa->alive){
+                float cx,cy; w2s(&cam, sa->x*TILE_PX+TILE_PX*0.5f, sa->y*TILE_PX+TILE_PX*0.5f, &cx,&cy);
+                float pulse=0.5f+0.5f*sinf((float)(now_sec()*5.0));
+                GfxColor yl=gfx_rgb(255,232,40);
+                int tight=(int)(iw*0.6f)+US(3);                       /* inner box ~cell size */
+                int ring=tight+US(4)+(int)(pulse*(iw*0.5f+US(7)));     /* pulsing outer ring */
+                for(int pass=0;pass<2;pass++){ int h=pass?ring:tight;
+                    G->rect_lines((int)cx-h,(int)cy-h,2*h,2*h,yl);
+                    G->rect_lines((int)cx-h-1,(int)cy-h-1,2*h+2,2*h+2,yl); }  /* 2px thick */
             }
         }
 
