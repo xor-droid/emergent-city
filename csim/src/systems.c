@@ -880,9 +880,28 @@ void jail_tick(World *w) {
 }
 
 /* ── Economy ─────────────────────────────────────────────────────────────── */
+static int cmp_dbl_asc(const void *a, const void *b) {
+    double x = *(const double *)a, y = *(const double *)b; return (x > y) - (x < y);
+}
+/* per-capita household wealth for an agent (own money if unhoused) */
+static double agent_pcwealth(const World *w, const Agent *a) {
+    if (a->home_id >= 0 && w->buildings[a->home_id].hh_size > 0)
+        return w->buildings[a->home_id].hh_wealth / w->buildings[a->home_id].hh_size;
+    return a->needs.money;
+}
+
 void economy_daily(World *w) {
     Economy *e = &w->econ;
     int alive = 0; double money_sum = 0;
+
+    /* reference wealth for RELATIVE social class: the city's median per-capita
+     * household wealth. Tiers are scaled to this so the distribution stays a
+     * pyramid as the city grows richer, instead of everyone saturating at the top. */
+    double wref = 0.0;
+    { static double tmp[MAX_AGENTS]; int n = 0;
+      for (int i = 0; i < w->n_agents; i++) if (w->agents[i].alive) tmp[n++] = agent_pcwealth(w, &w->agents[i]);
+      if (n) { qsort(tmp, n, sizeof(double), cmp_dbl_asc); wref = tmp[n/2]; } }
+    if (wref < 1.0) wref = 1.0;   /* guard against an all-broke city */
 
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
@@ -928,15 +947,16 @@ void economy_daily(World *w) {
         a->reputation = (float)clampd(a->reputation + (a->reputation > 0 ? -0.01 : 0.01), -1, 1);  /* drift to neutral */
 
         /* recompute social tier from household wealth + reputation + role + debt.
-         * Class is household-based: a low-wage spouse in a rich home still reads well-off.
-         * (hh_wealth is last day's aggregate; a 1-day lag on a display tier is fine.) */
-        double pcwealth = a->needs.money;
-        if (a->home_id >= 0 && w->buildings[a->home_id].hh_size > 0)
-            pcwealth = w->buildings[a->home_id].hh_wealth / w->buildings[a->home_id].hh_size;
+         * Class is household-based AND relative: tiers scale to the city median
+         * (wref), so a low-wage spouse in a rich home reads well-off and the tiers
+         * don't all saturate as the city grows richer. An absolute poverty floor
+         * (LOW_MONEY) still marks the truly destitute. */
+        double pcwealth = agent_pcwealth(w, a);
         int tier = 2;
-        if (pcwealth > 400) tier++;
-        if (pcwealth > 1000) tier++;
-        if (pcwealth < LOW_MONEY) tier--;
+        if (pcwealth > wref * 1.5) tier++;
+        if (pcwealth > wref * 3.0) tier++;
+        if (pcwealth < wref * 0.5) tier--;
+        if (pcwealth < LOW_MONEY) tier--;   /* absolute destitution floor */
         if (a->reputation > 0.3f) tier++;
         if (a->reputation < -0.3f) tier--;
         if (a->crime_role == CR_KINGPIN) tier++;
