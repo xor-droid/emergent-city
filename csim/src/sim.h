@@ -98,6 +98,7 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 /* ── Economy: markets, land, credit ────────────────────────────────────────── */
 #define RENT_TO_LANDLORD  6.0     /* daily rent a tenant pays their landlord */
 #define LOAN_AMOUNT       25.0    /* emergency micro-loan when destitute */
+#define CHILD_COST        3.0     /* daily upkeep a dependent child costs its parents (--child-cost) */
 #define DEBT_CEILING      200.0   /* no more credit past this */
 #define DAILY_INTEREST    0.03    /* interest accrued on outstanding debt per day */
 
@@ -485,6 +486,8 @@ void   set_research_rate(double r);         /* --research-rate / CSIM_RESEARCH_R
 double get_research_rate(void);
 void   set_craft_bonus(double b);           /* --production / CSIM_PRODUCTION */
 double get_craft_bonus(void);
+void   set_child_cost(double c);            /* --child-cost / CSIM_CHILD_COST */
+double get_child_cost(void);
 double worker_output(const Agent *a);       /* pay/output factor from craft + education */
 const char *faith_name(unsigned char f);
 const char *culture_name(unsigned char c);

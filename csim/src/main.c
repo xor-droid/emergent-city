@@ -29,6 +29,8 @@ static void usage(const char *argv0) {
     printf("  --research-rate R     pace of knowledge/technology discovery (default 0.05).\n");
     printf("  --production F        how much craft skill + schooling lift a worker's pay\n");
     printf("                        (default 1.0; 0 = flat wages, higher = skill matters more).\n");
+    printf("  --child-cost N        daily upkeep each dependent child costs its parents\n");
+    printf("                        (default 3; 0 = children are free).\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -69,6 +71,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_FAMILY_KIDS_MIN  CSIM_FAMILY_KIDS_MAX  CSIM_FIXED_STEP=1  CSIM_FIXED_DT=N\n");
     printf("    CSIM_RESEARCH_RATE  knowledge/tech discovery pace (same as --research-rate).\n");
     printf("    CSIM_PRODUCTION     craft/output pay weight (same as --production).\n");
+    printf("    CSIM_CHILD_COST     per-child daily upkeep (same as --child-cost).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
@@ -111,6 +114,7 @@ int main(int argc, char **argv) {
     double fixeddt = -1.0;         /* fixed step size; <0 = unset */
     double rrate = -1.0;           /* research rate; <0 = unset */
     double craftb = -1.0;          /* production/craft bonus; <0 = unset */
+    double childcost = -1.0;       /* per-child daily upkeep; <0 = unset */
     int vision = -1, visradius = -1;   /* field of view; <0 = unset */
     int hearing = -1, hearradius = -1; /* hearing; <0 = unset */
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
@@ -134,6 +138,8 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--research-rate=", 16)) { rrate = atof(argv[i] + 16); }
         else if (!strcmp(argv[i], "--production") && i + 1 < argc) { craftb = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--production=", 13)) { craftb = atof(argv[i] + 13); }
+        else if (!strcmp(argv[i], "--child-cost") && i + 1 < argc) { childcost = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--child-cost=", 13)) { childcost = atof(argv[i] + 13); }
         else if (!strcmp(argv[i], "--vision")) { vision = 1; }
         else if (!strcmp(argv[i], "--no-vision")) { vision = 0; }
         else if (!strcmp(argv[i], "--vision-radius") && i + 1 < argc) { visradius = atoi(argv[++i]); vision = (vision < 0) ? 1 : vision; }
@@ -174,6 +180,8 @@ int main(int argc, char **argv) {
     if (rrate >= 0.0) set_research_rate(rrate);
     if (craftb < 0.0) { const char *e = getenv("CSIM_PRODUCTION"); if (e) craftb = atof(e); }
     if (craftb >= 0.0) set_craft_bonus(craftb);
+    if (childcost < 0.0) { const char *e = getenv("CSIM_CHILD_COST"); if (e) childcost = atof(e); }
+    if (childcost >= 0.0) set_child_cost(childcost);
     if (visradius < 0) { const char *e = getenv("CSIM_VISION_RADIUS"); if (e) visradius = atoi(e); }
     if (visradius > 0) set_vision_radius(visradius);
     if (vision < 0) { const char *e = getenv("CSIM_VISION"); if (e) vision = atoi(e); }

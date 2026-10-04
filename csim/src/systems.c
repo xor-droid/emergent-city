@@ -944,6 +944,34 @@ void economy_daily(World *w) {
         }
     }
 
+    /* ── child-rearing: dependent children cost their parents daily upkeep, which is
+       transferred to the child (an allowance to live on). Strapped parents pay what
+       they can and the shortfall leaves the child a little worse off. ── */
+    double cc = get_child_cost();
+    if (cc > 0.0) {
+        for (int i = 0; i < w->n_agents; i++) {
+            Agent *c = &w->agents[i];
+            if (!c->alive || c->age >= AGE_WORK) continue;        /* only dependents */
+            Agent *pr[2]; int np = 0;
+            Agent *m = c->mother_id >= 0 ? world_agent_by_id(w, c->mother_id) : NULL;
+            Agent *f = c->father_id >= 0 ? world_agent_by_id(w, c->father_id) : NULL;
+            if (m && m->alive) pr[np++] = m;
+            if (f && f->alive) pr[np++] = f;
+            if (np == 0) continue;                                 /* orphan: no one to charge */
+            double paid = 0;
+            for (int p = 0; p < np; p++) {
+                double share = (cc - paid) / (np - p);             /* split the remainder evenly */
+                if (share > pr[p]->needs.money) share = pr[p]->needs.money;
+                pr[p]->needs.money -= share; paid += share;
+            }
+            c->needs.money += paid;                                /* the child's allowance */
+            if (paid < cc * 0.5) {                                 /* under-provided: a child goes without */
+                c->needs.hunger = clampd(c->needs.hunger - 0.08, 0, 1);
+                c->needs.safety = clampd(c->needs.safety - 0.04, 0, 1);
+            }
+        }
+    }
+
     /* ── markets settle for the day ── */
     double avg_money = alive ? money_sum / alive : 0.0;
     e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */

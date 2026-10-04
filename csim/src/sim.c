@@ -166,6 +166,10 @@ int  get_noise_worldgen(void) { return g_noise_worldgen; }
 static double g_craft_bonus = CRAFT_BONUS;
 void   set_craft_bonus(double b) { if (b >= 0.0) g_craft_bonus = b; }
 double get_craft_bonus(void) { return g_craft_bonus; }
+
+static double g_child_cost = CHILD_COST;   /* daily per-child upkeep paid by parents */
+void   set_child_cost(double c) { if (c >= 0.0) g_child_cost = c; }
+double get_child_cost(void) { return g_child_cost; }
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {
