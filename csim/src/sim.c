@@ -185,6 +185,10 @@ double occ_base_wage(unsigned char occ) {
     double base = (occ < OCC_COUNT) ? OCC_WAGE[occ] : 1.0;
     return 1.0 + g_occ_pay_spread * (base - 1.0);   /* spread 0 -> 1.0 for all (no change) */
 }
+
+static int g_neighborhoods = 0;   /* home value + residential sorting + affluence overlay */
+void set_neighborhoods(int on) { g_neighborhoods = on ? 1 : 0; }
+int  get_neighborhoods(void) { return g_neighborhoods; }
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {

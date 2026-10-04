@@ -525,10 +525,69 @@ int count_properties(const World *w, int owner_id) {
     return c;
 }
 
+/* ── Neighborhoods: home value + residential sorting (Phase 2, --neighborhoods) ── */
+/* desirability 0..1 of a home: downtown-central + near parks (crime penalty is
+ * applied later as heat builds, via households_daily). */
+static float home_value(const World *w, int bx, int by) {
+    const double cx = WORLD_W * 0.5, cy = WORLD_H * 0.5;
+    const double maxd = sqrt(cx*cx + cy*cy);
+    double d = sqrt((bx-cx)*(bx-cx) + (by-cy)*(by-cy)) / maxd;   /* 0 centre .. 1 edge */
+    double v = 0.15 + 0.70 * (1.0 - d);
+    int parks = 0, R = 4;
+    for (int yy = by-R; yy <= by+R; yy++) for (int xx = bx-R; xx <= bx+R; xx++) {
+        if (xx < 0 || yy < 0 || xx >= WORLD_W || yy >= WORLD_H) continue;
+        if (w->tile[xx][yy] == T_PARK) parks++;
+    }
+    v += 0.02 * parks;
+    return (float)(v < 0 ? 0 : v > 1 ? 1 : v);
+}
+
+typedef struct { double key; int idx; } RankD;   /* sort helper (money or value) */
+static int rankd_desc(const void *a, const void *b) {
+    const RankD *x = a, *y = b;
+    if (x->key < y->key) return 1;
+    if (x->key > y->key) return -1;
+    return x->idx - y->idx;   /* stable tiebreak for determinism */
+}
+
+/* Sort residency by affordability: rank households (here, individuals at spawn) by
+ * wealth and homes by value, then seat the richest in the most desirable homes →
+ * rich/poor quarters emerge instead of a random mix. Also stamps Building.value. */
+static void residential_sort(World *w) {
+    static RankD homes[MAX_BUILDINGS]; int nh = 0;
+    for (int b = 0; b < w->n_buildings; b++) if (w->buildings[b].type == T_HOME) {
+        w->buildings[b].value = home_value(w, w->buildings[b].x, w->buildings[b].y);
+        homes[nh].key = w->buildings[b].value; homes[nh].idx = b; nh++;
+    }
+    if (nh == 0) return;
+    qsort(homes, nh, sizeof(RankD), rankd_desc);   /* most desirable first */
+
+    static RankD ags[MAX_AGENTS]; int na = 0;
+    for (int i = 0; i < w->n_agents; i++) if (w->agents[i].alive) {
+        ags[na].key = w->agents[i].needs.money; ags[na].idx = i; na++;
+    }
+    qsort(ags, na, sizeof(RankD), rankd_desc);      /* richest first */
+
+    for (int b = 0; b < w->n_buildings; b++) if (w->buildings[b].type == T_HOME) w->buildings[b].n_residents = 0;
+    int hi = 0;
+    for (int k = 0; k < na; k++) {
+        Agent *a = &w->agents[ags[k].idx];
+        while (hi < nh) { int b = homes[hi].idx;
+            int cap = w->buildings[b].capacity > 0 ? w->buildings[b].capacity : 4;
+            if (w->buildings[b].n_residents < cap) break; hi++; }
+        int b = (hi < nh) ? homes[hi].idx : homes[nh-1].idx;   /* overflow → least desirable */
+        a->home_id = b;
+        a->x = w->buildings[b].x; a->y = w->buildings[b].y;
+        w->buildings[b].n_residents++;
+    }
+}
+
 void economy_setup(World *w) {
     Rng *r = &w->rng;
     for (int i = 0; i < w->n_agents; i++)
         if (w->agents[i].alive) w->agents[i].occupation = occ_for(w, &w->agents[i]);
+
+    if (get_neighborhoods()) residential_sort(w);   /* seat households by wealth into valued homes */
 
     /* Land ownership concentrates in a wealthy minority: the richest ~12% of the
        city become the landlord class, and every home is deeded to one of them.
@@ -1053,6 +1112,8 @@ int world_load(World *w, const char *path) {
     return rd == 1;
 }
 
+static int cmp_double(const void *a, const void *b);   /* defined with the metrics code below */
+
 /* ── Households: recompute per-home aggregates (call on day change) ────────────
  * A household = living agents sharing a home_id. hh_wealth = Σ residents' money;
  * hh_income = Σ residents' net legitimate cash flow for the day (day_income), which
@@ -1072,6 +1133,36 @@ void households_daily(World *w) {
             hb->hh_income += a->day_income;
         }
         a->day_income = 0;   /* reset the accumulator for the next day */
+    }
+
+    /* affluence field for the neighborhoods overlay: splat each home's wealth into a
+     * disc, keeping the max, so rich/poor quarters read as smooth blobs on the map. */
+    if (get_neighborhoods()) {
+        memset(w->affluence_, 0, sizeof(w->affluence_));
+        /* scale by the 85th percentile of per-capita household wealth, so one
+         * rent-rich landlord doesn't crush the whole map to near-zero. */
+        static double pc[MAX_BUILDINGS]; int np = 0;
+        for (int b = 0; b < w->n_buildings; b++) {
+            Building *hb = &w->buildings[b];
+            if (hb->type == T_HOME && hb->hh_size > 0) pc[np++] = hb->hh_wealth / hb->hh_size;
+        }
+        if (np == 0) return;
+        qsort(pc, np, sizeof(double), cmp_double);
+        double scale = pc[(np * 85) / 100];
+        if (scale < 1.0) scale = 1.0;
+        const int R = 6;
+        for (int b = 0; b < w->n_buildings; b++) {
+            Building *hb = &w->buildings[b];
+            if (hb->type != T_HOME || hb->hh_size <= 0) continue;
+            double pcw = hb->hh_wealth / hb->hh_size;
+            int base = (int)(255.0 * pcw / scale); if (base > 255) base = 255;
+            for (int yy = hb->y - R; yy <= hb->y + R; yy++) for (int xx = hb->x - R; xx <= hb->x + R; xx++) {
+                if (xx < 0 || yy < 0 || xx >= WORLD_W || yy >= WORLD_H) continue;
+                int dd = abs(xx - hb->x) + abs(yy - hb->y);
+                int v = base - base * dd / (2 * R);     /* linear falloff */
+                if (v > w->affluence_[xx][yy]) w->affluence_[xx][yy] = (uint8_t)(v < 0 ? 0 : v);
+            }
+        }
     }
 }
 
@@ -1240,6 +1331,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "child_cost=%g\n", get_child_cost());
     fprintf(f, "metrics_every=%g\n", get_metrics_every());
     fprintf(f, "occ_pay_spread=%g\n", get_occ_pay_spread());
+    fprintf(f, "neighborhoods=%d\n", get_neighborhoods());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

@@ -46,7 +46,7 @@ static GfxColor culture_col(unsigned char c){
                default:          return gfx_rgb(235,150,60); }   /* newcomers */
 }
 static const char *overlay_name(int o){
-    switch(o){ case 1:return "CRIME HEAT"; case 2:return "FACTION TURF"; case 3:return "CULTURE"; case 4:return "VISION (selected)"; case 5:return "HEARING (selected)"; default:return "off"; }
+    switch(o){ case 1:return "CRIME HEAT"; case 2:return "FACTION TURF"; case 3:return "CULTURE"; case 4:return "VISION (selected)"; case 5:return "HEARING (selected)"; case 6:return "AFFLUENCE"; default:return "off"; }
 }
 
 static char building_glyph(TileType t){
@@ -157,7 +157,7 @@ int run_ui(World *w){
     int show_city=0, overlay=0;   /* city dashboard (E); map overlay cycle (O): heat/turf/culture */
     int show_tune=0;              /* live tuning panel (T): aging pace, pop target, family knobs */
     int show_family=0;           /* family/genealogy panel (K) for the selected citizen */
-    { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%6; } }
+    { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%7; } }
     if(getenv("CSIM_CITY")) show_city=1;
     if(getenv("CSIM_TUNE")) show_tune=1;
     if(getenv("CSIM_KIN")) show_family=1;
@@ -288,7 +288,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_L)) show_legend=!show_legend;
         if(G->key_pressed(GFX_KEY_A)) ascii=!ascii;
         if(G->key_pressed(GFX_KEY_E)) show_city=!show_city;
-        if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%6;
+        if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%7;
         if(G->key_pressed(GFX_KEY_T)) show_tune=!show_tune;
         if(G->key_pressed(GFX_KEY_K)) show_family=!show_family;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
@@ -610,11 +610,21 @@ int run_ui(World *w){
                         float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
                         G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(150,255,170,50));
                     }
+        } else if(overlay==6){                            /* affluence: rich (green) .. poor (red) */
+            for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++){
+                int a=w->affluence_[x][y]; if(a<=6) continue;
+                float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                int rr=(a<128)?255:(int)(255*(255-a)/127);   /* red high when poor */
+                int gg=(a<128)?(int)(255*a/127):255;         /* green high when rich */
+                int al=60+a*90/255;                          /* 60..150 */
+                G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(rr,gg,60,al));
+            }
         }
         if(overlay){ const char *ohint =
                  ((overlay==4||overlay==5)&&selected<0)?"  (select a citizen)"
                : (overlay==4&&!get_vision())?"  (vision off)"
-               : (overlay==5&&!get_hearing())?"  (hearing off)":"";
+               : (overlay==5&&!get_hearing())?"  (hearing off)"
+               : (overlay==6&&!get_neighborhoods())?"  (neighborhoods off)":"";
             snprintf(buf,sizeof(buf),"OVERLAY [O]: %s%s",overlay_name(overlay),ohint);
             G->text(buf,US(8),hudH+US(6),US(13),gfx_rgb(255,220,120)); }
 

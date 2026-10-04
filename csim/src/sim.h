@@ -322,6 +322,7 @@ typedef struct {
     int    hh_size;         /* living residents */
     double hh_wealth;       /* sum of residents' money */
     double hh_income;       /* residents' net legitimate income for the last day */
+    float  value;           /* 0..1 home desirability (centrality/parks − crime); homes only */
 } Building;
 
 /* City-wide economy: markets, prevailing wages. */
@@ -363,6 +364,7 @@ typedef struct {
 typedef struct {
     uint8_t tile[WORLD_W][WORLD_H];     /* TileType */
     uint8_t danger_[WORLD_W][WORLD_H];  /* 0..255 danger (crime heat) */
+    uint8_t affluence_[WORLD_W][WORLD_H];/* 0..255 local household wealth (neighborhoods overlay) */
 
     Agent agents[MAX_AGENTS];
     int n_agents;
@@ -503,6 +505,8 @@ double occ_base_wage(unsigned char occ);     /* occupation pay multiplier, scale
 void   set_occ_pay_spread(double s);         /* --occ-pay-spread / CSIM_OCC_PAY_SPREAD */
 double get_occ_pay_spread(void);
 void   households_daily(World *w);            /* recompute per-home hh_size/hh_wealth/hh_income (day change) */
+void   set_neighborhoods(int on);             /* --neighborhoods / CSIM_NEIGHBORHOODS: home value + sorting + overlay */
+int    get_neighborhoods(void);
 
 /* ── Balance metrics export (dashboard): one CSV row per sample ─────────────── */
 #define METRICS_EVERY_HOURS 24.0             /* default sampling cadence: once per game-day */

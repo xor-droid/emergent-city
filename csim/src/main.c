@@ -34,6 +34,9 @@ static void usage(const char *argv0) {
     printf("  --occ-pay-spread F    how much occupation sets base pay (socioeconomic class):\n");
     printf("                        0 = flat/legacy (default), 1 = full tier spread (officer/\n");
     printf("                        shopkeep earn more than laborers). Drives wealth inequality.\n");
+    printf("  --neighborhoods       give homes a value (downtown/parks) and seat households by\n");
+    printf("                        wealth, so rich & poor quarters emerge; adds an AFFLUENCE\n");
+    printf("                        map overlay (O). Default off = random residency.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -84,6 +87,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_PRODUCTION     craft/output pay weight (same as --production).\n");
     printf("    CSIM_CHILD_COST     per-child daily upkeep (same as --child-cost).\n");
     printf("    CSIM_OCC_PAY_SPREAD occupation pay-tier spread (same as --occ-pay-spread).\n");
+    printf("    CSIM_NEIGHBORHOODS=1  home value + residential sorting (same as --neighborhoods).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
@@ -94,7 +98,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
     printf("    CSIM_CITY=1 / CSIM_TUNE=1   open the dashboard / tuning panel at launch.\n");
-    printf("    CSIM_OVERLAY=1..5   open a map overlay (1 heat, 2 turf, 3 culture, 4 vision, 5 hearing).\n");
+    printf("    CSIM_OVERLAY=1..6   open a map overlay (1 heat, 2 turf, 3 culture, 4 vision, 5 hearing, 6 affluence).\n");
     printf("    CSIM_ASCII=1        start in Dwarf-Fortress ASCII render mode.\n");
     printf("  display / render:\n");
     printf("    CSIM_UI=N           UI scale (default: derived from monitor height).\n");
@@ -137,6 +141,7 @@ int main(int argc, char **argv) {
     const char *metrics = NULL;        /* balance CSV export path; NULL = off */
     double metricsevery = -1.0;        /* sample cadence in game-hours; <0 = unset */
     double occspread = -1.0;           /* occupation pay-tier spread; <0 = unset */
+    int neighborhoods = -1;            /* home value + residential sorting; <0 = unset */
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -177,6 +182,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--metrics-hourly")) { metricsevery = 1.0; }
         else if (!strcmp(argv[i], "--occ-pay-spread") && i + 1 < argc) { occspread = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--occ-pay-spread=", 17)) { occspread = atof(argv[i] + 17); }
+        else if (!strcmp(argv[i], "--neighborhoods")) { neighborhoods = 1; }
+        else if (!strcmp(argv[i], "--no-neighborhoods")) { neighborhoods = 0; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -226,6 +233,8 @@ int main(int argc, char **argv) {
     if (metricsevery > 0.0) set_metrics_every(metricsevery);
     if (occspread < 0.0) { const char *e = getenv("CSIM_OCC_PAY_SPREAD"); if (e) occspread = atof(e); }
     if (occspread >= 0.0) set_occ_pay_spread(occspread);
+    if (neighborhoods < 0) { const char *e = getenv("CSIM_NEIGHBORHOODS"); if (e) neighborhoods = atoi(e); }
+    if (neighborhoods >= 0) set_neighborhoods(neighborhoods);   /* must precede world_populate */
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 
