@@ -197,6 +197,29 @@ int  get_crime_wealth(void) { return g_crime_wealth; }
 static int g_police_bias = 0;     /* 0=crime (default/legacy), 1=money, 2=balanced */
 void set_police_bias(int mode) { g_police_bias = (mode < 0 || mode > 2) ? 0 : mode; }
 int  get_police_bias(void) { return g_police_bias; }
+
+static int    g_weather = 0;               /* deterministic weather on/off */
+static double g_weather_period = WEATHER_PERIOD;
+static double g_heat_cost = 1.0;           /* heating-cost scale (phase 2) */
+void   set_weather(int on) { g_weather = on ? 1 : 0; }
+int    get_weather(void) { return g_weather; }
+void   set_weather_period(double d) { if (d > 0.0) g_weather_period = d; }
+double get_weather_period(void) { return g_weather_period; }
+void   set_heat_cost(double f) { if (f >= 0.0) g_heat_cost = f; }
+double get_heat_cost(void) { return g_heat_cost; }
+
+/* perception multipliers: fog blinds, rain muffles. 1.0 = clear. Only meaningful when
+ * weather is on (callers gate on get_weather via these returning 1.0 otherwise). */
+double weather_vision_mult(const World *w) {
+    if (!g_weather) return 1.0;
+    double m = 1.0 - 0.6 * w->weather.fog - 0.2 * w->weather.rain;
+    return m < 0.3 ? 0.3 : m;
+}
+double weather_hearing_mult(const World *w) {
+    if (!g_weather) return 1.0;
+    double m = 1.0 - 0.6 * w->weather.rain - 0.1 * w->weather.fog;
+    return m < 0.3 ? 0.3 : m;
+}
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {

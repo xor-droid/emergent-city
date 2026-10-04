@@ -382,6 +382,8 @@ typedef struct {
     double hour;    /* 0..24 */
     int day;
     uint64_t tick;  /* monotonic world_tick count — the deterministic clock for replay */
+    uint64_t seed;  /* worldgen seed (for pure-function systems like weather) */
+    struct { float temp, rain, fog; } weather;  /* 0..1 each; pure fn of (seed,time); --weather */
     Rng rng;
 
     /* stats for HUD / headless */
@@ -515,6 +517,18 @@ void   set_neighborhoods(int on);             /* --neighborhoods / CSIM_NEIGHBOR
 int    get_neighborhoods(void);
 void   set_crime_wealth(int on);              /* --crime-wealth / CSIM_CRIME_WEALTH: wealth-scaled loot + EV targeting */
 int    get_crime_wealth(void);
+
+/* ── Weather (deterministic noise; --weather) ──────────────────────────────── */
+#define WEATHER_PERIOD 5.0                    /* default game-days per weather cycle */
+void   set_weather(int on);                   /* --weather / CSIM_WEATHER */
+int    get_weather(void);
+void   set_weather_period(double days);       /* --weather-period / CSIM_WEATHER_PERIOD */
+double get_weather_period(void);
+void   set_heat_cost(double f);               /* --heat-cost / CSIM_HEAT_COST (phase 2 scale) */
+double get_heat_cost(void);
+void   weather_update(World *w);              /* recompute w->weather from (seed,time); call each tick */
+double weather_vision_mult(const World *w);   /* 1.0 clear .. ~0.4 thick fog (phase 2) */
+double weather_hearing_mult(const World *w);  /* 1.0 clear .. ~0.4 heavy rain (phase 2) */
 void   set_police_bias(int mode);             /* --police-bias: 0 crime(default), 1 money, 2 balanced */
 int    get_police_bias(void);
 double police_bias_bonus(const World *w, int x, int y);  /* extra catch chance at (x,y) from the bias */

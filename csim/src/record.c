@@ -42,6 +42,9 @@ static double gf_cw(void){return get_crime_wealth();}             static void sf
 static double gf_pbias(void){return get_police_bias();}           static void sf_pbias(double v){set_police_bias((int)v);}
 static double gf_fstep(void){return get_fixed_step();}            static void sf_fstep(double v){set_fixed_step((int)v);}
 static double gf_fdt(void){return get_fixed_dt();}                static void sf_fdt(double v){set_fixed_dt(v);}
+static double gf_weather(void){return get_weather();}             static void sf_weather(double v){set_weather((int)v);}
+static double gf_wperiod(void){return get_weather_period();}      static void sf_wperiod(double v){set_weather_period(v);}
+static double gf_heatc(void){return get_heat_cost();}             static void sf_heatc(double v){set_heat_cost(v);}
 
 static const Knob KNOBS[] = {
     {"years_per_day",gf_ypd,sf_ypd}, {"family_share",gf_fshare,sf_fshare},
@@ -53,6 +56,7 @@ static const Knob KNOBS[] = {
     {"occ_pay_spread",gf_occ,sf_occ}, {"neighborhoods",gf_nbhd,sf_nbhd},
     {"crime_wealth",gf_cw,sf_cw}, {"police_bias",gf_pbias,sf_pbias},
     {"fixed_step",gf_fstep,sf_fstep}, {"fixed_dt",gf_fdt,sf_fdt},
+    {"weather",gf_weather,sf_weather}, {"weather_period",gf_wperiod,sf_wperiod}, {"heat_cost",gf_heatc,sf_heatc},
 };
 static const int N_KNOBS = (int)(sizeof(KNOBS)/sizeof(KNOBS[0]));
 static int knob_index(const char *name) {

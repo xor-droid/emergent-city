@@ -171,6 +171,7 @@ static int building_nearest_reachable(const World *w, int fx, int fy, TileType t
 
 void world_init(World *w, uint64_t seed) {
     memset(w, 0, sizeof(*w));
+    w->seed = seed;                  /* for pure-function systems (weather) */
     rng_seed(&w->rng, seed, 0xCAFEu);
     Rng *r = &w->rng;
     const double cx = WORLD_W * 0.5, cy = WORLD_H * 0.5;
@@ -1052,6 +1053,29 @@ static int should_consult(World *w, Agent *a) {
 }
 
 /* ── Tick ────────────────────────────────────────────────────────────────── */
+/* Deterministic weather: a pure function of (seed, time). No w->rng draws, so it never
+ * perturbs the sim's randomness — recorded sessions replay the exact weather timeline.
+ * Independent cycle of g_weather_period game-days; a seasonal baseline can plug into
+ * weather_baseline() later. temp/rain/fog are 0..1. */
+static double weather_baseline(double day) { (void)day; return 0.5; }  /* seam: seasonal term later */
+void weather_update(World *w) {
+    if (!get_weather()) { w->weather.temp = 0.5f; w->weather.rain = 0; w->weather.fog = 0; return; }
+    double period = get_weather_period(); if (period <= 0) period = WEATHER_PERIOD;
+    double t = (w->day + w->hour / 24.0) / period;          /* weather-clock, in cycles */
+    fnl_state nt = fnlCreateState(); nt.seed = (int)w->seed + 4242; nt.noise_type = FNL_NOISE_OPENSIMPLEX2; nt.frequency = 1.0f;
+    fnl_state nr = fnlCreateState(); nr.seed = (int)w->seed + 909;  nr.noise_type = FNL_NOISE_OPENSIMPLEX2; nr.frequency = 1.0f;
+    fnl_state nf = fnlCreateState(); nf.seed = (int)w->seed + 77;   nf.noise_type = FNL_NOISE_OPENSIMPLEX2; nf.frequency = 1.0f;
+    float tn = fnlGetNoise2D(&nt, (float)(t * 1.0),  0.0f);  /* -1..1, slow temperature front */
+    float rn = fnlGetNoise2D(&nr, (float)(t * 2.3), 10.0f);  /* faster rain field */
+    float fn = fnlGetNoise2D(&nf, (float)(t * 3.1), 20.0f);  /* fog field */
+    float temp = (float)(weather_baseline(w->day) + 0.45 * tn);     temp = temp<0?0:temp>1?1:temp;
+    float rain = (rn - 0.15f) * 1.7f;                               rain = rain<0?0:rain>1?1:rain;
+    float night = (w->hour < 6.0 || w->hour > 20.0) ? 1.0f : 0.0f;  /* fog favours night + after rain */
+    float fogb = (fn - 0.10f) * 1.5f;                               fogb = fogb<0?0:fogb>1?1:fogb;
+    float fog  = fogb * (0.4f + 0.6f * night) + rain * 0.25f;       fog  = fog<0?0:fog>1?1:fog;
+    w->weather.temp = temp; w->weather.rain = rain; w->weather.fog = fog;
+}
+
 void world_tick(World *w, double dt_seconds) {
     w->tick++;                       /* deterministic step clock (replay stamps events by it) */
     double game_hours = dt_seconds * TIME_SCALE / 3600.0;
@@ -1059,6 +1083,8 @@ void world_tick(World *w, double dt_seconds) {
     w->hour += game_hours;
     while (w->hour >= 24.0) { w->hour -= 24.0; w->day++; }
     int new_day = (w->day != prev_day);
+
+    if (get_weather()) weather_update(w);   /* deterministic; off = w->weather stays neutral */
 
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
@@ -1306,7 +1332,7 @@ void metrics_open(const char *path) {
     /* socioeconomics: wealth inequality + household income distribution + class tiers */
     fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
     fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich,moves,segregation,cr_poor,cr_mid,cr_rich");
-    fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich");
+    fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich,temp,rain,fog");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1393,6 +1419,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%.0f,%.0f,%.0f", w->loot_tier[0], w->loot_tier[1], w->loot_tier[2]);
     fprintf(g_metrics, ",%d,%.4f,%d,%d,%d", w->n_moves, seg, w->crimes_tier[0], w->crimes_tier[1], w->crimes_tier[2]);
     fprintf(g_metrics, ",%d,%d,%d", w->crimes_loc_tier[0], w->crimes_loc_tier[1], w->crimes_loc_tier[2]);
+    fprintf(g_metrics, ",%.3f,%.3f,%.3f", w->weather.temp, w->weather.rain, w->weather.fog);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1403,10 +1430,12 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
         snprintf(d, sizeof d,
             "[{\"doc_type\":\"metric\",\"session_id\":\"%s\",\"tick\":%llu,\"t\":%.4f,\"day\":%d,"
             "\"alive\":%d,\"deaths\":%d,\"crimes\":%d,\"avg_money\":%.0f,\"gini\":%.4f,"
-            "\"hh_income_med\":%.0f,\"theories\":%d,\"techs\":%d,\"factions\":%d,\"wars\":%d}]",
+            "\"hh_income_med\":%.0f,\"theories\":%d,\"techs\":%d,\"factions\":%d,\"wars\":%d,"
+            "\"temp\":%.3f,\"rain\":%.3f,\"fog\":%.3f}]",
             rec_session_id(), (unsigned long long)w->tick, w->day + w->hour/24.0, w->day,
             alive, w->deaths, w->crimes, alive?money/alive:0.0, gini, hmed,
-            w->sci.theories, techs, factions, wars);
+            w->sci.theories, techs, factions, wars,
+            w->weather.temp, w->weather.rain, w->weather.fog);
         os_ingest(d);
     }
 }
@@ -1445,6 +1474,9 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "neighborhoods=%d\n", get_neighborhoods());
     fprintf(f, "crime_wealth=%d\n", get_crime_wealth());
     fprintf(f, "police_bias=%d\n", get_police_bias());
+    fprintf(f, "weather=%d\n", get_weather());
+    fprintf(f, "weather_period=%g\n", get_weather_period());
+    fprintf(f, "heat_cost=%g\n", get_heat_cost());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

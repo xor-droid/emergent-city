@@ -657,10 +657,24 @@ int run_ui(World *w){
             }
         }
 
+        /* ── weather ambient tint over the map (rain = cool veil, fog = pale haze) ── */
+        if(get_weather() && !ascii){
+            int ra=(int)(w->weather.rain*70), fa=(int)(w->weather.fog*95);
+            if(ra>4) G->fill_rect(0,hudH,W,Hs-hudH,gfx_rgba(90,110,150,ra));
+            if(fa>4) G->fill_rect(0,hudH,W,Hs-hudH,gfx_rgba(200,205,210,fa));
+        }
+
         /* ── HUD ── */
         char hud[256]; hud_string(w,hud,sizeof(hud),speed,paused,fps,G->name);
         G->fill_rect(0,0,W,hudH,gfx_rgba(0,0,0,170));
         G->text(hud,US(8),US(5),US(14),gfx_rgb(230,225,215));
+        if(get_weather()){
+            const char *sky = w->weather.fog>0.5f?"fog":w->weather.rain>0.4f?"storm":w->weather.rain>0.15f?"rain"
+                            : w->weather.temp>0.7f?"hot":w->weather.temp<0.3f?"cold":"clear";
+            char wx[96]; snprintf(wx,sizeof wx,"WX %s  t%.0f r%.0f f%.0f",sky,
+                w->weather.temp*100,w->weather.rain*100,w->weather.fog*100);
+            G->text(wx,W-US(300),US(5),US(13),gfx_rgb(170,200,235));
+        }
         if(replay_is_loaded()){
             char rb[160]; unsigned long long et=(unsigned long long)replay_end_tick();
             if(replay_in_progress())

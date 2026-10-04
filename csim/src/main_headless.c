@@ -125,6 +125,9 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "neighborhoods"))   set_neighborhoods(iv);
         else if (!strcmp(key, "crime_wealth"))    set_crime_wealth(iv);
         else if (!strcmp(key, "police_bias"))     set_police_bias(iv);
+        else if (!strcmp(key, "weather"))         set_weather(iv);
+        else if (!strcmp(key, "weather_period"))  set_weather_period(d);
+        else if (!strcmp(key, "heat_cost"))       set_heat_cost(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -211,6 +214,9 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_CRIME_WEALTH"); if (e) set_crime_wealth(atoi(e)); }
     { const char *e = getenv("CSIM_POLICE_BIAS");
       if (e) set_police_bias((!strcmp(e,"money")||!strcmp(e,"1")) ? 1 : (!strcmp(e,"balanced")||!strcmp(e,"2")) ? 2 : 0); }
+    { const char *e = getenv("CSIM_WEATHER"); if (e) set_weather(atoi(e)); }
+    { const char *e = getenv("CSIM_WEATHER_PERIOD"); if (e) set_weather_period(atof(e)); }
+    { const char *e = getenv("CSIM_HEAT_COST"); if (e) set_heat_cost(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;
