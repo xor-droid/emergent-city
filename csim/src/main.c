@@ -40,6 +40,9 @@ static void usage(const char *argv0) {
     printf("  --crime-wealth        loot scales with the target's wealth (rob a mansion for a\n");
     printf("                        real score, a tenement for pennies) and offenders pick\n");
     printf("                        targets by expected value. Default off = flat loot.\n");
+    printf("  --police-bias MODE    where police concentrate: crime (default, toward crime heat),\n");
+    printf("                        money (protect wealthy blocks; crime displaces to poor areas),\n");
+    printf("                        or balanced. With --neighborhoods, two very different cities.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -92,6 +95,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_OCC_PAY_SPREAD occupation pay-tier spread (same as --occ-pay-spread).\n");
     printf("    CSIM_NEIGHBORHOODS=1  home value + residential sorting (same as --neighborhoods).\n");
     printf("    CSIM_CRIME_WEALTH=1   wealth-scaled loot + EV targeting (same as --crime-wealth).\n");
+    printf("    CSIM_POLICE_BIAS=MODE crime|money|balanced patrol bias (same as --police-bias).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
@@ -129,6 +133,14 @@ static void usage(const char *argv0) {
     printf("  %s --metrics tools/dashboard/metrics.csv   live-feed the balance dashboard\n", argv0);
 }
 
+/* map a --police-bias value to its mode int (default crime=0) */
+static int parse_police_bias(const char *m) {
+    if (!m) return 0;
+    if (!strcmp(m, "money") || !strcmp(m, "1")) return 1;
+    if (!strcmp(m, "balanced") || !strcmp(m, "2")) return 2;
+    return 0;   /* "crime" / "0" / anything else */
+}
+
 int main(int argc, char **argv) {
     double ypd = -1.0;             /* aging pace (life-years per game-day); <0 = unset */
     double fshare = -1.0;          /* immigrant family share; <0 = unset */
@@ -147,6 +159,7 @@ int main(int argc, char **argv) {
     double occspread = -1.0;           /* occupation pay-tier spread; <0 = unset */
     int neighborhoods = -1;            /* home value + residential sorting; <0 = unset */
     int crimewealth = -1;              /* wealth-scaled loot + EV targeting; <0 = unset */
+    int policebias = -1;               /* 0 crime / 1 money / 2 balanced; <0 = unset */
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -191,6 +204,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-neighborhoods")) { neighborhoods = 0; }
         else if (!strcmp(argv[i], "--crime-wealth")) { crimewealth = 1; }
         else if (!strcmp(argv[i], "--no-crime-wealth")) { crimewealth = 0; }
+        else if (!strcmp(argv[i], "--police-bias") && i + 1 < argc) { policebias = parse_police_bias(argv[++i]); }
+        else if (!strncmp(argv[i], "--police-bias=", 14)) { policebias = parse_police_bias(argv[i] + 14); }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -244,6 +259,8 @@ int main(int argc, char **argv) {
     if (neighborhoods >= 0) set_neighborhoods(neighborhoods);   /* must precede world_populate */
     if (crimewealth < 0) { const char *e = getenv("CSIM_CRIME_WEALTH"); if (e) crimewealth = atoi(e); }
     if (crimewealth >= 0) set_crime_wealth(crimewealth);
+    if (policebias < 0) { const char *e = getenv("CSIM_POLICE_BIAS"); if (e) policebias = parse_police_bias(e); }
+    if (policebias >= 0) set_police_bias(policebias);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

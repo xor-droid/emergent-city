@@ -124,6 +124,13 @@ const CHARTS = [
   {title:"Household income distribution", s:[
     {col:"hh_income_p25",label:"p25",color:C.slate},{col:"hh_income_med",label:"median",color:C.green},
     {col:"hh_income_p75",label:"p75",color:C.amber},{col:"hh_income_mean",label:"mean",color:C.blue}]},
+  {title:"Segregation & mobility", s:[
+    {col:"segregation",label:"segregation (CoV)",color:C.violet},
+    {col:"moves",label:"relocations (cum)",color:C.teal,axis:"y1"}]},
+  {title:"Crimes by victim wealth (count)", s:[
+    {col:"cr_poor",label:"poor targets",color:C.slate},
+    {col:"cr_mid",label:"middle targets",color:C.amber},
+    {col:"cr_rich",label:"rich targets",color:C.green}]},
   {title:"Social class (tiers 0–4)", s:[
     {col:"class0",label:"destitute",color:C.red},{col:"class1",label:"struggling",color:C.orange},
     {col:"class2",label:"citizen",color:C.slate},{col:"class3",label:"comfortable",color:C.teal},

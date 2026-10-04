@@ -193,6 +193,10 @@ int  get_neighborhoods(void) { return g_neighborhoods; }
 static int g_crime_wealth = 0;    /* loot scales with target wealth + EV-based target choice */
 void set_crime_wealth(int on) { g_crime_wealth = on ? 1 : 0; }
 int  get_crime_wealth(void) { return g_crime_wealth; }
+
+static int g_police_bias = 0;     /* 0=crime (default/legacy), 1=money, 2=balanced */
+void set_police_bias(int mode) { g_police_bias = (mode < 0 || mode > 2) ? 0 : mode; }
+int  get_police_bias(void) { return g_police_bias; }
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {

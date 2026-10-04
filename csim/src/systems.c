@@ -435,6 +435,20 @@ static void crime_tier_add(World *w, double victim_wealth, double loot) {
     w->crimes_tier[tier]++;
 }
 
+/* Police patrol bias (Phase 4 policy knob): extra catch chance at (x,y). Mode 0
+ * (default/legacy) returns 0 → behaviour unchanged. Mode 1 (money) concentrates
+ * policing in affluent areas (safer rich blocks, crime displaced to poor ones);
+ * mode 2 (balanced) splits between wealth and existing crime heat. */
+double police_bias_bonus(const World *w, int x, int y) {
+    int mode = get_police_bias();
+    if (mode == 0) return 0.0;
+    double val = get_neighborhoods() ? w->affluence_[x][y] / 255.0 : 0.5;
+    double money_term = 0.25 * (val - 0.5) * 2.0;      /* −0.25 (poor) .. +0.25 (rich) */
+    if (mode == 1) return money_term;
+    double heat = w->danger_[x][y] / 255.0;            /* mode 2: balanced */
+    return 0.5 * money_term + 0.5 * (0.25 * heat);
+}
+
 void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     if (!strcmp(kind, "dealing"))     { do_deal(w, perp);          return; }
     if (!strcmp(kind, "trafficking")) { do_traffic(w, perp);       return; }
@@ -445,6 +459,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     double skill = perp->crime_skill;
     double witw = (!strcmp(kind, "burglary")) ? 0.03 : 0.10;   /* burglary is indoors */
     double chance = clampd(0.62 - witw * civ - (pol ? 0.55 + police_pressure(w) : 0.0)
+                           - police_bias_bonus(w, x, y)   /* where police concentrate (money/crime bias) */
                            + pers_crime_propensity(&perp->pers) * 0.12 + skill * 0.25, 0.05, 0.96);
     int success = rng_double(&w->rng) < chance;
     double importance = (!strcmp(kind,"theft")||!strcmp(kind,"vandalism")) ? 0.5 : 0.85;

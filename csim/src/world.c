@@ -1146,6 +1146,40 @@ int world_load(World *w, const char *path) {
 
 static int cmp_double(const void *a, const void *b);   /* defined with the metrics code below */
 
+/* Residential mobility (Phase 4): households whose per-capita wealth no longer matches
+ * their home's value relocate — up when they've prospered, down when they've slipped —
+ * to the best-matching home with room. Gentrification and decline over time. Draws
+ * w->rng (fixed order) only on the neighborhoods path, so defaults stay byte-identical. */
+static void residential_move(World *w) {
+    double med = w->median_wealth > 0 ? w->median_wealth : 1.0;
+    for (int b = 0; b < w->n_buildings; b++) {
+        Building *hb = &w->buildings[b];
+        if (hb->type != T_HOME || hb->hh_size <= 0) continue;
+        double wt = (hb->hh_wealth / hb->hh_size) / (3.0 * med);
+        if (wt > 1) wt = 1; if (wt < 0) wt = 0;
+        double mismatch = wt - hb->value;
+        if (fabs(mismatch) < 0.20) continue;              /* content where they are */
+        if (rng_double(&w->rng) > 0.08) continue;          /* only a few move per day */
+        int bestB = -1; double bestScore = fabs(mismatch); /* must beat staying put */
+        for (int c = 0; c < w->n_buildings; c++) {
+            Building *cb = &w->buildings[c];
+            if (c == b || cb->type != T_HOME) continue;
+            if (cb->capacity - cb->hh_size < hb->hh_size) continue;   /* room for the whole household */
+            double score = fabs((double)cb->value - wt);
+            if (score < bestScore) { bestScore = score; bestB = c; }
+        }
+        if (bestB < 0) continue;
+        int moved = 0;
+        for (int i = 0; i < w->n_agents; i++) { Agent *a = &w->agents[i];
+            if (!a->alive || a->home_id != b) continue;
+            a->home_id = bestB; a->x = w->buildings[bestB].x; a->y = w->buildings[bestB].y; moved++;
+        }
+        w->buildings[bestB].hh_size += moved; w->buildings[bestB].n_residents += moved;
+        hb->hh_size -= moved; if (hb->n_residents >= moved) hb->n_residents -= moved;
+        w->n_moves++;
+    }
+}
+
 /* ── Households: recompute per-home aggregates (call on day change) ────────────
  * A household = living agents sharing a home_id. hh_wealth = Σ residents' money;
  * hh_income = Σ residents' net legitimate cash flow for the day (day_income), which
@@ -1165,6 +1199,25 @@ void households_daily(World *w) {
             hb->hh_income += a->day_income;
         }
         a->day_income = 0;   /* reset the accumulator for the next day */
+    }
+
+    /* dynamic home value (Phase 4): desirability drifts toward a blend of location,
+     * resident wealth and (minus) local crime heat → gentrification and decline. Only
+     * after the economy has a median (skips initial seeding, so no churn at spawn). */
+    if (get_neighborhoods() && w->median_wealth > 0) {
+        double med = w->median_wealth;
+        for (int b = 0; b < w->n_buildings; b++) {
+            Building *hb = &w->buildings[b];
+            if (hb->type != T_HOME) continue;
+            double base = home_value(w, hb->x, hb->y);                 /* static locational worth */
+            double wealth = hb->hh_size > 0 ? (hb->hh_wealth / hb->hh_size) / (3.0 * med) : 0.0;
+            if (wealth > 1) wealth = 1;
+            double heat = w->danger_[hb->x][hb->y] / 255.0;
+            double target = 0.45*base + 0.45*wealth - 0.25*heat + 0.10;
+            if (target < 0) target = 0; if (target > 1) target = 1;
+            hb->value += (float)(0.12 * (target - hb->value));          /* EMA drift */
+        }
+        residential_move(w);   /* households relocate as their fortunes diverge from their home */
     }
 
     /* affluence field for the neighborhoods overlay: splat each home's wealth into a
@@ -1249,7 +1302,7 @@ void metrics_open(const char *path) {
     fprintf(g_metrics, ",factions,wars,war_casualties,crackdown");
     /* socioeconomics: wealth inequality + household income distribution + class tiers */
     fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
-    fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich");
+    fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich,moves,segregation,cr_poor,cr_mid,cr_rich");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1301,12 +1354,17 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
         double cum=0,wsum=0; for(int i=0;i<nm;i++){ cum+=(double)(i+1)*mv[i]; wsum+=mv[i]; }
         if (wsum>0) gini = (2.0*cum)/(nm*wsum) - (double)(nm+1)/nm; }
     static double hi[MAX_BUILDINGS];     /* occupied homes' net income, for quartiles */
-    int nh=0; double hisum=0;
+    int nh=0; double hisum=0, pcwsum=0, pcwsq=0;
     for (int b=0;b<w->n_buildings;b++) if(w->buildings[b].type==T_HOME && w->buildings[b].hh_size>0){
-        hi[nh++]=w->buildings[b].hh_income; hisum+=w->buildings[b].hh_income; }
+        hi[nh++]=w->buildings[b].hh_income; hisum+=w->buildings[b].hh_income;
+        double pc=w->buildings[b].hh_wealth/w->buildings[b].hh_size; pcwsum+=pc; pcwsq+=pc*pc; }
     double hp25=0,hmed=0,hp75=0,hmean=0;
     if (nh>0){ qsort(hi,nh,sizeof(double),cmp_double);
         hp25=hi[nh/4]; hmed=hi[nh/2]; hp75=hi[(nh*3)/4]; hmean=hisum/nh; }
+    /* segregation = spread of per-home per-capita wealth (coefficient of variation):
+       higher = wealth more clustered by neighborhood. */
+    double seg=0;
+    if (nh>0){ double m=pcwsum/nh, var=pcwsq/nh - m*m; if(var<0)var=0; if(m>0) seg=sqrt(var)/m; }
 
     fprintf(g_metrics, "%.4f,%d,%.2f,%d,%d,%d,%d,%d,%ld",
         w->day + w->hour / 24.0, w->day, w->hour, alive, ch, yo, ad, el, alive?agesum/alive:0);
@@ -1329,6 +1387,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%d,%d,%d,%d", factions, wars, war_cas, w->crackdown_days>0?1:0);
     fprintf(g_metrics, ",%.4f,%.0f,%.0f,%.0f,%.0f", gini, hp25, hmed, hp75, hmean);
     fprintf(g_metrics, ",%.0f,%.0f,%.0f", w->loot_tier[0], w->loot_tier[1], w->loot_tier[2]);
+    fprintf(g_metrics, ",%d,%.4f,%d,%d,%d", w->n_moves, seg, w->crimes_tier[0], w->crimes_tier[1], w->crimes_tier[2]);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1367,6 +1426,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "occ_pay_spread=%g\n", get_occ_pay_spread());
     fprintf(f, "neighborhoods=%d\n", get_neighborhoods());
     fprintf(f, "crime_wealth=%d\n", get_crime_wealth());
+    fprintf(f, "police_bias=%d\n", get_police_bias());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());
