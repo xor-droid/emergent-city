@@ -1,6 +1,15 @@
 /* world.c — world generation, population, tick orchestration, save/load. */
 #include "sim.h"
 #include "llm.h"
+#define FNL_IMPL                 /* generate the FastNoiseLite C implementation here (one TU) */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push      /* silence a benign warning in the vendored cellular-noise tables */
+#pragma GCC diagnostic ignored "-Waggressive-loop-optimizations"
+#endif
+#include "FastNoiseLite.h"       /* vendored POSIX C port (Auburn/FastNoiseLite, C API) */
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -82,11 +91,28 @@ void world_init(World *w, uint64_t seed) {
     const double cx = WORLD_W * 0.5, cy = WORLD_H * 0.5;
     const double maxd = sqrt(cx*cx + cy*cy);
 
-    /* 1. Base layer: grass, plus a meandering river down the east side. */
+    /* Optional coherent-noise worldgen (FastNoiseLite C port). Seeded from `seed`,
+       kept out of w->rng so it's deterministic and the default path is unchanged. */
+    int noise = get_noise_worldgen();
+    fnl_state n_water, n_dens, n_park;
+    if (noise) {
+        n_water = fnlCreateState(); n_water.seed = (int)seed;        n_water.noise_type = FNL_NOISE_OPENSIMPLEX2; n_water.frequency = 0.035f;
+        n_dens  = fnlCreateState(); n_dens.seed  = (int)seed + 1337; n_dens.noise_type  = FNL_NOISE_OPENSIMPLEX2; n_dens.frequency  = 0.060f;
+        n_park  = fnlCreateState(); n_park.seed  = (int)seed + 7777; n_park.noise_type  = FNL_NOISE_OPENSIMPLEX2; n_park.frequency  = 0.090f;
+    }
+
+    /* 1. Base layer: grass + water. Default = a meandering east-side river;
+     *    noise mode = organic lakes/rivers where an elevation field dips below sea level. */
     for (int y = 0; y < WORLD_H; y++) {
         double rc = WORLD_W*0.72 + 10.0*sin(y*0.10) + 5.0*sin(y*0.31);
-        for (int x = 0; x < WORLD_W; x++)
-            w->tile[x][y] = (fabs(x - rc) < 1.6) ? T_WATER : T_GRASS;
+        for (int x = 0; x < WORLD_W; x++) {
+            if (noise) {
+                float e = fnlGetNoise2D(&n_water, (float)x, (float)y);   /* -1..1 */
+                w->tile[x][y] = (e < -0.5f) ? T_WATER : T_GRASS;         /* ~low-lying = water */
+            } else {
+                w->tile[x][y] = (fabs(x - rc) < 1.6) ? T_WATER : T_GRASS;
+            }
+        }
     }
 
     /* 2. Street grid: minor streets every 7/6 tiles, major avenues every 21/18.
@@ -99,23 +125,41 @@ void world_init(World *w, uint64_t seed) {
             if (major || minor) w->tile[x][y] = T_ROAD;
         }
 
-    /* 3. A handful of parks (whole-ish blocks of greenery). */
-    for (int p = 0; p < 6; p++) {
-        int px = 3 + rng_int(r, WORLD_W - 11), py = 3 + rng_int(r, WORLD_H - 9);
-        int pw = 4 + rng_int(r, 4), ph = 3 + rng_int(r, 3);
-        for (int x = px; x < px+pw && x < WORLD_W; x++)
-            for (int y = py; y < py+ph && y < WORLD_H; y++)
-                if (w->tile[x][y] == T_GRASS) w->tile[x][y] = T_PARK;
+    /* 3. Parks. Default = a handful of random blocks; noise mode = organic greens
+     *    wherever a park field peaks. */
+    if (noise) {
+        for (int x = 0; x < WORLD_W; x++)
+            for (int y = 0; y < WORLD_H; y++)
+                if (w->tile[x][y] == T_GRASS && fnlGetNoise2D(&n_park, (float)x, (float)y) > 0.58f)
+                    w->tile[x][y] = T_PARK;
+    } else {
+        for (int p = 0; p < 6; p++) {
+            int px = 3 + rng_int(r, WORLD_W - 11), py = 3 + rng_int(r, WORLD_H - 9);
+            int pw = 4 + rng_int(r, 4), ph = 3 + rng_int(r, 3);
+            for (int x = px; x < px+pw && x < WORLD_W; x++)
+                for (int y = py; y < py+ph && y < WORLD_H; y++)
+                    if (w->tile[x][y] == T_GRASS) w->tile[x][y] = T_PARK;
+        }
     }
 
-    /* 4. Fill lots with buildings on a downtown-to-fringe density gradient. */
+    /* 4. Fill lots with buildings. Default = a smooth downtown-to-fringe density
+     *    gradient; noise mode = organic neighborhoods clustered where a density
+     *    field is high (with a gentle pull toward the centre). */
     for (int x = 0; x < WORLD_W; x++)
         for (int y = 0; y < WORLD_H; y++) {
             if (w->tile[x][y] != T_GRASS) continue;
             if (w->n_buildings >= MAX_BUILDINGS) goto built;
             double dx = x - cx, dy = y - cy, d = sqrt(dx*dx + dy*dy) / maxd;
-            if (rng_double(r) > district_fill(d)) continue;   /* leave as yard/grass */
-            TileType t = district_building(r, d);
+            double fill; double dtype = d;
+            if (noise) {
+                double n01 = fnlGetNoise2D(&n_dens, (float)x, (float)y) * 0.5 + 0.5;  /* 0..1 */
+                fill  = n01 * (1.0 - 0.5 * d);                 /* dense where noise high + near centre */
+                dtype = clampd(d - (n01 - 0.5) * 0.5, 0, 1);   /* high-density pockets read as "downtown" */
+            } else {
+                fill = district_fill(d);
+            }
+            if (rng_double(r) > fill) continue;   /* leave as yard/grass */
+            TileType t = district_building(r, dtype);
             place_building(w, x, y, t, default_cap(t));
         }
 built:;
