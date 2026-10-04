@@ -106,6 +106,10 @@ static void usage(const char *argv0) {
     printf("    CSIM_SEED=N         worldgen seed (as --seed).\n");
     printf("    CSIM_METRICS=PATH   live balance CSV export (as --metrics).\n");
     printf("    CSIM_METRICS_EVERY=H  sample cadence in game-hours (as --metrics-every).\n");
+    printf("    CSIM_RECORD=PATH    record a replayable session (as --record).\n");
+    printf("  session archive (OpenSearch via Data Prepper; .env, optional):\n");
+    printf("    CSIM_OS_INGEST_URL  Data Prepper /log/ingest URL; ships session+events(+metrics).\n");
+    printf("    CSIM_OS_QUERY_URL / CSIM_OS_USER / CSIM_OS_PASS   recall for --replay-session os:<id>.\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");

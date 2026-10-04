@@ -30,7 +30,7 @@ function(apply_llm tgt)
   endif()
 endfunction()
 
-set(CORE_SOURCES src/sim.c src/systems.c src/world.c src/llm.c src/viz.c src/record.c)
+set(CORE_SOURCES src/sim.c src/systems.c src/world.c src/llm.c src/viz.c src/record.c src/os_client.c)
 
 # ── Headless core (libm + optional LLM). Always builds. ──
 add_executable(csim_headless src/main_headless.c ${CORE_SOURCES})

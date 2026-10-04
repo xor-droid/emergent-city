@@ -1,7 +1,9 @@
 /* record.c — session recording + deterministic replay (see record.h). */
+#define _POSIX_C_SOURCE 200809L   /* open_memstream */
 #include "record.h"
 #include "viz.h"        /* god_apply */
 #include "llm.h"        /* llm_enabled */
+#include "os_client.h" /* os_ingest */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,9 +105,41 @@ void rec_god(const World *w, int tool, int tx, int ty) {
     snprintf(e.kind, sizeof e.kind, "god"); e.tool = tool; e.tx = tx; e.ty = ty;
     push_event(e);
 }
+const char *rec_session_id(void) { return S.active ? S.session_id : ""; }
+
+/* ship the session manifest + all events to OpenSearch (via Data Prepper) as a JSON
+ * array of docs. Best-effort; a down sink never affects the local recording/replay. */
+static void rec_ship_opensearch(void) {
+    if (!S.active || !os_ingest_enabled()) return;
+    char *buf = NULL; size_t sz = 0; FILE *m = open_memstream(&buf, &sz);
+    if (!m) return;
+    fprintf(m, "[{\"doc_type\":\"session\",\"session_id\":\"%s\",\"seed\":%llu,\"pop\":%d,"
+               "\"reason\":\"%s\",\"llm\":%d,\"end_tick\":%llu,\"checksum\":\"%llu\"",
+            S.session_id, (unsigned long long)S.seed, S.pop, S.reason, llm_enabled(),
+            (unsigned long long)S.end_tick, (unsigned long long)S.checksum);
+    for (int i = 0; i < N_KNOBS; i++) fprintf(m, ",\"cfg_%s\":%.10g", KNOBS[i].name, S.cfg[i]);
+    fprintf(m, "}");
+    for (int i = 0; i < S.n; i++) {
+        RecEvent *e = &S.ev[i];
+        if (!strcmp(e->kind, "tune"))
+            fprintf(m, ",{\"doc_type\":\"event\",\"session_id\":\"%s\",\"tick\":%llu,"
+                       "\"kind\":\"tune\",\"knob\":\"%s\",\"value\":%.10g}",
+                    S.session_id, (unsigned long long)e->tick, e->knob, e->value);
+        else if (!strcmp(e->kind, "god"))
+            fprintf(m, ",{\"doc_type\":\"event\",\"session_id\":\"%s\",\"tick\":%llu,"
+                       "\"kind\":\"god\",\"tool\":%d,\"tx\":%d,\"ty\":%d}",
+                    S.session_id, (unsigned long long)e->tick, e->tool, e->tx, e->ty);
+    }
+    fprintf(m, "]");
+    fclose(m);
+    os_ingest(buf);
+    free(buf);
+}
+
 void rec_end(const World *w) {
     if (!S.active) return;
     S.end_tick = w->tick; S.checksum = world_checksum(w);
+    rec_ship_opensearch();
 }
 
 int rec_save_file(const char *path) {

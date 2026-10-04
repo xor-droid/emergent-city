@@ -15,6 +15,7 @@
 #include "sim.h"
 #include "llm.h"
 #include "record.h"
+#include "os_client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +41,10 @@ static void husage(const char *a0) {
     printf("  --replay-interval S   seconds between replayed rows (default 0.3).\n");
     printf("  --record PATH         record this run as a replayable session (seed+config+events).\n");
     printf("  --replay-session FILE re-run a recorded session deterministically and verify its\n");
-    printf("                        final-state checksum (byte-identical proof).\n");
+    printf("                        final-state checksum (byte-identical proof). FILE may be\n");
+    printf("                        os:<session_id> to recall it from OpenSearch first.\n");
+    printf("                        OpenSearch via .env: CSIM_OS_INGEST_URL (ship),\n");
+    printf("                        CSIM_OS_QUERY_URL/CSIM_OS_USER/CSIM_OS_PASS (recall).\n");
     printf("  --rerun IN.meta       re-run deterministically from a PATH.meta manifest; the\n");
     printf("                        regenerated CSV reproduces the original run byte-for-byte\n");
     printf("                        (with the LLM off — OPENROUTER_* unset — as reproducibility\n");
@@ -172,9 +176,20 @@ int main(int argc, char **argv) {
     if (replay_in)
         return do_replay(replay_in, metrics, replay_interval);
 
-    /* Session replay: re-run a recorded session deterministically + verify checksum. */
-    if (replay_session)
+    /* Session replay: re-run a recorded session deterministically + verify checksum.
+     * "os:<id>" recalls the session from OpenSearch first, else it's a local file. */
+    if (replay_session) {
+        char tmp[256];
+        if (!strncmp(replay_session, "os:", 3)) {
+            snprintf(tmp, sizeof tmp, "/tmp/csim-recall-%s.sess", replay_session + 3);
+            if (os_fetch_session(replay_session + 3, tmp) != 0) {
+                fprintf(stderr, "recall failed for %s (CSIM_OS_QUERY_URL/USER/PASS set?)\n", replay_session + 3);
+                return 2;
+            }
+            replay_session = tmp;
+        }
         return replay_session_file(replay_session, 1);
+    }
 
     /* --- config knobs: env first; --rerun manifest overrides; CLI seed/days last --- */
     { const char *e = getenv("CSIM_YEARS_PER_DAY"); if (e) set_years_per_day(atof(e)); }

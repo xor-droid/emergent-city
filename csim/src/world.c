@@ -1,6 +1,8 @@
 /* world.c — world generation, population, tick orchestration, save/load. */
 #include "sim.h"
 #include "llm.h"
+#include "record.h"
+#include "os_client.h"
 #define FNL_IMPL                 /* generate the FastNoiseLite C implementation here (one TU) */
 #if defined(__GNUC__)
 #pragma GCC diagnostic push      /* silence a benign warning in the vendored cellular-noise tables */
@@ -1394,6 +1396,19 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
+
+    /* also stream a headline metric doc to OpenSearch (tagged with the session) */
+    if (rec_active() && os_ingest_enabled()) {
+        char d[640];
+        snprintf(d, sizeof d,
+            "[{\"doc_type\":\"metric\",\"session_id\":\"%s\",\"tick\":%llu,\"t\":%.4f,\"day\":%d,"
+            "\"alive\":%d,\"deaths\":%d,\"crimes\":%d,\"avg_money\":%.0f,\"gini\":%.4f,"
+            "\"hh_income_med\":%.0f,\"theories\":%d,\"techs\":%d,\"factions\":%d,\"wars\":%d}]",
+            rec_session_id(), (unsigned long long)w->tick, w->day + w->hour/24.0, w->day,
+            alive, w->deaths, w->crimes, alive?money/alive:0.0, gini, hmed,
+            w->sci.theories, techs, factions, wars);
+        os_ingest(d);
+    }
 }
 
 /* Called every tick: write a row whenever the sampling cadence has elapsed. Default

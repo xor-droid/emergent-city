@@ -22,8 +22,9 @@ int  rec_active(void);
 void rec_tune(const World *w, const char *knob, double value); /* a live knob change */
 void rec_tune_now(const World *w, const char *knob);           /* record a knob's current value */
 void rec_god(const World *w, int tool, int tx, int ty);        /* a god-mode action */
-void rec_end(const World *w);                                  /* stamp end tick + checksum */
+void rec_end(const World *w);                                  /* stamp end tick + checksum + ship to OpenSearch */
 int  rec_save_file(const char *path);                          /* write the session; 1 ok */
+const char *rec_session_id(void);                              /* active session id, or "" */
 
 /* ── replay (reader) ─────────────────────────────────────────────────────── */
 /* Re-run a session file deterministically, applying its events, and check the
