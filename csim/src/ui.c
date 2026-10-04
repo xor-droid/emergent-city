@@ -161,8 +161,10 @@ int run_ui(World *w){
     if(getenv("CSIM_CITY")) show_city=1;
     if(getenv("CSIM_TUNE")) show_tune=1;
     if(getenv("CSIM_KIN")) show_family=1;
+    if(getenv("CSIM_CRIMEWATCH")) show_crime=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
+    int crime_scroll=0, jail_scroll=0;           /* scroll offsets for the crime-watch / jail lists */
 
     /* optional image tileset (--tileset / CSIM_TILESET); falls back to glyphs */
     void *ts_tex=NULL; int ts_kind=TSK_CP437, ts_sem=SEM_KENNEY, ts_cell=16, ts_space=0, ts_margin=0;
@@ -259,6 +261,23 @@ int run_ui(World *w){
         int maxscroll=nlist-listRows; if(maxscroll<0) maxscroll=0;
         int selIdx=-1; for(int i=0;i<nlist;i++) if(ids[i]==selected){selIdx=i;break;}
 
+        /* ── crime-watch + jail panel geometry (computed early so scroll input and
+           drawing agree; the lists scroll when they'd overflow the window) ── */
+        int cwN=0; for(int i=0;i<w->n_agents;i++) if(w->agents[i].alive && w->agents[i].wanted) cwN++;
+        int cwActLines=10, cwPW=US(720), cwPX=W/2-cwPW/2, cwPY=hudH+US(6);
+        int cwListTop=cwPY+US(40)+US(18)+cwActLines*US(16)+US(10)+US(18)+US(16);
+        int cwRows=(Hs-cwListTop-US(14))/US(17); if(cwRows<1) cwRows=1;
+        int cwVis=cwN<cwRows?cwN:cwRows, cwMax=cwN-cwRows; if(cwMax<0) cwMax=0;
+        int cwPH=(cwListTop-cwPY)+(cwVis+1)*US(17);
+        if(crime_scroll>cwMax) crime_scroll=cwMax; if(crime_scroll<0) crime_scroll=0;
+
+        int jlN=crime_jailed_count(w);
+        int jlPW=US(680), jlPX=W/2-jlPW/2, jlPY=US(60), jlListTop=jlPY+US(50);
+        int jlRows=(Hs-jlListTop-US(12))/US(20); if(jlRows<1) jlRows=1;
+        int jlVis=jlN<jlRows?jlN:jlRows, jlMax=jlN-jlRows; if(jlMax<0) jlMax=0;
+        int jlPH=(jlListTop-jlPY)+(jlVis>0?jlVis:1)*US(20)+US(10);
+        if(jail_scroll>jlMax) jail_scroll=jlMax; if(jail_scroll<0) jail_scroll=0;
+
         /* ── input ── */
         if(G->key_pressed(GFX_KEY_SPACE)) paused=!paused;
         if(G->key_pressed(GFX_KEY_G)) god=!god;
@@ -296,7 +315,11 @@ int run_ui(World *w){
         int overPanel = show_right && mx>=panelX;
         float wheel=G->wheel();
         if(wheel!=0){
-            if(overPanel && my>=listTop){
+            if(show_crime && mx>=cwPX && mx<=cwPX+cwPW && my>=cwPY && my<=cwPY+cwPH){
+                crime_scroll-=(int)wheel*3; if(crime_scroll<0)crime_scroll=0; if(crime_scroll>cwMax)crime_scroll=cwMax;
+            } else if(show_jail && mx>=jlPX && mx<=jlPX+jlPW && my>=jlPY && my<=jlPY+jlPH){
+                jail_scroll-=(int)wheel*3; if(jail_scroll<0)jail_scroll=0; if(jail_scroll>jlMax)jail_scroll=jlMax;
+            } else if(overPanel && my>=listTop){
                 list_scroll-=(int)wheel*3;
                 if(list_scroll<0)list_scroll=0; if(list_scroll>maxscroll)list_scroll=maxscroll;
             } else {
@@ -369,7 +392,25 @@ int run_ui(World *w){
             if(row>=0 && row<famN){ selected=famIds[row]; follow=1; }   /* jump to the relative */
         }
 
-        if(G->mouse_pressed(GFX_MBTN_LEFT) && !tuneClick && !famClick){
+        /* clicks on the modal crime/jail panels: drag their scrollbar, and don't
+           fall through to selecting an agent behind the panel */
+        int modalClick=0;
+        if(G->mouse_pressed(GFX_MBTN_LEFT) && show_crime &&
+           mx>=cwPX && mx<=cwPX+cwPW && my>=cwPY && my<=cwPY+cwPH){
+            modalClick=1;
+            if(cwMax>0 && mx>=cwPX+cwPW-US(9) && my>=cwListTop){
+                float f=(my-cwListTop)/(float)(cwVis*US(17)); crime_scroll=(int)(f*cwMax);
+                if(crime_scroll<0)crime_scroll=0; if(crime_scroll>cwMax)crime_scroll=cwMax; }
+        }
+        if(G->mouse_pressed(GFX_MBTN_LEFT) && show_jail &&
+           mx>=jlPX && mx<=jlPX+jlPW && my>=jlPY && my<=jlPY+jlPH){
+            modalClick=1;
+            if(jlMax>0 && mx>=jlPX+jlPW-US(9) && my>=jlListTop){
+                float f=(my-jlListTop)/(float)(jlVis*US(20)); jail_scroll=(int)(f*jlMax);
+                if(jail_scroll<0)jail_scroll=0; if(jail_scroll>jlMax)jail_scroll=jlMax; }
+        }
+
+        if(G->mouse_pressed(GFX_MBTN_LEFT) && !tuneClick && !famClick && !modalClick){
             if(overPanel && my>=listTop){
                 int row=list_scroll+(my-listTop)/rowh;
                 int trackX=W-US(6), trackY=listTop, trackH=listRows*rowh;
@@ -625,16 +666,17 @@ int run_ui(World *w){
                 G->fill_rect(trackX,thumbY,US(4),thumbH,gfx_rgb(150,145,135)); }
         }
 
-        /* ── jail roster ── */
+        /* ── jail roster (scrollable) ── */
         if(show_jail){
-            int pw=US(680), ph=US(40+22+22*22), px=W/2-pw/2, py=US(60);
+            int px=jlPX, py=jlPY, pw=jlPW, ph=jlPH;
             G->fill_rect(px,py,pw,ph,COL_PANEL); G->rect_lines(px,py,pw,ph,COL_GOLD);
-            snprintf(buf,sizeof(buf),"JAIL ROSTER (%d)  [J]",crime_jailed_count(w)); G->text(buf,px+US(12),py+US(10),US(15),COL_GOLD);
+            snprintf(buf,sizeof(buf),"JAIL ROSTER (%d)  [J]",jlN); G->text(buf,px+US(12),py+US(10),US(15),COL_GOLD);
             G->text("NAME",px+US(12),py+US(34),US(10),COL_GRAY); G->text("CRIME",px+US(210),py+US(34),US(10),COL_GRAY);
             G->text("GANG/CULT",px+US(300),py+US(34),US(10),COL_GRAY); G->text("SERVED/SENTENCE",px+US(480),py+US(34),US(10),COL_GRAY);
-            int yy=py+US(50), shown=0;
-            for(int i=0;i<w->n_agents && shown<22;i++){ Agent *a=&w->agents[i];
+            int yy=jlListTop, idx=0, shown=0;
+            for(int i=0;i<w->n_agents && shown<jlVis;i++){ Agent *a=&w->agents[i];
                 if(!a->alive||a->arrested_ticks<=0) continue;
+                if(idx++ < jail_scroll) continue;
                 int tot=a->sentence_total>0?a->sentence_total:1, served=tot-a->arrested_ticks; if(served<0)served=0;
                 snprintf(buf,sizeof(buf),"%.24s",a->name); G->text(buf,px+US(12),yy,US(12),COL_WHITE);
                 G->text(a->jailed_for[0]?a->jailed_for:"-",px+US(210),yy,US(12),COL_WHITE);
@@ -643,7 +685,13 @@ int run_ui(World *w){
                 snprintf(buf,sizeof(buf),"%d/%d (%d%%)",served,tot,served*100/tot);
                 G->text(buf,px+US(480),yy,US(12),served*100/tot>=66?COL_GREEN:COL_WHITE);
                 yy+=US(20); shown++; }
-            if(!shown) G->text("No one is in jail.",px+US(12),yy,US(13),COL_GRAY);
+            if(!jlN) G->text("No one is in jail.",px+US(12),jlListTop,US(13),COL_GRAY);
+            if(jlMax>0){   /* scrollbar */
+                int trackX=px+pw-US(8), trackY=jlListTop, trackH=jlVis*US(20);
+                G->fill_rect(trackX,trackY,US(4),trackH,gfx_rgb(40,38,48));
+                int thumbH=trackH*jlVis/jlN; if(thumbH<US(10))thumbH=US(10);
+                int thumbY=trackY+(trackH-thumbH)*jail_scroll/jlMax;
+                G->fill_rect(trackX,thumbY,US(4),thumbH,gfx_rgb(150,145,135)); }
         }
 
         /* ── factions menu ── */
@@ -772,37 +820,41 @@ int run_ui(World *w){
             G->text("click a name to jump to them",famPX+US(12),famPY+famPH-US(16),US(10),COL_GRAY);
         }
 
-        /* ── crime watch: live crimes + who's on the run (with lie-low cooldown) ── */
+        /* ── crime watch: live crimes + who's on the run (scrollable, with lie-low cooldown) ── */
         if(show_crime){
-            int nwanted=0; for(int i=0;i<w->n_agents;i++) if(w->agents[i].alive && w->agents[i].wanted) nwanted++;
-            int actLines=10, runRows=nwanted>16?16:nwanted;
-            int pw=US(720), ph=US(40)+US(18)+actLines*US(16)+US(10)+US(18)+US(16)+(runRows+1)*US(17);
-            int px=W/2-pw/2, py=hudH+US(6);
+            int px=cwPX, py=cwPY, pw=cwPW, ph=cwPH;
             G->fill_rect(px,py,pw,ph,COL_PANEL); G->rect_lines(px,py,pw,ph,COL_RED);
             G->text("CRIME WATCH  [c]",px+US(12),py+US(10),US(15),COL_RED);
             int yy=py+US(36);
             G->text("CRIMES IN ACTION",px+US(12),yy,US(11),COL_GOLD); yy+=US(18);
             int shown=0;
-            for(int i=0;i<w->ev_count && shown<actLines;i++){ const WorldEvent *e=events_recent(w,i); if(!e) break;
+            for(int i=0;i<w->ev_count && shown<cwActLines;i++){ const WorldEvent *e=events_recent(w,i); if(!e) break;
                 if(e->kind!=EV_CRIME && e->kind!=EV_CRIME_FAILED && e->kind!=EV_ARREST) continue;
                 GfxColor c = e->kind==EV_ARREST?COL_GREEN : e->kind==EV_CRIME_FAILED?COL_GRAY : gfx_rgb(232,200,200);
                 snprintf(buf,sizeof(buf),"%.92s",e->text); G->text(buf,px+US(16),yy,US(12),c); yy+=US(16); shown++; }
             if(!shown){ G->text("(quiet for now)",px+US(16),yy,US(12),COL_GRAY); yy+=US(16); }
             yy+=US(10);
-            snprintf(buf,sizeof(buf),"ON THE RUN (%d)",nwanted); G->text(buf,px+US(12),yy,US(11),COL_GOLD); yy+=US(18);
+            snprintf(buf,sizeof(buf),"ON THE RUN (%d)",cwN); G->text(buf,px+US(12),yy,US(11),COL_GOLD); yy+=US(18);
             G->text("NAME",px+US(16),yy,US(10),COL_GRAY); G->text("WANTED FOR",px+US(250),yy,US(10),COL_GRAY);
             G->text("LIE-LOW COOLDOWN",px+US(440),yy,US(10),COL_GRAY); yy+=US(16);
-            if(!nwanted){ G->text("No one is on the run.",px+US(16),yy,US(12),COL_GRAY); }
-            int rshown=0;
-            for(int i=0;i<w->n_agents && rshown<runRows;i++){ Agent *a=&w->agents[i];
+            if(!cwN){ G->text("No one is on the run.",px+US(16),yy,US(12),COL_GRAY); }
+            int idx=0, rshown=0;   /* skip `crime_scroll` wanted agents, then draw cwVis */
+            for(int i=0;i<w->n_agents && rshown<cwVis;i++){ Agent *a=&w->agents[i];
                 if(!a->alive || !a->wanted) continue;
+                if(idx++ < crime_scroll) continue;
                 snprintf(buf,sizeof(buf),"%.30s",a->name); G->text(buf,px+US(16),yy,US(12),COL_WHITE);
                 G->text(a->wanted_for[0]?a->wanted_for:"-",px+US(250),yy,US(12),COL_RED);
                 double f=crime_cooldown_frac(a); if(f<0)f=0; if(f>1)f=1;
-                int bw=US(210), bx=px+US(440);
+                int bw=US(200), bx=px+US(440);
                 G->fill_rect(bx,yy+US(2),bw,US(9),gfx_rgb(50,46,54));
                 G->fill_rect(bx,yy+US(2),(int)(bw*f),US(9),COL_AMBER);
                 yy+=US(17); rshown++; }
+            if(cwMax>0){   /* scrollbar for the on-the-run list */
+                int trackX=px+pw-US(8), trackY=cwListTop, trackH=cwVis*US(17);
+                G->fill_rect(trackX,trackY,US(4),trackH,gfx_rgb(40,38,48));
+                int thumbH=trackH*cwVis/cwN; if(thumbH<US(10))thumbH=US(10);
+                int thumbY=trackY+(trackH-thumbH)*crime_scroll/cwMax;
+                G->fill_rect(trackX,thumbY,US(4),thumbH,gfx_rgb(150,145,135)); }
         }
 
         /* ── inspector (left) ── */
