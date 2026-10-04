@@ -115,6 +115,8 @@ enum { TECH_WRITING, TECH_TOOLING, TECH_MEDICINE, TECH_BANKING, TECH_PRINTING, T
 #define DISCOVERY_BASE   0.25   /* daily discovery chance, scaled by top scholars' aptitude */
 #define ADOPT_RATE       0.06   /* daily diffusion of a discovered tech toward full adoption */
 #define CLERGY_SCHOLAR   2.0    /* clergy count double toward scholarship (monastic learning) */
+#define CRAFT_BONUS      1.0    /* default: how much craft+education lift a worker's pay (--production) */
+#define CRAFT_GAIN       0.004  /* craft learned per work shift (diminishing, x aptitude) */
 
 /* ── Culture: religion, cultural group, language, education ─────────────────── */
 enum { FAITH_NONE, FAITH_ORTHODOX, FAITH_REFORMED, FAITH_OLD, FAITH_MYSTIC, FAITH_COUNT };
@@ -279,6 +281,7 @@ typedef struct {
     unsigned char language;     /* LANG_* mother tongue */
     float education;            /* 0..1 learned schooling / literacy */
     float intellect;            /* 0..1 innate research aptitude (reasoning/observation) */
+    float craft;                /* 0..1 occupational skill (grows by working; sets output/pay) */
 
     int wanted;
     int wanted_ticks;
@@ -452,6 +455,9 @@ void knowledge_daily(World *w);             /* research -> theories -> tech disc
 const char *tech_name(int t);
 void   set_research_rate(double r);         /* --research-rate / CSIM_RESEARCH_RATE */
 double get_research_rate(void);
+void   set_craft_bonus(double b);           /* --production / CSIM_PRODUCTION */
+double get_craft_bonus(void);
+double worker_output(const Agent *a);       /* pay/output factor from craft + education */
 const char *faith_name(unsigned char f);
 const char *culture_name(unsigned char c);
 const char *language_name(unsigned char l);

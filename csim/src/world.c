@@ -464,6 +464,7 @@ static void culture_assign(World *w, Agent *a) {
              ? culture_faith(a->culture) : FAITH_NONE;
     a->education = (float)clampd(rng_gauss(r, 0.5, 0.2), 0.0, 1.0);
     a->intellect = (float)clampd(rng_gauss(r, 0.5, 0.18), 0.05, 1.0);   /* innate research aptitude */
+    a->craft = (float)clampd(rng_gauss(r, 0.35, 0.18), 0.0, 1.0);       /* some prior trade experience */
 }
 
 void culture_setup(World *w) {
@@ -719,11 +720,14 @@ static void execute_action(World *w, Agent *a) {
             break;
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
-        case A_WORK:    /* the educated command better pay (human capital) */
-                        n->money += WAGE_PER_SHIFT * w->econ.wage_mult * (0.7 + a->education * 0.6);
+        case A_WORK:    /* pay scales with the worker's craft + schooling (human capital) */
+                        n->money += WAGE_PER_SHIFT * w->econ.wage_mult * worker_output(a);
                         n->energy = clampd(n->energy - 0.1, 0, 1);
                         n->meaning = clampd(n->meaning + 0.05, 0, 1);
                         a->reputation = (float)clampd(a->reputation + 0.004, -1, 1);
+                        /* learn the trade by doing — diminishing, faster for the bright */
+                        if (a->craft < 1.0f)
+                            a->craft = (float)clampd(a->craft + CRAFT_GAIN * (1.0 - a->craft) * (0.5 + a->intellect), 0, 1);
                         break;
         case A_SOCIALIZE: do_socialize(w, a); break;
         case A_DRINK: { double price = DRINK_PRICE * w->econ.goods_price;

@@ -310,7 +310,7 @@ int run_ui(World *w){
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
         /* live tuning panel geometry (shared by click-handling + draw) */
-        int tuneRows=7, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tuneRows=8, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
         int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
         int tuneBW=US(26), tuneBH=US(24);
         int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
@@ -330,6 +330,7 @@ int run_ui(World *w){
                     case 4: set_family_kids(get_family_kids_min(), get_family_kids_max()+dir); break;
                     case 5: set_fixed_step(!get_fixed_step()); break;   /* toggle */
                     case 6:{ double v=get_research_rate()+dir*0.01; if(v<0)v=0; set_research_rate(v);} break;
+                    case 7:{ double v=get_craft_bonus()+dir*0.25; if(v<0)v=0; set_craft_bonus(v);} break;
                 } }
                 break;
             }
@@ -672,8 +673,8 @@ int run_ui(World *w){
             G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
             G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
             G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
-            const char *tlab[7]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate"};
-            char tv[7][24];
+            const char *tlab[8]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate","Production"};
+            char tv[8][24];
             snprintf(tv[0],24,"%.1f",get_years_per_day());
             snprintf(tv[1],24,"%d",get_pop_target());
             snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
@@ -681,6 +682,7 @@ int run_ui(World *w){
             snprintf(tv[4],24,"%d",get_family_kids_max());
             snprintf(tv[5],24,"%s",get_fixed_step()?"Fixed":"Variable");
             snprintf(tv[6],24,"%.2f",get_research_rate());
+            snprintf(tv[7],24,"%.2f",get_craft_bonus());
             for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
                 G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
                 G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));
@@ -749,8 +751,8 @@ int run_ui(World *w){
                            a->pregnant_ticks>0?"  (expecting)":"");
                   G->text(buf,US(12),yy,US(12), a->pregnant_ticks>0?gfx_rgb(230,180,220):gfx_rgb(200,196,186)); yy+=US(19); }
                 { int props=count_properties(w,a->id);
-                  if(props>0) snprintf(buf,sizeof(buf),"%s   landlord x%d",occupation_name(a->occupation),props);
-                  else        snprintf(buf,sizeof(buf),"%s",occupation_name(a->occupation));
+                  if(props>0) snprintf(buf,sizeof(buf),"%s  craft %d%%  landlord x%d",occupation_name(a->occupation),(int)(a->craft*100),props);
+                  else        snprintf(buf,sizeof(buf),"%s  craft %d%%",occupation_name(a->occupation),(int)(a->craft*100));
                   G->text(buf,US(12),yy,US(12),gfx_rgb(200,196,186)); yy+=US(19); }
                 if(a->debt>0.5){ snprintf(buf,sizeof(buf),"Debt %.0f",a->debt);
                   G->text(buf,US(12),yy,US(12), a->debt>DEBT_CEILING*0.75?COL_RED:COL_AMBER); yy+=US(19); }

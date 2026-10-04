@@ -144,6 +144,16 @@ int  get_pop_target(void)  { return g_pop_target; }
 static double g_research_rate = RESEARCH_RATE;
 void   set_research_rate(double r) { if (r >= 0.0) g_research_rate = r; }
 double get_research_rate(void) { return g_research_rate; }
+
+static double g_craft_bonus = CRAFT_BONUS;
+void   set_craft_bonus(double b) { if (b >= 0.0) g_craft_bonus = b; }
+double get_craft_bonus(void) { return g_craft_bonus; }
+/* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
+   (City-wide Tooling tech is applied separately via the wage multiplier.) */
+double worker_output(const Agent *a) {
+    double q = 0.7 + g_craft_bonus * (0.4 * a->craft + 0.3 * a->education);
+    return q < 0.3 ? 0.3 : q;
+}
 const char *tech_name(int t) {
     static const char *n[TECH_COUNT] = { "Writing","Tooling","Medicine","Banking","Printing","Civics" };
     return (t >= 0 && t < TECH_COUNT) ? n[t] : "?";

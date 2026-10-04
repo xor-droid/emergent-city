@@ -14,6 +14,7 @@ int main(void) {
       if (lo || hi) set_family_kids(lo ? atoi(lo) : get_family_kids_min(), hi ? atoi(hi) : get_family_kids_max()); }
     { const char *e = getenv("CSIM_POP_TARGET"); if (e) set_pop_target(atoi(e)); }
     { const char *e = getenv("CSIM_RESEARCH_RATE"); if (e) set_research_rate(atof(e)); }
+    { const char *e = getenv("CSIM_PRODUCTION"); if (e) set_craft_bonus(atof(e)); }
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);
@@ -77,10 +78,10 @@ int main(void) {
            married, married / 2, pregnant, born);
     printf("life cycle (%.1f yr/day): avg age=%ld  children=%d youths=%d adults=%d elders=%d\n",
            get_years_per_day(), alive ? age_sum / alive : 0, children, youths, adults, elders);
-    { double edu_sum = 0, int_sum = 0; int na2 = 0;
-      for (int k = 0; k < w.n_agents; k++) if (w.agents[k].alive) { edu_sum += w.agents[k].education; int_sum += w.agents[k].intellect; na2++; }
-      printf("knowledge: theories=%d  research=%.0f  avg_edu=%.0f%%  avg_intellect=%.0f%%  tech:",
-             w.sci.theories, w.sci.research, na2 ? edu_sum/na2*100 : 0, na2 ? int_sum/na2*100 : 0);
+    { double edu_sum = 0, int_sum = 0, craft_sum = 0; int na2 = 0;
+      for (int k = 0; k < w.n_agents; k++) if (w.agents[k].alive) { edu_sum += w.agents[k].education; int_sum += w.agents[k].intellect; craft_sum += w.agents[k].craft; na2++; }
+      printf("knowledge: theories=%d  research=%.0f  avg_edu=%.0f%%  avg_craft=%.0f%%  tech:",
+             w.sci.theories, w.sci.research, na2 ? edu_sum/na2*100 : 0, na2 ? craft_sum/na2*100 : 0);
       int any = 0;
       for (int t = 0; t < TECH_COUNT; t++) if (w.sci.discovered[t]) { printf(" %s(%.0f%%)", tech_name(t), w.sci.adoption[t]*100); any = 1; }
       if (!any) printf(" none");
