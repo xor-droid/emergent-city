@@ -47,6 +47,7 @@
 #define START_MONEY_SD   50.0
 #define RENT_PER_DAY     5.0
 #define UPKEEP_FRACTION  0.15
+#define HEAT_BASE        10.0    /* daily heating cost at full cold in a 0-insulation home (--weather) */
 
 /* ── Personality / movement ──────────────────────────────────────────────── */
 #define BIG5_MEAN  0.5

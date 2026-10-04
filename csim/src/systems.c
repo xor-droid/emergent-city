@@ -102,7 +102,8 @@ int agent_can_see(const World *w, const Agent *viewer, int tx, int ty) {
     int dx = tx - (int)viewer->x, dy = ty - (int)viewer->y;
     int d2 = dx * dx + dy * dy;
     if (d2 == 0) return 1;
-    int R = get_vision_radius();
+    int R = (int)(get_vision_radius() * weather_vision_mult(w));  /* fog shortens sight */
+    if (R < 1) R = 1;
     if (d2 > R * R) return 0;                          /* out of range */
     if (d2 > VISION_NEAR * VISION_NEAR) {              /* beyond the close ring -> must be in the cone */
         int fx = 0, fy = 0;
@@ -138,7 +139,7 @@ static int walls_between(const World *w, int x0, int y0, int x1, int y1) {
    do not fully block — sound carries around corners. */
 int agent_can_hear(const World *w, const Agent *l, int sx, int sy, double loudness) {
     if (loudness <= 0.0) return 0;
-    double R = get_hearing_radius() * loudness;
+    double R = get_hearing_radius() * loudness * weather_hearing_mult(w);  /* rain masks sound */
     int dx = sx - (int)l->x, dy = sy - (int)l->y;
     double d = sqrt((double)(dx * dx + dy * dy));
     if (d > R) return 0;
@@ -166,7 +167,7 @@ static void witnesses_at(World *w, Agent *perp, double loudness, int *civ, int *
     int x = (int)perp->x, y = (int)perp->y; *civ = 0; *pol = 0;
     int vis = get_vision(), hear = get_hearing();
     int reach = WITNESS_RADIUS;
-    if (hear) { int hr = (int)(get_hearing_radius() * loudness + 0.999); if (hr > reach) reach = hr; }
+    if (hear) { int hr = (int)(get_hearing_radius() * loudness * weather_hearing_mult(w) + 0.999); if (hr > reach) reach = hr; }
     for (int i = 0; i < w->n_agents; i++) {
         Agent *o = &w->agents[i];
         if (!o->alive || o->id == perp->id) continue;
@@ -1001,6 +1002,21 @@ void economy_daily(World *w) {
         double upkeep = a->needs.money * UPKEEP_FRACTION;
         a->needs.money = clampd(a->needs.money - upkeep, 0.0, 1e9);
         a->day_income -= upkeep;                            /* cost of living (net income) */
+
+        /* ── heating: cold weather costs money, and a cheap (poorly-insulated) home
+           costs MORE — so winter bites the poor hardest and can push them into debt ── */
+        if (get_weather() && a->age >= AGE_WORK) {
+            double temp = w->weather.temp;
+            double coldness = temp < 0.5 ? (0.5 - temp) * 2.0 : 0.0;   /* 0..1 */
+            if (coldness > 0.0) {
+                double insul = 0.5;                         /* neutral when no home values */
+                if (a->home_id >= 0 && w->buildings[a->home_id].value > 0.0f) insul = w->buildings[a->home_id].value;
+                double heating = HEAT_BASE * get_heat_cost() * coldness * (1.0 - insul);
+                if (heating > a->needs.money) heating = a->needs.money;
+                a->needs.money -= heating;
+                a->day_income -= heating;
+            }
+        }
 
         /* ── credit: interest accrues; repay when flush, borrow when destitute ── */
         /* Banking (tech) lowers the rate as it spreads */
