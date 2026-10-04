@@ -442,8 +442,10 @@ static void crime_tier_add(World *w, double victim_wealth, double loot) {
 double police_bias_bonus(const World *w, int x, int y) {
     int mode = get_police_bias();
     if (mode == 0) return 0.0;
-    double val = get_neighborhoods() ? w->affluence_[x][y] / 255.0 : 0.5;
-    double money_term = 0.25 * (val - 0.5) * 2.0;      /* −0.25 (poor) .. +0.25 (rich) */
+    /* affluence_ is 0 away from any home (no residential signal) — treat that as
+     * neutral, not "poorest", so the money bias only acts in/near inhabited blocks. */
+    int aff = get_neighborhoods() ? w->affluence_[x][y] : 128;
+    double money_term = (aff == 0) ? 0.0 : 0.25 * (aff / 255.0 - 0.5) * 2.0;  /* −0.25 poor .. +0.25 rich */
     if (mode == 1) return money_term;
     double heat = w->danger_[x][y] / 255.0;            /* mode 2: balanced */
     return 0.5 * money_term + 0.5 * (0.25 * heat);
