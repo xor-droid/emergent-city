@@ -353,21 +353,108 @@ const char *event_kind_name(EventKind k) {
     return (k >= 0 && k < EV_KIND_COUNT) ? names[k] : "?";
 }
 
-/* ── Pathing (greedy step with sidestep) ─────────────────────────────────── */
+/* ── Pathing (greedy best-walkable-neighbor; routes around water) ──────────── */
 int tile_walkable(const World *w, int x, int y) {
-    (void)w;
-    return x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H;  /* all in-bounds walkable */
+    if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return 0;
+    return w->tile[x][y] != T_WATER;   /* water is impassable; major avenues bridge it as T_ROAD */
 }
 int path_step(const World *w, int fx, int fy, int tx, int ty, int *nx, int *ny) {
-    (void)w;
     if (fx == tx && fy == ty) { *nx = fx; *ny = fy; return 0; }
-    int dx = (tx > fx) - (tx < fx);
-    int dy = (ty > fy) - (ty < fy);
-    /* prefer the larger axis first for a diagonal-ish walk */
-    if (abs(tx - fx) >= abs(ty - fy) && dx) { *nx = fx + dx; *ny = fy; }
-    else if (dy) { *nx = fx; *ny = fy + dy; }
-    else { *nx = fx + dx; *ny = fy; }
+    /* step to the walkable 4-neighbor nearest the target — greedy avoidance that
+       never steps onto water. Deterministic (fixed order breaks ties). */
+    static const int DIRS[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+    int best = -1, bestd = 1 << 30;
+    for (int i = 0; i < 4; i++) {
+        int cx = fx + DIRS[i][0], cy = fy + DIRS[i][1];
+        if (!tile_walkable(w, cx, cy)) continue;
+        int d = abs(tx - cx) + abs(ty - cy);
+        if (d < bestd) { bestd = d; best = i; }
+    }
+    if (best < 0) { *nx = fx; *ny = fy; return 0; }   /* boxed in — wait a tick */
+    *nx = fx + DIRS[best][0]; *ny = fy + DIRS[best][1];
     return 1;
+}
+
+/* ── A* with Jump Point Search (4-connected grid; routes around water) ─────────
+   Single-threaded scratch; deterministic (integer, fixed tie-breaks). Only called
+   on retarget (paths are cached per agent), so plain A* would also do — JPS skips
+   straight corridors for speed on the open/lake-filled maps. */
+#define PF_N (WORLD_W * WORLD_H)
+static int pf_g[PF_N], pf_parent[PF_N], pf_f[PF_N], pf_gen[PF_N], pf_curgen = 0;
+static int pf_heap[PF_N], pf_heapn;
+static int pf_chain[PF_N];
+static const int PF_DX[4] = {1,-1,0,0}, PF_DY[4] = {0,0,1,-1};
+
+static void pf_push(int node) {
+    int i = pf_heapn++; pf_heap[i] = node;
+    while (i > 0) { int p = (i-1)/2; if (pf_f[pf_heap[p]] <= pf_f[pf_heap[i]]) break;
+        int t = pf_heap[p]; pf_heap[p] = pf_heap[i]; pf_heap[i] = t; i = p; }
+}
+static int pf_pop(void) {
+    int top = pf_heap[0]; pf_heap[0] = pf_heap[--pf_heapn];
+    int i = 0; for (;;) { int l = 2*i+1, r = 2*i+2, s = i;
+        if (l < pf_heapn && pf_f[pf_heap[l]] < pf_f[pf_heap[s]]) s = l;
+        if (r < pf_heapn && pf_f[pf_heap[r]] < pf_f[pf_heap[s]]) s = r;
+        if (s == i) break; int t = pf_heap[s]; pf_heap[s] = pf_heap[i]; pf_heap[i] = t; i = s; }
+    return top;
+}
+/* jump along cardinal `d` from (x,y) until a wall, the goal, or a forced neighbour
+   (a turn opened by an obstacle); returns the jump-point index, or -1. */
+static int pf_jump(const World *w, int x, int y, int d, int gx, int gy) {
+    for (;;) {
+        x += PF_DX[d]; y += PF_DY[d];
+        if (!tile_walkable(w, x, y)) return -1;
+        if (x == gx && y == gy) return y*WORLD_W + x;
+        if (d < 2) {  /* horizontal: a turn up/down is forced if it was blocked one step back */
+            int bx = x - PF_DX[d];
+            if ((tile_walkable(w, x, y+1) && !tile_walkable(w, bx, y+1)) ||
+                (tile_walkable(w, x, y-1) && !tile_walkable(w, bx, y-1))) return y*WORLD_W + x;
+        } else {       /* vertical */
+            int by = y - PF_DY[d];
+            if ((tile_walkable(w, x+1, y) && !tile_walkable(w, x+1, by)) ||
+                (tile_walkable(w, x-1, y) && !tile_walkable(w, x-1, by))) return y*WORLD_W + x;
+        }
+    }
+}
+int find_path(const World *w, int sx, int sy, int tx, int ty, unsigned char *out, int cap) {
+    if (sx == tx && sy == ty) return 0;
+    if (!tile_walkable(w, tx, ty) || !tile_walkable(w, sx, sy)) return -1;
+    if (++pf_curgen == 0) { memset(pf_gen, 0, sizeof(pf_gen)); pf_curgen = 1; }
+    pf_heapn = 0;
+    int s = sy*WORLD_W + sx, gidx = ty*WORLD_W + tx;
+    pf_g[s] = 0; pf_parent[s] = -1; pf_gen[s] = pf_curgen; pf_f[s] = abs(tx-sx)+abs(ty-sy);
+    pf_push(s);
+    int found = 0, guard = 0;
+    while (pf_heapn > 0 && guard++ < PF_N*2) {
+        int cur = pf_pop();
+        if (cur == gidx) { found = 1; break; }
+        int cx = cur % WORLD_W, cy = cur / WORLD_W;
+        for (int d = 0; d < 4; d++) {              /* jump all 4 cardinals (correct superset) */
+            int jp = pf_jump(w, cx, cy, d, tx, ty);
+            if (jp < 0) continue;
+            int jx = jp % WORLD_W, jy = jp / WORLD_W;
+            int ng = pf_g[cur] + abs(jx-cx) + abs(jy-cy);
+            if (pf_gen[jp] != pf_curgen || ng < pf_g[jp]) {
+                pf_gen[jp] = pf_curgen; pf_g[jp] = ng; pf_parent[jp] = cur;
+                pf_f[jp] = ng + abs(tx-jx) + abs(ty-jy);
+                pf_push(jp);
+            }
+        }
+    }
+    if (!found) return -1;
+    /* jump-point chain goal..start, then expand each straight segment to tile steps */
+    int clen = 0;
+    for (int n = gidx; n != -1; n = pf_parent[n]) pf_chain[clen++] = n;
+    int cnt = 0;
+    for (int i = clen - 1; i > 0; i--) {
+        int A = pf_chain[i], B = pf_chain[i-1];
+        int ax = A % WORLD_W, ay = A / WORLD_W, bx = B % WORLD_W, by = B / WORLD_W;
+        int ddx = (bx > ax) - (bx < ax), ddy = (by > ay) - (by < ay);
+        int dir = ddx ? (ddx > 0 ? 0 : 1) : (ddy > 0 ? 2 : 3);
+        int steps = abs(bx-ax) + abs(by-ay);
+        for (int k = 0; k < steps && cnt < cap; k++) out[cnt++] = (unsigned char)dir;
+    }
+    return cnt;
 }
 
 /* ── Buildings ───────────────────────────────────────────────────────────── */

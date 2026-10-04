@@ -84,6 +84,52 @@ static double district_fill(double d) {
     if (d < 0.62) return 0.66; if (d < 0.82) return 0.42; return 0.18;
 }
 
+/* ── Connectivity (so water-blocking pathfinding doesn't strand agents) ────────
+   Flood-fill walkable tiles into connected components; essential targets (shops,
+   workplaces, homes) are then chosen within the agent's own component, so they're
+   always reachable without crossing water. Derived from tiles, recomputed at
+   world_init and after load. */
+static int g_comp[WORLD_W * WORLD_H];
+static void compute_components(World *w) {
+    static int queue[WORLD_W * WORLD_H];
+    for (int i = 0; i < WORLD_W * WORLD_H; i++) g_comp[i] = -1;
+    static const int DX[4] = {1,-1,0,0}, DY[4] = {0,0,1,-1};
+    int comp = 0;
+    for (int sy = 0; sy < WORLD_H; sy++) for (int sx = 0; sx < WORLD_W; sx++) {
+        int si = sy*WORLD_W + sx;
+        if (g_comp[si] != -1 || !tile_walkable(w, sx, sy)) continue;
+        int head = 0, tail = 0; queue[tail++] = si; g_comp[si] = comp;
+        while (head < tail) {
+            int c = queue[head++], cx = c % WORLD_W, cy = c / WORLD_W;
+            for (int d = 0; d < 4; d++) {
+                int nx = cx + DX[d], ny = cy + DY[d];
+                if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) continue;
+                int ni = ny*WORLD_W + nx;
+                if (g_comp[ni] == -1 && tile_walkable(w, nx, ny)) { g_comp[ni] = comp; queue[tail++] = ni; }
+            }
+        }
+        comp++;
+    }
+}
+static int comp_at(int x, int y) {
+    if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return -1;
+    return g_comp[y*WORLD_W + x];
+}
+/* nearest building of `type` in the same component as (fx,fy); falls back to the
+   nearest of any component so a caller always gets something. */
+static int building_nearest_reachable(const World *w, int fx, int fy, TileType type) {
+    int myc = comp_at(fx, fy);
+    int best = -1, bestd = 0, any = -1, anyd = 0;
+    for (int i = 0; i < w->n_buildings; i++) {
+        if (w->buildings[i].type != type) continue;
+        int bx = w->buildings[i].x, by = w->buildings[i].y;
+        int d = abs(bx - fx) + abs(by - fy);
+        if (any < 0 || d < anyd) { any = i; anyd = d; }
+        if (comp_at(bx, by) == myc && (best < 0 || d < bestd)) { best = i; bestd = d; }
+    }
+    return best >= 0 ? best : any;
+}
+
 void world_init(World *w, uint64_t seed) {
     memset(w, 0, sizeof(*w));
     rng_seed(&w->rng, seed, 0xCAFEu);
@@ -108,7 +154,7 @@ void world_init(World *w, uint64_t seed) {
         for (int x = 0; x < WORLD_W; x++) {
             if (noise) {
                 float e = fnlGetNoise2D(&n_water, (float)x, (float)y);   /* -1..1 */
-                w->tile[x][y] = (e < -0.5f) ? T_WATER : T_GRASS;         /* ~low-lying = water */
+                w->tile[x][y] = (e < -0.62f) ? T_WATER : T_GRASS;        /* only the lowest land floods, so the city stays connected */
             } else {
                 w->tile[x][y] = (fabs(x - rc) < 1.6) ? T_WATER : T_GRASS;
             }
@@ -177,6 +223,7 @@ built:;
         }
     }
 
+    compute_components(w);   /* for reachability-aware targeting (pathing avoids water) */
     w->hour = 8.0; w->day = 1;
     w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
     factions_seed(w);
@@ -204,12 +251,12 @@ void world_populate(World *w, int n) {
         if (home >= 0) { a->x = w->buildings[home].x; a->y = w->buildings[home].y; }
         else { a->x = rng_int(r, WORLD_W); a->y = rng_int(r, WORLD_H); }
         a->tx = -1; a->ty = -1;
-        /* workplace: weighted so police are a small minority (~3%) */
+        /* workplace: weighted so police are a small minority (~3%); reachable from home */
         double wr = rng_double(r);
         TileType wtype = wr < 0.55 ? T_WORK : wr < 0.80 ? T_SHOP
                        : wr < 0.90 ? T_BAR  : wr < 0.97 ? T_CHURCH : T_POLICE;
-        a->workplace_id = random_building(w, wtype);
-        if (a->workplace_id < 0) a->workplace_id = random_building(w, T_WORK);
+        a->workplace_id = building_nearest_reachable(w, (int)a->x, (int)a->y, wtype);
+        if (a->workplace_id < 0) a->workplace_id = building_nearest_reachable(w, (int)a->x, (int)a->y, T_WORK);
         if (a->workplace_id >= 0 && w->buildings[a->workplace_id].type == T_POLICE)
             a->is_police = 1;
         a->faction_id = -1;
@@ -256,12 +303,14 @@ int world_spawn_agent(World *w, int tx, int ty) {
        so the city replenishes through births, not just arrivals */
     a->age = (int)clampd(rng_gauss(r, 26, 7), 18, 55);
     a->home_id = random_building(w, T_HOME);
-    a->x = (tx >= 0 && tx < WORLD_W) ? tx : rng_int(r, WORLD_W);
-    a->y = (ty >= 0 && ty < WORLD_H) ? ty : rng_int(r, WORLD_H);
+    /* spawn at home when possible (god-mode spawns honor tx,ty) so home is reachable */
+    if (tx >= 0 && tx < WORLD_W && ty >= 0 && ty < WORLD_H) { a->x = tx; a->y = ty; }
+    else if (a->home_id >= 0) { a->x = w->buildings[a->home_id].x; a->y = w->buildings[a->home_id].y; }
+    else { a->x = rng_int(r, WORLD_W); a->y = rng_int(r, WORLD_H); }
     a->tx = -1; a->ty = -1;
     double wr = rng_double(r);
     TileType wtype = wr < 0.6 ? T_WORK : wr < 0.85 ? T_SHOP : wr < 0.95 ? T_BAR : T_CHURCH;
-    a->workplace_id = random_building(w, wtype);
+    a->workplace_id = building_nearest_reachable(w, (int)a->x, (int)a->y, wtype);
     a->faction_id = -1;
     a->needs.hunger = a->needs.energy = a->needs.safety = 1.0;
     a->needs.social = a->needs.meaning = a->needs.belonging = 1.0;
@@ -637,13 +686,13 @@ static void set_target(World *w, Agent *a) {
     switch (a->action) {
         case A_EAT:
             if (a->needs.hunger < NEED_CRITICAL) { a->tx = -1; a->ty = -1; return; }
-            b = building_nearest(w, (int)a->x, (int)a->y, T_SHOP); break;
-        case A_SHOP:  b = building_nearest(w, (int)a->x, (int)a->y, T_SHOP); break;
+            b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;
+        case A_SHOP:  b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;
         case A_SLEEP: case A_GO_HOME: b = a->home_id; break;
         case A_WORK:  b = a->workplace_id; break;
-        case A_DRINK: b = building_nearest(w, (int)a->x, (int)a->y, T_BAR); break;
-        case A_PRAY:  b = building_nearest(w, (int)a->x, (int)a->y, T_CHURCH); break;
-        case A_TREAT: b = building_nearest(w, (int)a->x, (int)a->y, T_SHOP); break;  /* pharmacy/clinic */
+        case A_DRINK: b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_BAR); break;
+        case A_PRAY:  b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_CHURCH); break;
+        case A_TREAT: b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;  /* pharmacy/clinic */
         case A_CRIME: {
             Agent *tgt = NULL;
             if (a->crime_role == CR_KINGPIN) { a->tx = -1; a->ty = -1; return; }  /* stay put, deal wholesale */
@@ -652,7 +701,7 @@ static void set_target(World *w, Agent *a) {
             else if (a->faction_id >= 0) { tgt = seek_victim(w, a, 1); if (!tgt) tgt = seek_victim(w, a, 0); }
             else tgt = seek_victim(w, a, 0);
             if (tgt) { a->tx = (int)tgt->x; a->ty = (int)tgt->y; return; }
-            if (a->crime_role == CR_CAREER) b = building_nearest(w, (int)a->x, (int)a->y, T_HOME);  /* go burgle */
+            if (a->crime_role == CR_CAREER) b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_HOME);  /* go burgle */
             break;
         }
         default: break;
@@ -805,16 +854,36 @@ static void execute_action(World *w, Agent *a) {
     }
 }
 
+/* one tile toward the target: follow the cached A*+JPS path, recomputing on
+   retarget or when a long (truncated) path runs out; greedy fallback if unreachable. */
+static int agent_next_step(const World *w, Agent *a, int *nx, int *ny) {
+    int cx = (int)a->x, cy = (int)a->y;
+    int retarget  = (a->path_tx != (short)a->tx || a->path_ty != (short)a->ty);
+    int exhausted = (a->path_i >= a->path_len);
+    if (retarget || (exhausted && a->path_len > 0 && (cx != a->tx || cy != a->ty))) {
+        int n = find_path(w, cx, cy, a->tx, a->ty, a->path, PATH_MAX);
+        a->path_len = (short)(n > 0 ? n : 0); a->path_i = 0;
+        a->path_tx = (short)a->tx; a->path_ty = (short)a->ty;
+    }
+    static const int DX[4] = {1,-1,0,0}, DY[4] = {0,0,1,-1};
+    if (a->path_i < a->path_len) {
+        int d = a->path[a->path_i];
+        int px = cx + DX[d], py = cy + DY[d];
+        if (tile_walkable(w, px, py)) { a->path_i++; *nx = px; *ny = py; return 1; }
+    }
+    return path_step(w, cx, cy, a->tx, a->ty, nx, ny);   /* unreachable/edge -> greedy */
+}
+
 static void move_toward(const World *w, Agent *a, double dt) {
     if (a->tx < 0) return;
     a->move_progress += dt * AGENT_SPEED_TPS;
     while (a->move_progress >= 1.0 && !((int)a->x == a->tx && (int)a->y == a->ty)) {
         int nx, ny;
-        if (path_step(w, (int)a->x, (int)a->y, a->tx, a->ty, &nx, &ny)) {
+        if (agent_next_step(w, a, &nx, &ny) && (nx != (int)a->x || ny != (int)a->y)) {
             if (nx > a->x) a->facing = 'E'; else if (nx < a->x) a->facing = 'W';
             else if (ny > a->y) a->facing = 'S'; else if (ny < a->y) a->facing = 'N';
             a->x = nx; a->y = ny;
-        }
+        } else break;   /* boxed in — stop burning move budget this tick */
         a->move_progress -= 1.0;
     }
 }
@@ -934,5 +1003,6 @@ int world_load(World *w, const char *path) {
     if (!f) return 0;
     size_t rd = fread(w, sizeof(World), 1, f);
     fclose(f);
+    if (rd == 1) compute_components(w);   /* g_comp is derived, not stored */
     return rd == 1;
 }

@@ -17,6 +17,7 @@
 #define MAX_AGENTS 400
 #define MAX_BUILDINGS 4096   /* dense districted worldgen registers many buildings */
 #define MAX_FACTIONS 32
+#define PATH_MAX 256            /* max cached path length per agent (re-chunks if longer) */
 #define EVENT_RING 256          /* recent world events kept for the feed */
 #define MAX_RELATIONS 40        /* per-agent relationship ledger (LRU-ish) */
 #define AGENT_MEMORY 8          /* per-agent recent memories */
@@ -253,6 +254,9 @@ typedef struct {
     int acted;
     double move_progress;
     char facing;
+    /* cached A*+JPS path (step directions 0=E,1=W,2=S,3=N), recomputed on retarget */
+    unsigned char path[PATH_MAX];
+    short path_len, path_i, path_tx, path_ty;
 
     int is_police;
     int faction_id;         /* -1 if none */
@@ -499,6 +503,9 @@ void economy_daily(World *w);     /* cost of living, wages settle */
 int  tile_walkable(const World *w, int x, int y);
 /* step one tile from (fx,fy) toward (tx,ty); writes next (*nx,*ny). 1 if moved. */
 int  path_step(const World *w, int fx, int fy, int tx, int ty, int *nx, int *ny);
+/* A*+JPS: fill `out` with up to `cap` step directions (0=E,1=W,2=S,3=N) from
+   (sx,sy) to (tx,ty); returns path length, 0 if already there, -1 if unreachable. */
+int  find_path(const World *w, int sx, int sy, int tx, int ty, unsigned char *out, int cap);
 
 /* ── Buildings ───────────────────────────────────────────────────────────── */
 int  building_nearest(const World *w, int fx, int fy, TileType type);
