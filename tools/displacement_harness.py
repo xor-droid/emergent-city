@@ -10,8 +10,9 @@ the systematic policy effect — does `money` bias displace crime from rich to p
 blocks? — stands out with an error bar.
 
 All runs fix --neighborhoods --crime-wealth (so wealth/affluence exist) and force the
-LLM off (OPENROUTER_API_KEY="") for determinism. It reads the per-victim-tier crime
-counts (cr_poor/cr_mid/cr_rich) the sim already exports.
+LLM off (OPENROUTER_API_KEY="") for determinism. Displacement is measured SPATIALLY:
+the crime counts by the affluence of the NEIGHBOURHOOD each crime happened in
+(loc_poor/loc_mid/loc_rich), which is the true read of "crime moving to poorer areas".
 
 Usage:
   tools/displacement_harness.py [--seeds N] [--days D] [--bin PATH] [--modes crime,money,balanced]
@@ -36,7 +37,8 @@ def run(binpath, seed, days, mode, outdir):
             pass            # keep the last (cumulative) row
     if not row:
         raise RuntimeError(f"no metrics rows for seed {seed} mode {mode}")
-    p, m, r = int(row["cr_poor"]), int(row["cr_mid"]), int(row["cr_rich"])
+    # spatial displacement: crimes classified by the NEIGHBOURHOOD (location) affluence
+    p, m, r = int(row["loc_poor"]), int(row["loc_mid"]), int(row["loc_rich"])
     tot = p + m + r
     return {"poor": p, "mid": m, "rich": r, "total": tot,
             "poor_share": 100.0 * p / tot if tot else 0.0,
@@ -75,8 +77,8 @@ def main():
             print(f"\r  ran seed {s}/{len(seeds)}", end="", flush=True)
     print("\n")
 
-    # absolute per-mode shares
-    print(f"  {'mode':<10}{'poor-target %':>16}{'rich-target %':>16}")
+    # absolute per-mode shares (by neighbourhood where the crime happened)
+    print(f"  {'mode':<10}{'poor-block %':>16}{'rich-block %':>16}")
     for mode in modes:
         pm, _, pse = summarize(data[mode]["poor"])
         rm, _, rse = summarize(data[mode]["rich"])
@@ -94,8 +96,8 @@ def main():
             pm, _, pse = summarize(dpoor); rm, _, rse = summarize(drich)
             sig = "significant" if abs(pm) > 2 * pse and pse > 0 else "not significant"
             arrow = "more" if pm > 0 else "less"
-            print(f"    {mode:>9}: poor-target share {pm:+.1f} pp ±{pse:.1f}  (crime shifts {arrow} to poor blocks; {sig})")
-            print(f"    {'':>9}  rich-target share {rm:+.1f} pp ±{rse:.1f}")
+            print(f"    {mode:>9}: poor-block share {pm:+.1f} pp ±{pse:.1f}  (crime displaced {arrow} to poor blocks; {sig})")
+            print(f"    {'':>9}  rich-block share {rm:+.1f} pp ±{rse:.1f}")
 
 if __name__ == "__main__":
     main()

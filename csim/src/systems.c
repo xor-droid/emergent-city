@@ -472,6 +472,12 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         double loot = crime_loot(w, perp, target, kind);
         perp->needs.money += loot;
         if (loot > 0) w->crime_take[ck_index(kind)] += loot;   /* cumulative illegal proceeds (dashboard) */
+        /* spatial displacement: classify the crime by the affluence of the NEIGHBOURHOOD
+         * it happened in (not the victim's wealth). Only where there's a residential signal. */
+        if (loot > 0 && get_neighborhoods()) {
+            int aff = w->affluence_[x][y];
+            if (aff > 0) w->crimes_loc_tier[aff < 85 ? 0 : aff > 170 ? 2 : 1]++;
+        }
         if (target) {
             double vw = target->needs.money;                   /* victim wealth before the take */
             if (loot > 0) { target->needs.money = clampd(target->needs.money - loot, 0, 1e9);

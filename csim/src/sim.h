@@ -390,7 +390,8 @@ typedef struct {
     double crime_take[CK_COUNT];/* cumulative illegal proceeds, per crime kind */
     double median_wealth;       /* city median per-capita household wealth (set daily) */
     double loot_tier[3];        /* cumulative loot stolen from poor/mid/rich targets */
-    int    crimes_tier[3];      /* count of money crimes against poor/mid/rich targets */
+    int    crimes_tier[3];      /* count of money crimes against poor/mid/rich targets (by victim wealth) */
+    int    crimes_loc_tier[3];  /* count of money crimes in poor/mid/rich NEIGHBOURHOODS (by location affluence) */
     int    n_moves;             /* cumulative household relocations (residential mobility) */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */

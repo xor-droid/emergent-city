@@ -1303,6 +1303,7 @@ void metrics_open(const char *path) {
     /* socioeconomics: wealth inequality + household income distribution + class tiers */
     fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
     fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich,moves,segregation,cr_poor,cr_mid,cr_rich");
+    fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1388,6 +1389,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%.4f,%.0f,%.0f,%.0f,%.0f", gini, hp25, hmed, hp75, hmean);
     fprintf(g_metrics, ",%.0f,%.0f,%.0f", w->loot_tier[0], w->loot_tier[1], w->loot_tier[2]);
     fprintf(g_metrics, ",%d,%.4f,%d,%d,%d", w->n_moves, seg, w->crimes_tier[0], w->crimes_tier[1], w->crimes_tier[2]);
+    fprintf(g_metrics, ",%d,%d,%d", w->crimes_loc_tier[0], w->crimes_loc_tier[1], w->crimes_loc_tier[2]);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
