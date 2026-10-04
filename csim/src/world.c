@@ -567,6 +567,7 @@ static float home_value(const World *w, int bx, int by) {
         if (w->tile[xx][yy] == T_PARK) parks++;
     }
     v += 0.02 * parks;
+    if (get_biomes()) v += get_biome_value_weight() * biome_delta(w->biome_[bx][by]);  /* hills↑, floodplain↓ */
     return (float)(v < 0 ? 0 : v > 1 ? 1 : v);
 }
 

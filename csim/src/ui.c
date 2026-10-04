@@ -337,7 +337,7 @@ int run_ui(World *w){
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
         /* live tuning panel geometry (shared by click-handling + draw) */
-        int tuneRows=13, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tuneRows=14, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
         int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
         int tuneBW=US(26), tuneBH=US(24);
         int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
@@ -363,12 +363,14 @@ int run_ui(World *w){
                     case 10: set_hearing(!get_hearing()); break;   /* toggle */
                     case 11: set_hearing_radius(get_hearing_radius()+dir); break;
                     case 12:{ double v=get_child_cost()+dir*1.0; if(v<0)v=0; set_child_cost(v);} break;
+                    case 13:{ double v=get_biome_value_weight()+dir*0.25; if(v<0)v=0; set_biome_value_weight(v);} break;
                 }
                 if(replay_in_progress()) replay_fork(w);   /* editing during replay diverges into a new session */
                 if(rec_active()){
-                    static const char *TK[13]={"years_per_day","pop_target","family_share","kids_min","kids_max",
-                        "fixed_step","research_rate","production","vision","vision_radius","hearing","hearing_radius","child_cost"};
-                    if(i>=0 && i<13) rec_tune_now(w, TK[i]);   /* record this live change for replay */
+                    static const char *TK[14]={"years_per_day","pop_target","family_share","kids_min","kids_max",
+                        "fixed_step","research_rate","production","vision","vision_radius","hearing","hearing_radius","child_cost",
+                        "biome_value_weight"};
+                    if(i>=0 && i<14) rec_tune_now(w, TK[i]);   /* record this live change for replay */
                 } }
                 break;
             }
@@ -838,8 +840,8 @@ int run_ui(World *w){
             G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
             G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
             G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
-            const char *tlab[13]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate","Production","Vision","Vision range","Hearing","Hearing range","Child cost"};
-            char tv[13][24];
+            const char *tlab[14]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate","Production","Vision","Vision range","Hearing","Hearing range","Child cost","Biome value"};
+            char tv[14][24];
             snprintf(tv[0],24,"%.1f",get_years_per_day());
             snprintf(tv[1],24,"%d",get_pop_target());
             snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
@@ -853,6 +855,7 @@ int run_ui(World *w){
             snprintf(tv[10],24,"%s",get_hearing()?"On":"Off");
             snprintf(tv[11],24,"%d",get_hearing_radius());
             snprintf(tv[12],24,"%.0f",get_child_cost());
+            snprintf(tv[13],24,"%.2f",get_biome_value_weight());
             for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
                 G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
                 G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));
