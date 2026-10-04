@@ -159,6 +159,10 @@ enum { LS_CHILD, LS_YOUTH, LS_ADULT, LS_ELDER };
 #define VISION_RADIUS  8    /* how far an agent sees down their line of sight (tiles) */
 #define VISION_NEAR    2    /* 360-degree close-range awareness radius (tiles) */
 
+/* ── Agent hearing (auditory perception) ───────────────────────────────────── */
+#define HEARING_RADIUS 12   /* how far the loudest act carries (tiles); scaled by loudness */
+#define HEARING_MUFFLE 2    /* a wall on the line costs this many tiles of hearing reach */
+
 /* ── Combat, faction warfare & law (governance) ────────────────────────────── */
 #define COMBAT_INJURY       0.5    /* base injury a won fight inflicts */
 #define WAR_DECLARE_CHANCE  0.06   /* daily per-faction chance to start a war */
@@ -439,6 +443,15 @@ int  get_vision(void);
 void set_vision_radius(int r);
 int  get_vision_radius(void);
 int  agent_can_see(const World *w, const Agent *viewer, int tx, int ty);  /* FOV + LOS */
+/* ── Hearing ───────────────────────────────────────────────────────────────── */
+void set_hearing(int on);                /* --hearing / CSIM_HEARING: loud acts heard around corners */
+int  get_hearing(void);
+void set_hearing_radius(int r);
+int  get_hearing_radius(void);
+int  agent_can_hear(const World *w, const Agent *l, int sx, int sy, double loudness);
+/* ── Worldgen mode ─────────────────────────────────────────────────────────── */
+void set_noise_worldgen(int on);         /* --noise-worldgen / CSIM_NOISE_WORLDGEN */
+int  get_noise_worldgen(void);
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
 void lifecycle_daily(World *w);             /* old-age mortality, on day change */

@@ -152,6 +152,17 @@ int  get_vision(void) { return g_vision; }
 void set_vision_radius(int r) { if (r >= 1) g_vision_radius = r; }
 int  get_vision_radius(void) { return g_vision_radius; }
 
+static int g_hearing = 0;              /* 0 = off (default), 1 = loud acts heard around corners */
+static int g_hearing_radius = HEARING_RADIUS;
+void set_hearing(int on) { g_hearing = on ? 1 : 0; }
+int  get_hearing(void) { return g_hearing; }
+void set_hearing_radius(int r) { if (r >= 1) g_hearing_radius = r; }
+int  get_hearing_radius(void) { return g_hearing_radius; }
+
+static int g_noise_worldgen = 0;       /* 0 = sine/gradient worldgen (default), 1 = FastNoiseLite */
+void set_noise_worldgen(int on) { g_noise_worldgen = on ? 1 : 0; }
+int  get_noise_worldgen(void) { return g_noise_worldgen; }
+
 static double g_craft_bonus = CRAFT_BONUS;
 void   set_craft_bonus(double b) { if (b >= 0.0) g_craft_bonus = b; }
 double get_craft_bonus(void) { return g_craft_bonus; }

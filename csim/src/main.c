@@ -32,6 +32,11 @@ static void usage(const char *argv0) {
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
+    printf("  --hearing [--hearing-radius N]  loud acts (murder/assault/arson/riot) carry around\n");
+    printf("                        corners and get noticed even out of sight; quiet crimes stay\n");
+    printf("                        stealthy, serial killers quieter still. Rebalances --vision.\n");
+    printf("  --noise-worldgen      generate the city with coherent (FastNoiseLite) noise for\n");
+    printf("                        organic rivers/districts instead of the default sine/gradient.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -65,11 +70,13 @@ static void usage(const char *argv0) {
     printf("    CSIM_RESEARCH_RATE  knowledge/tech discovery pace (same as --research-rate).\n");
     printf("    CSIM_PRODUCTION     craft/output pay weight (same as --production).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
+    printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
+    printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
     printf("    CSIM_CITY=1 / CSIM_TUNE=1   open the dashboard / tuning panel at launch.\n");
-    printf("    CSIM_OVERLAY=1..3   open a map overlay (1 heat, 2 turf, 3 culture).\n");
+    printf("    CSIM_OVERLAY=1..5   open a map overlay (1 heat, 2 turf, 3 culture, 4 vision, 5 hearing).\n");
     printf("    CSIM_ASCII=1        start in Dwarf-Fortress ASCII render mode.\n");
     printf("  display / render:\n");
     printf("    CSIM_UI=N           UI scale (default: derived from monitor height).\n");
@@ -105,6 +112,8 @@ int main(int argc, char **argv) {
     double rrate = -1.0;           /* research rate; <0 = unset */
     double craftb = -1.0;          /* production/craft bonus; <0 = unset */
     int vision = -1, visradius = -1;   /* field of view; <0 = unset */
+    int hearing = -1, hearradius = -1; /* hearing; <0 = unset */
+    int noisegen = -1;                 /* noise worldgen; <0 = unset */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
@@ -129,6 +138,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-vision")) { vision = 0; }
         else if (!strcmp(argv[i], "--vision-radius") && i + 1 < argc) { visradius = atoi(argv[++i]); vision = (vision < 0) ? 1 : vision; }
         else if (!strncmp(argv[i], "--vision-radius=", 16)) { visradius = atoi(argv[i] + 16); vision = (vision < 0) ? 1 : vision; }
+        else if (!strcmp(argv[i], "--hearing")) { hearing = 1; }
+        else if (!strcmp(argv[i], "--no-hearing")) { hearing = 0; }
+        else if (!strcmp(argv[i], "--hearing-radius") && i + 1 < argc) { hearradius = atoi(argv[++i]); hearing = (hearing < 0) ? 1 : hearing; }
+        else if (!strncmp(argv[i], "--hearing-radius=", 17)) { hearradius = atoi(argv[i] + 17); hearing = (hearing < 0) ? 1 : hearing; }
+        else if (!strcmp(argv[i], "--noise-worldgen")) { noisegen = 1; }
+        else if (!strcmp(argv[i], "--no-noise-worldgen")) { noisegen = 0; }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -163,6 +178,12 @@ int main(int argc, char **argv) {
     if (visradius > 0) set_vision_radius(visradius);
     if (vision < 0) { const char *e = getenv("CSIM_VISION"); if (e) vision = atoi(e); }
     if (vision >= 0) set_vision(vision);
+    if (hearradius < 0) { const char *e = getenv("CSIM_HEARING_RADIUS"); if (e) hearradius = atoi(e); }
+    if (hearradius > 0) set_hearing_radius(hearradius);
+    if (hearing < 0) { const char *e = getenv("CSIM_HEARING"); if (e) hearing = atoi(e); }
+    if (hearing >= 0) set_hearing(hearing);
+    if (noisegen < 0) { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) noisegen = atoi(e); }
+    if (noisegen >= 0) set_noise_worldgen(noisegen);   /* must precede world_init */
 
     G = gfx_raylib();
 

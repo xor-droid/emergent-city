@@ -17,6 +17,9 @@ int main(void) {
     { const char *e = getenv("CSIM_PRODUCTION"); if (e) set_craft_bonus(atof(e)); }
     { const char *e = getenv("CSIM_VISION_RADIUS"); if (e) set_vision_radius(atoi(e)); }
     { const char *e = getenv("CSIM_VISION"); if (e) set_vision(atoi(e)); }
+    { const char *e = getenv("CSIM_HEARING_RADIUS"); if (e) set_hearing_radius(atoi(e)); }
+    { const char *e = getenv("CSIM_HEARING"); if (e) set_hearing(atoi(e)); }
+    { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) set_noise_worldgen(atoi(e)); }
     World w;
     world_init(&w, 1337);
     world_populate(&w, 150);

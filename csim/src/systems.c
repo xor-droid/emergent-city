@@ -117,16 +117,65 @@ int agent_can_see(const World *w, const Agent *viewer, int tx, int ty) {
     return line_of_sight(w, (int)viewer->x, (int)viewer->y, tx, ty);
 }
 
-static void witnesses_at(World *w, Agent *perp, int *civ, int *pol) {
+/* count opaque buildings on the line between two points (sound muffles per wall) */
+static int walls_between(const World *w, int x0, int y0, int x1, int y1) {
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, x = x0, y = y0, n = 0;
+    while (!(x == x1 && y == y1)) {
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+        if (x == x1 && y == y1) break;
+        if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) break;
+        { TileType tt = (TileType)w->tile[x][y]; if (tt >= T_HOME && tt <= T_POLICE) n++; }
+    }
+    return n;
+}
+
+/* Can `l` hear an act of the given loudness at (sx,sy)? Omnidirectional (no cone);
+   reach = hearing radius x loudness; walls muffle (cost HEARING_MUFFLE each) but
+   do not fully block — sound carries around corners. */
+int agent_can_hear(const World *w, const Agent *l, int sx, int sy, double loudness) {
+    if (loudness <= 0.0) return 0;
+    double R = get_hearing_radius() * loudness;
+    int dx = sx - (int)l->x, dy = sy - (int)l->y;
+    double d = sqrt((double)(dx * dx + dy * dy));
+    if (d > R) return 0;
+    return d + walls_between(w, (int)l->x, (int)l->y, sx, sy) * (double)HEARING_MUFFLE <= R;
+}
+
+/* How loud is this act? Violence carries; stealth crime is near-silent. A serial
+   killer muffles their kills (stealth scales with skill). 0..~0.9. */
+double crime_loudness(const Agent *perp, const char *kind) {
+    double v;
+    if      (!strcmp(kind, "arson")     || !strcmp(kind, "riot"))        v = 0.9;
+    else if (!strcmp(kind, "murder"))                                    v = 0.8;
+    else if (!strcmp(kind, "assault")   || !strcmp(kind, "the war"))     v = 0.7;
+    else if (!strcmp(kind, "robbery"))                                   v = 0.5;
+    else if (!strcmp(kind, "extortion"))                                 v = 0.4;
+    else if (!strcmp(kind, "vandalism"))                                 v = 0.2;
+    else                                                                 v = 0.1; /* theft/burglary/dealing/trafficking */
+    if (perp && perp->crime_role == CR_KILLER &&
+        (!strcmp(kind, "murder") || !strcmp(kind, "assault")))
+        v *= (1.0 - 0.6 * perp->crime_skill);   /* a skilled killer strikes quietly */
+    return v;
+}
+
+static void witnesses_at(World *w, Agent *perp, double loudness, int *civ, int *pol) {
     int x = (int)perp->x, y = (int)perp->y; *civ = 0; *pol = 0;
-    int vis = get_vision();
+    int vis = get_vision(), hear = get_hearing();
+    int reach = WITNESS_RADIUS;
+    if (hear) { int hr = (int)(get_hearing_radius() * loudness + 0.999); if (hr > reach) reach = hr; }
     for (int i = 0; i < w->n_agents; i++) {
         Agent *o = &w->agents[i];
         if (!o->alive || o->id == perp->id) continue;
-        if (abs((int)o->x - x) <= WITNESS_RADIUS && abs((int)o->y - y) <= WITNESS_RADIUS) {
-            if (vis && !agent_can_see(w, o, x, y)) continue;   /* only those who can see the act */
-            if (o->is_police) (*pol)++; else (*civ)++;
-        }
+        int saw = 0, heard = 0;
+        if (abs((int)o->x - x) <= WITNESS_RADIUS && abs((int)o->y - y) <= WITNESS_RADIUS)
+            saw = (!vis) || agent_can_see(w, o, x, y);         /* within sight range */
+        if (!saw && hear) heard = agent_can_hear(w, o, x, y, loudness);  /* or heard the noise */
+        if (!saw && !heard) continue;
+        if (o->is_police) (*pol)++; else (*civ)++;
     }
 }
 
@@ -195,7 +244,7 @@ static void do_deal(World *w, Agent *d) {
     if (d->drug_stock <= 0) return;
     Agent *cust = find_user_near(w, d, SELL_RADIUS);
     if (!cust) return;
-    int civ, pol; witnesses_at(w, d, &civ, &pol);
+    int civ, pol; witnesses_at(w, d, crime_loudness(d, "dealing"), &civ, &pol);
     if (pol && rng_double(&w->rng) < 0.5 - d->crime_skill * 0.3 + police_pressure(w)) {
         jail(d, "dealing");
         char t[96]; snprintf(t, sizeof(t), "%s was busted dealing", d->name);
@@ -221,7 +270,7 @@ static void do_traffic(World *w, Agent *p) {
     char t[96];
     if (p->crime_role == CR_KINGPIN) {
         if (p->drug_stock >= DRUG_BATCH) return;   /* only import when the stash runs low */
-        int civ, pol; witnesses_at(w, p, &civ, &pol); (void)civ;
+        int civ, pol; witnesses_at(w, p, crime_loudness(p, "trafficking"), &civ, &pol); (void)civ;
         if (pol && rng_double(&w->rng) < 0.35 - p->crime_skill * 0.25 + police_pressure(w)) {
             jail(p, "trafficking");
             snprintf(t, sizeof(t), "%s was caught trafficking a shipment", p->name);
@@ -246,7 +295,7 @@ static void do_traffic(World *w, Agent *p) {
 
 static void do_murder(World *w, Agent *k, Agent *victim) {
     if (!victim || !victim->alive) return;
-    int civ, pol; witnesses_at(w, k, &civ, &pol);
+    int civ, pol; witnesses_at(w, k, crime_loudness(k, "murder"), &civ, &pol);
     double chance = clampd(0.6 + k->crime_skill * 0.3 - civ * 0.15 - (pol ? 0.5 + police_pressure(w) : 0), 0.03, 0.97);
     char t[96];
     if (pol && rng_double(&w->rng) > chance) {
@@ -345,7 +394,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     if (!strcmp(kind, "murder"))      { do_murder(w, perp, target); return; }
 
     int x = (int)perp->x, y = (int)perp->y;
-    int civ, pol; witnesses_at(w, perp, &civ, &pol);
+    int civ, pol; witnesses_at(w, perp, crime_loudness(perp, kind), &civ, &pol);
     double skill = perp->crime_skill;
     double witw = (!strcmp(kind, "burglary")) ? 0.03 : 0.10;   /* burglary is indoors */
     double chance = clampd(0.62 - witw * civ - (pol ? 0.55 + police_pressure(w) : 0.0)
