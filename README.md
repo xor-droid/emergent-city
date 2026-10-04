@@ -34,10 +34,13 @@ A city's worth of interacting systems, all emergent from the agents:
 - **🔪 Crime underworld** — career criminals, street **dealers**, **kingpins**, and rare latent **serial killers**. A real drug economy (kingpin import → wholesale → street sales to addicts), **turf wars** and retaliation when dealers poach, career **escalation** (theft → burglary → robbery → arson), `wanted` heat, arrests, and **jail gangs** that settle scores behind bars. Assaults cause **injuries** you can die of or pay to **treat**.
 - **⚔️ Factions & warfare** — gangs and cults recruit members and hold **turf**. Rival factions **declare war**, their soldiers hunt each other through a shared **combat** system, casualties mount, and truces are called. (Warfare is strictly faction-vs-faction — it's a city, not a nation.)
 - **⚖️ Law** — police patrol and arrest; a crime surge triggers a temporary **crackdown**; repeat offenders get **longer sentences**.
-- **💰 Economy** — occupations, wages that track the cost of living, **goods-price inflation**, a **landlord class** that owns homes and collects **rent**, and **credit** (micro-loans, interest, debt that drags down your status).
+- **💰 Economy** — occupations, wages that track the cost of living, **goods-price inflation**, a **landlord class** that owns homes and collects **rent**, **credit** (micro-loans, interest, debt that drags down your status), and a per-worker **craft skill** that grows by working so experienced, educated hands earn more.
 - **🏅 Reputation & status** — a civic standing that work and worship raise and crime lowers, feeding into social **tiers and titles** (Destitute → Magnate, Officer, Kingpin, Notorious…).
 - **🌍 Culture** — religions, cultural groups, languages and **education**. Friendships form along cultural lines (a shared tongue bonds, a language barrier strains), the devout draw meaning from worship, and culture **spreads by contact**: the young get schooled, searching souls convert to a friend's faith, minorities assimilate into the common tongue.
-- **👶 Life cycle** — courtship → **marriage** → **children** who inherit the family's culture and faith; citizens **age** through life stages (Child → Youth → Adult → Elder) and eventually **die of old age**. Immigration brings young families so the city's age pyramid stays healthy. The whole pace is tunable.
+- **🔬 Knowledge & technology** — educated scholars accrue **research** into **theories**, which unlock a chain of **technologies** (writing, tooling, medicine, banking, printing, civics) that **diffuse** through the city and modestly lift wages, healing, interest, research and policing as they're adopted.
+- **👶 Life cycle** — courtship → **marriage** → **children** who inherit the family's culture and faith; citizens **age** through life stages (Child → Youth → Adult → Elder) and eventually **die of old age**. Immigration brings young families so the city's age pyramid stays healthy. Click a citizen and press **`K`** to walk their **family tree** (parents, spouse, children, siblings). The whole pace is tunable.
+- **👁️ Perception (opt-in)** — turn on **field of view** and agents only witness crimes / spot fugitives they can actually *see* (line-of-sight blocked by buildings), so crime goes stealthy in blind spots. Add **hearing** and loud acts — gunshots, brawls, arson, riots — still carry *around corners*, while a quiet pickpocket doesn't (serial killers are quieter still). The two together make a realistic cat-and-mouse.
+- **🗺️ Pathfinding & worldgen** — agents navigate with grid **A\*** + **Jump Point Search**, routing **around water** instead of walking over it. The city can be generated the default way (a sine river + district gradient) or with coherent **FastNoiseLite** noise (`--noise-worldgen`) for organic lakes and neighbourhoods.
 - **🎲 Determinism** — the core is a deterministic PCG32 sim with a fixed timestep; a run is **bit-for-bit reproducible from its seed** (headless, or the GUI with `--fixed-step`, LLM off). Binary save/load snapshots the whole world.
 
 ![City dashboard](docs/dashboard.png)
@@ -79,8 +82,9 @@ cmake --build build
 | **1–6** | sim speed 1×–6× |
 | **Space** | pause |
 | **E** | city dashboard |
+| **K** | family tree of the selected citizen (click a relative to jump) |
 | **T** | live tuning panel (change settings while it runs) |
-| **O** | cycle map overlays: crime-heat, faction-turf + war lines, culture |
+| **O** | cycle map overlays: crime-heat, faction-turf + war lines, culture, vision, hearing |
 | **F / J / C** | factions / jail roster / crime watch |
 | **Tab / L** | event feed / legend |
 | **G** | God Mode (`1`–`8` select a tool: smite, bless, spawn, incite riot…) |
@@ -99,14 +103,17 @@ Most sim parameters are flags **and** environment variables **and** live-adjusta
 
 ```bash
 ./build/csim --pop-target 250 --years-per-day 4      # bigger city, faster life cycle
+./build/csim --vision --hearing                      # perception on: stealthy, cat-and-mouse crime
+./build/csim --noise-worldgen                        # organic FastNoiseLite city (lakes, districts)
 ./build/csim --fixed-step                            # deterministic, reproducible run
 ./build/csim --family-share 0.6 --family-kids-max 5  # more children
+./build/csim --production 2 --research-rate 0.1      # skill matters more; faster tech
 CSIM_WARMDAYS=12 ./build/csim --pop-target 250       # open on an already-grown city
 CSIM_SHOT=out.png ./build/csim                       # render one frame to ./out.png and exit
 ./build/csim --tileset dawnlike                      # sprite tileset instead of blocks
 ```
 
-Run `./build/csim --help` for the full, categorized list (aging pace, population target, family demographics, timestep/determinism, rendering, screenshots, LLM, …).
+Run `./build/csim --help` for the full, categorized list (aging pace, population target, family demographics, perception, worldgen, knowledge/production, timestep/determinism, rendering, screenshots, LLM, …).
 
 ### Reproducibility
 
