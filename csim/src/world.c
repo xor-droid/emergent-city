@@ -115,6 +115,43 @@ static int comp_at(int x, int y) {
     if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return -1;
     return g_comp[y*WORLD_W + x];
 }
+
+/* Per-tile "nearest service by walking distance" fields (flow fields): a
+   multi-source BFS from every building of a type fills each walkable tile with the
+   id of the closest such building *by path*. So agents always head to the genuinely
+   nearest shop/bar/church, not one a river-detour away — the main cure for
+   distance-related deaths once water blocks movement. */
+enum { SVC_SHOP, SVC_BAR, SVC_CHURCH, SVC_COUNT };
+static int g_svc[SVC_COUNT][WORLD_W * WORLD_H];
+static const TileType SVC_TYPE[SVC_COUNT] = { T_SHOP, T_BAR, T_CHURCH };
+static void compute_services(World *w) {
+    static int queue[WORLD_W * WORLD_H];
+    static const int DX[4] = {1,-1,0,0}, DY[4] = {0,0,1,-1};
+    for (int s = 0; s < SVC_COUNT; s++) {
+        int *near = g_svc[s];
+        for (int i = 0; i < WORLD_W * WORLD_H; i++) near[i] = -1;
+        int head = 0, tail = 0;
+        for (int b = 0; b < w->n_buildings; b++) {       /* seed from every such building */
+            if (w->buildings[b].type != SVC_TYPE[s]) continue;
+            int bi = w->buildings[b].y * WORLD_W + w->buildings[b].x;
+            if (near[bi] == -1) { near[bi] = b; queue[tail++] = bi; }
+        }
+        while (head < tail) {
+            int c = queue[head++], cx = c % WORLD_W, cy = c / WORLD_W;
+            for (int d = 0; d < 4; d++) {
+                int nx = cx + DX[d], ny = cy + DY[d];
+                if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) continue;
+                int ni = ny*WORLD_W + nx;
+                if (near[ni] == -1 && tile_walkable(w, nx, ny)) { near[ni] = near[c]; queue[tail++] = ni; }
+            }
+        }
+    }
+}
+/* the nearest-by-path building id of a service type for an agent at (fx,fy), or -1 */
+static int nearest_service(int fx, int fy, int svc) {
+    if (fx < 0 || fx >= WORLD_W || fy < 0 || fy >= WORLD_H) return -1;
+    return g_svc[svc][fy*WORLD_W + fx];
+}
 /* nearest building of `type` in the same component as (fx,fy); falls back to the
    nearest of any component so a caller always gets something. */
 static int building_nearest_reachable(const World *w, int fx, int fy, TileType type) {
@@ -224,6 +261,7 @@ built:;
     }
 
     compute_components(w);   /* for reachability-aware targeting (pathing avoids water) */
+    compute_services(w);     /* per-tile nearest shop/bar/church by walking distance */
     w->hour = 8.0; w->day = 1;
     w->econ.goods_price = 1.0; w->econ.wage_mult = 1.0;
     factions_seed(w);
@@ -686,13 +724,16 @@ static void set_target(World *w, Agent *a) {
     switch (a->action) {
         case A_EAT:
             if (a->needs.hunger < NEED_CRITICAL) { a->tx = -1; a->ty = -1; return; }
-            b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;
-        case A_SHOP:  b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;
-        case A_SLEEP: case A_GO_HOME: b = a->home_id; break;
+            b = nearest_service((int)a->x, (int)a->y, SVC_SHOP); break;
+        case A_SHOP:  b = nearest_service((int)a->x, (int)a->y, SVC_SHOP); break;
+        case A_SLEEP:
+            if (a->needs.energy < NEED_CRITICAL) { a->tx = -1; a->ty = -1; return; }  /* drop where you are */
+            b = a->home_id; break;
+        case A_GO_HOME: b = a->home_id; break;
         case A_WORK:  b = a->workplace_id; break;
-        case A_DRINK: b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_BAR); break;
-        case A_PRAY:  b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_CHURCH); break;
-        case A_TREAT: b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_SHOP); break;  /* pharmacy/clinic */
+        case A_DRINK: b = nearest_service((int)a->x, (int)a->y, SVC_BAR); break;
+        case A_PRAY:  b = nearest_service((int)a->x, (int)a->y, SVC_CHURCH); break;
+        case A_TREAT: b = nearest_service((int)a->x, (int)a->y, SVC_SHOP); break;  /* pharmacy/clinic */
         case A_CRIME: {
             Agent *tgt = NULL;
             if (a->crime_role == CR_KINGPIN) { a->tx = -1; a->ty = -1; return; }  /* stay put, deal wholesale */
@@ -1003,6 +1044,6 @@ int world_load(World *w, const char *path) {
     if (!f) return 0;
     size_t rd = fread(w, sizeof(World), 1, f);
     fclose(f);
-    if (rd == 1) compute_components(w);   /* g_comp is derived, not stored */
+    if (rd == 1) { compute_components(w); compute_services(w); }   /* derived, not stored */
     return rd == 1;
 }
