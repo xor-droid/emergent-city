@@ -75,9 +75,16 @@ Deployed on the shared `nginx-unified` container (host networking) at
   normal user on the host) writes it — no permission clash
 - **revert:** delete the conf file + the `-v` line in `docker-run.sh`, then recreate the
   container (`docker rm -f nginx-unified && docker-run.sh`); `docker-run.sh.bak-*` backups exist
-- **feed it:** write the CSV into the web root, e.g.
-  `./csim/build/csim_headless --days 40 --metrics /opt/docker/deploy/emergent-city/web/metrics.csv`
-  run on the host, or `scp` your `metrics.csv` there.
+- **feed it (easiest):** [`feed.sh`](feed.sh) runs the sim locally and live-mirrors the
+  growing CSV to the web root over SSH (rsync loop, sends only the delta):
+  ```sh
+  tools/dashboard/feed.sh -- --days 40           # headless, live
+  tools/dashboard/feed.sh --bin ./csim/build/csim --   # GUI, live
+  tools/dashboard/feed.sh --mirror-only --local /tmp/m.csv   # mirror an existing writer
+  ```
+  Or feed it directly: write the CSV into the web root
+  (`--metrics /opt/docker/deploy/emergent-city/web/metrics.csv` when running on the host),
+  or `scp`/`rsync` your `metrics.csv` there.
 
 > Recreating this shared container briefly drops every nginx-unified vhost, so only do it
 > for mount changes; day-to-day edits (conf tweaks) just need `nginx -s reload`.
