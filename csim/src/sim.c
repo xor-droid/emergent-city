@@ -170,6 +170,10 @@ double get_craft_bonus(void) { return g_craft_bonus; }
 static double g_child_cost = CHILD_COST;   /* daily per-child upkeep paid by parents */
 void   set_child_cost(double c) { if (c >= 0.0) g_child_cost = c; }
 double get_child_cost(void) { return g_child_cost; }
+
+static double g_metrics_every = METRICS_EVERY_HOURS;  /* dashboard sample cadence, game-hours */
+void   set_metrics_every(double h) { if (h > 0.0) g_metrics_every = h; }
+double get_metrics_every(void) { return g_metrics_every; }
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {

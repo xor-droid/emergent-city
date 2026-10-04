@@ -117,14 +117,16 @@ Run `./build/csim --help` for the full, categorized list (aging pace, population
 
 ### Balance dashboard
 
-Pass `--metrics <path.csv>` (GUI or headless) to log **one CSV row per game-day** with
-every aggregate the city tracks — population by life stage, births/deaths, economy, every
-crime kind, knowledge/tech adoption, culture, factions/wars. A static, auto-refreshing web
-dashboard in [`tools/dashboard/`](tools/dashboard/) (vendored Chart.js, no build step)
-polls that CSV and redraws ~16 charts live — no page reload — for both live runs and
-replays. Headless can **replay** a past run two ways: `--replay old.csv` (stream it back so
-the graphs animate) or `--rerun old.csv.meta` (deterministically reproduce it). Serve it
-with any static host; see [the dashboard README](tools/dashboard/README.md) for nginx notes.
+Pass `--metrics <path.csv>` (GUI or headless) to log a CSV row with every aggregate the
+city tracks — population by life stage, births/deaths, economy, every crime kind,
+knowledge/tech adoption, culture, factions/wars — once per game-day, or finer with
+`--metrics-every <game-hours>` / `--metrics-hourly` (rows carry a fractional-day `t`
+column). A static, auto-refreshing web dashboard in [`tools/dashboard/`](tools/dashboard/)
+(vendored Chart.js, no build step) polls that CSV and redraws ~16 charts live — no page
+reload — for both live runs and replays; **click any chart to enlarge** it. Headless can
+**replay** a past run two ways: `--replay old.csv` (stream it back so the graphs animate)
+or `--rerun old.csv.meta` (deterministically reproduce it). Serve it with any static host;
+see [the dashboard README](tools/dashboard/README.md) for nginx notes.
 
 ### Reproducibility
 

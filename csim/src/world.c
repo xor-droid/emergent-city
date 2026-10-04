@@ -1028,7 +1028,8 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); metrics_tick(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); }
+    metrics_sample_maybe(w);   /* samples on the configured cadence (default once/day) */
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */
@@ -1057,6 +1058,7 @@ int world_load(World *w, const char *path) {
  * observers of World — they draw no w->rng numbers, so default runs stay
  * byte-identical whether or not export is enabled. */
 static FILE *g_metrics = NULL;
+static double g_last_sample = -1e18;   /* game-hours (day*24+hour) of the last row written */
 
 /* Write ",<prefix><slug>" — a CSV-safe column name: lowercase, non-alphanumerics
  * (spaces, etc.) collapsed to '_'. Keeps headers machine-friendly ("Old Faith"
@@ -1076,9 +1078,10 @@ void metrics_open(const char *path) {
     if (g_metrics) { fclose(g_metrics); g_metrics = NULL; }
     g_metrics = fopen(path, "w");
     if (!g_metrics) return;
-    /* fixed columns */
+    g_last_sample = -1e18;    /* so the first tick emits a row immediately */
+    /* fixed columns — t is fractional game-days (day + hour/24), the x-axis */
     fprintf(g_metrics,
-        "day,alive,children,youths,adults,elders,avg_age,"
+        "t,day,hour,alive,children,youths,adults,elders,avg_age,"
         "couples,married,pregnant,born_alive,deaths,in_faction,avg_friends,max_friends,"
         "avg_money,goods_price,wage,indebted,total_debt,landlords,"
         "crimes,wanted,jailed");
@@ -1125,8 +1128,8 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     int factions=0; for(int i=0;i<w->n_factions;i++) if(w->factions[i].active && w->factions[i].members) factions++;
     int techs=0; for(int k=0;k<TECH_COUNT;k++) techs+=w->sci.discovered[k];
 
-    fprintf(g_metrics, "%d,%d,%d,%d,%d,%d,%ld",
-        w->day, alive, ch, yo, ad, el, alive?agesum/alive:0);
+    fprintf(g_metrics, "%.4f,%d,%.2f,%d,%d,%d,%d,%d,%ld",
+        w->day + w->hour / 24.0, w->day, w->hour, alive, ch, yo, ad, el, alive?agesum/alive:0);
     fprintf(g_metrics, ",%d,%d,%d,%d,%d,%d,%.2f,%d",
         couples/2, married, preg, born, w->deaths, in_faction,
         alive?(double)total_friends/alive:0.0, max_friends);
@@ -1143,6 +1146,17 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     for (int i=0;i<LANG_COUNT;i++) fprintf(g_metrics, ",%d", lang[i]);
     fprintf(g_metrics, ",%d,%d,%d,%d\n", factions, wars, war_cas, w->crackdown_days>0?1:0);
     fflush(g_metrics);
+}
+
+/* Called every tick: write a row whenever the sampling cadence has elapsed. Default
+ * cadence is 24 game-hours (one row per day); set smaller (e.g. 1) for intra-day. */
+void metrics_sample_maybe(World *w) {
+    if (!g_metrics) return;
+    double now = w->day * 24.0 + w->hour;             /* elapsed game-hours */
+    if (now - g_last_sample >= get_metrics_every() - 1e-9) {
+        g_last_sample = now;
+        metrics_tick(w);
+    }
 }
 
 /* Sidecar manifest written beside the metrics CSV: records seed + days + every knob
@@ -1163,6 +1177,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "research_rate=%g\n", get_research_rate());
     fprintf(f, "production=%g\n", get_craft_bonus());
     fprintf(f, "child_cost=%g\n", get_child_cost());
+    fprintf(f, "metrics_every=%g\n", get_metrics_every());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

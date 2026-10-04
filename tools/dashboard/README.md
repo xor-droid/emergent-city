@@ -89,12 +89,31 @@ Deployed on the shared `nginx-unified` container (host networking) at
 > Recreating this shared container briefly drops every nginx-unified vhost, so only do it
 > for mount changes; day-to-day edits (conf tweaks) just need `nginx -s reload`.
 
-## 3. Auto-refresh
+## 3. Auto-refresh & interaction
 
 The page polls `metrics.csv` every **1.5 s** (override with `?poll=3000` for 3 s),
 cache-busts each request, and updates the Chart.js datasets in place — no reload, no
 flicker. The header dot shows **live** while rows are still arriving and **idle** once
 the file stops growing. Load a different file with `?src=other.csv`.
+
+**Click any chart to enlarge** it in a modal (it keeps updating live while open; close
+with ×, the backdrop, or Esc).
+
+## 3b. Sampling resolution (finer than per-day)
+
+By default the sim writes **one row per game-day**. For smoother graphs, sample more
+often with `--metrics-every H` (game-hours) or `--metrics-hourly` (= `--metrics-every 1`):
+
+```sh
+./csim/build/csim_headless --days 10 --metrics-hourly --metrics tools/dashboard/metrics.csv
+./csim/build/csim_headless --days 10 --metrics-every 0.5 --metrics .../metrics.csv   # twice/hour
+```
+
+The CSV carries a fractional-day column **`t`** (`day + hour/24`) plus `day` and `hour`;
+the dashboard uses `t` as the x-axis automatically when present, so intra-day rows plot
+correctly. Cumulative counters (deaths, crimes, …) accumulate between samples; the
+"per-day" delta charts become per-**sample** deltas at finer cadence. The cadence is
+recorded in `*.meta`, so `--rerun` reproduces it.
 
 ## 4. Replay a previous session (headless)
 

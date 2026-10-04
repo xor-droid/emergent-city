@@ -42,9 +42,11 @@ static void usage(const char *argv0) {
     printf("  --seed N              worldgen seed (default 1337); same seed+config = same run.\n");
     printf("\n");
     printf("Balance metrics (feeds the live web dashboard in tools/dashboard/):\n");
-    printf("  --metrics PATH        append one CSV row of all daily aggregates per game-day to\n");
-    printf("                        PATH (live; point it at the dashboard dir so nginx serves it).\n");
+    printf("  --metrics PATH        append one CSV row of all aggregates per sample to PATH\n");
+    printf("                        (live; point it at the dashboard dir so nginx serves it).\n");
     printf("                        Also writes PATH.meta (seed+config) for deterministic re-run.\n");
+    printf("  --metrics-every H     sample cadence in game-hours (default 24 = once/day); e.g. 1\n");
+    printf("  --metrics-hourly      for hourly, 0.5 for twice an hour. Finer = smoother graphs.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -83,6 +85,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
     printf("    CSIM_SEED=N         worldgen seed (as --seed).\n");
     printf("    CSIM_METRICS=PATH   live balance CSV export (as --metrics).\n");
+    printf("    CSIM_METRICS_EVERY=H  sample cadence in game-hours (as --metrics-every).\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
@@ -128,6 +131,7 @@ int main(int argc, char **argv) {
     int hearing = -1, hearradius = -1; /* hearing; <0 = unset */
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
     const char *metrics = NULL;        /* balance CSV export path; NULL = off */
+    double metricsevery = -1.0;        /* sample cadence in game-hours; <0 = unset */
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -163,6 +167,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-noise-worldgen")) { noisegen = 0; }
         else if (!strcmp(argv[i], "--metrics") && i + 1 < argc) { metrics = argv[++i]; }
         else if (!strncmp(argv[i], "--metrics=", 10)) { metrics = argv[i] + 10; }
+        else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc) { metricsevery = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--metrics-every=", 16)) { metricsevery = atof(argv[i] + 16); }
+        else if (!strcmp(argv[i], "--metrics-hourly")) { metricsevery = 1.0; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -208,6 +215,8 @@ int main(int argc, char **argv) {
     if (noisegen < 0) { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) noisegen = atoi(e); }
     if (noisegen >= 0) set_noise_worldgen(noisegen);   /* must precede world_init */
     if (!metrics) metrics = getenv("CSIM_METRICS");
+    if (metricsevery < 0.0) { const char *e = getenv("CSIM_METRICS_EVERY"); if (e) metricsevery = atof(e); }
+    if (metricsevery > 0.0) set_metrics_every(metricsevery);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

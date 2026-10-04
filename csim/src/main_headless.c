@@ -31,6 +31,8 @@ static void husage(const char *a0) {
     printf("  --seed N              worldgen seed (default 1337); same seed+config = same run.\n");
     printf("  --days N              game-days to simulate (default 6).\n");
     printf("  --metrics PATH        live balance CSV export (point at the dashboard dir).\n");
+    printf("  --metrics-every H     sample cadence in game-hours (default 24 = once/day; 1 = hourly).\n");
+    printf("  --metrics-hourly      shorthand for --metrics-every 1.\n");
     printf("  --replay IN.csv       replay a recorded run: stream its rows to --metrics (or\n");
     printf("                        stdout) at --replay-interval seconds each (pure playback,\n");
     printf("                        no simulation). Lets the dashboard animate a past session.\n");
@@ -106,6 +108,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "research_rate"))  set_research_rate(d);
         else if (!strcmp(key, "production"))      set_craft_bonus(d);
         else if (!strcmp(key, "child_cost"))      set_child_cost(d);
+        else if (!strcmp(key, "metrics_every"))   set_metrics_every(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -119,6 +122,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
 int main(int argc, char **argv) {
     const char *metrics = NULL, *replay_in = NULL, *rerun_in = NULL;
     double replay_interval = 0.3;
+    double mevery = -1.0;   /* metrics cadence (game-hours); <0 = unset, CLI wins */
     long seed = -1;      /* <0 = unset */
     int  days = -1;      /* <0 = unset */
 
@@ -130,6 +134,9 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--days=", 7))                        days = atoi(argv[i] + 7);
         else if (!strcmp(argv[i], "--metrics") && i + 1 < argc)          metrics = argv[++i];
         else if (!strncmp(argv[i], "--metrics=", 10))                    metrics = argv[i] + 10;
+        else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc)    mevery = atof(argv[++i]);
+        else if (!strncmp(argv[i], "--metrics-every=", 16))              mevery = atof(argv[i] + 16);
+        else if (!strcmp(argv[i], "--metrics-hourly"))                   mevery = 1.0;
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc)           replay_in = argv[++i];
         else if (!strncmp(argv[i], "--replay=", 9))                      replay_in = argv[i] + 9;
         else if (!strcmp(argv[i], "--replay-interval") && i + 1 < argc)  replay_interval = atof(argv[++i]);
@@ -159,6 +166,7 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_HEARING_RADIUS"); if (e) set_hearing_radius(atoi(e)); }
     { const char *e = getenv("CSIM_HEARING"); if (e) set_hearing(atoi(e)); }
     { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) set_noise_worldgen(atoi(e)); }
+    { const char *e = getenv("CSIM_METRICS_EVERY"); if (e) set_metrics_every(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;
@@ -167,6 +175,8 @@ int main(int argc, char **argv) {
         if (days < 0 && mdays >= 0) days = mdays;
         fprintf(stderr, "rerun: reproducing %s (seed=%ld, days=%d)\n", rerun_in, seed, days);
     }
+
+    if (mevery > 0.0) set_metrics_every(mevery);   /* CLI --metrics-every wins over env/manifest */
 
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;

@@ -490,9 +490,13 @@ void   set_child_cost(double c);            /* --child-cost / CSIM_CHILD_COST */
 double get_child_cost(void);
 double worker_output(const Agent *a);       /* pay/output factor from craft + education */
 
-/* ── Balance metrics export (dashboard): one CSV row per game-day ───────────── */
-void metrics_open(const char *path);        /* CSV_METRICS / --metrics; "" / NULL = off */
-void metrics_tick(World *w);                 /* call on day change; no-op unless opened */
+/* ── Balance metrics export (dashboard): one CSV row per sample ─────────────── */
+#define METRICS_EVERY_HOURS 24.0             /* default sampling cadence: once per game-day */
+void metrics_open(const char *path);        /* CSIM_METRICS / --metrics; "" / NULL = off */
+void metrics_tick(World *w);                 /* write one row now (no-op unless opened) */
+void metrics_sample_maybe(World *w);         /* call every tick; samples on the cadence */
+void   set_metrics_every(double hours);      /* --metrics-every / CSIM_METRICS_EVERY (game-hours) */
+double get_metrics_every(void);
 void metrics_write_manifest(const char *csv_path, unsigned int seed, int days);
 
 const char *faith_name(unsigned char f);
