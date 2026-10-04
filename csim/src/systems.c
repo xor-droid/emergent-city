@@ -132,13 +132,14 @@ static void witnesses_at(World *w, Agent *perp, int *civ, int *pol) {
 
 /* nearest plausible drug customer (prefer existing users) */
 static Agent *find_user_near(World *w, Agent *d, int radius) {
-    Agent *bestA = NULL, *bestAny = NULL; double bdA = 1e18, bdAny = 1e18;
+    Agent *bestA = NULL, *bestAny = NULL; double bdA = 1e18, bdAny = 1e18; int vis = get_vision();
     for (int i = 0; i < w->n_agents; i++) {
         Agent *o = &w->agents[i];
         if (!o->alive || o->id == d->id || o->is_police || o->arrested_ticks > 0) continue;
         if (o->crime_role == CR_DEALER || o->crime_role == CR_KINGPIN) continue;
         double dx = o->x - d->x, dy = o->y - d->y, dd = dx*dx + dy*dy;
         if (dd > (double)radius * radius) continue;
+        if (vis && !agent_can_see(w, d, (int)o->x, (int)o->y)) continue;   /* deal with a buyer in sight */
         if (o->addiction > 0.1 && dd < bdA) { bdA = dd; bestA = o; }
         if (dd < bdAny) { bdAny = dd; bestAny = o; }
     }

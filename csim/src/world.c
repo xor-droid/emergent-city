@@ -556,10 +556,11 @@ Agent *world_agent_at(World *w, int tx, int ty, double radius) {
 /* ── Per-agent helpers ───────────────────────────────────────────────────── */
 /* crime seeking: head toward the right other agent so the trade/violence connects */
 static Agent *seek_customer(World *w, Agent *d) {
-    Agent *best = NULL; double bd = 1e18;
+    Agent *best = NULL; double bd = 1e18; int vis = get_vision();
     for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
         if (!o->alive || o->id == d->id || o->is_police || o->arrested_ticks > 0) continue;
         if (o->crime_role == CR_DEALER || o->crime_role == CR_KINGPIN) continue;
+        if (vis && !agent_can_see(w, d, (int)o->x, (int)o->y)) continue;   /* pursue a customer in sight */
         double dx = o->x - d->x, dy = o->y - d->y;
         double dd = dx*dx + dy*dy + (o->addiction > 0.1f ? 0.0 : 2000.0);  /* prefer addicts */
         if (dd < bd) { bd = dd; best = o; }
@@ -576,10 +577,11 @@ static Agent *seek_kingpin(World *w, Agent *d) {
     return best;
 }
 static Agent *seek_victim(World *w, Agent *a, int rival_faction_only) {
-    Agent *best = NULL; double bd = 1e18;
+    Agent *best = NULL; double bd = 1e18; int vis = get_vision();
     for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
         if (!o->alive || o->id == a->id || o->is_police || o->arrested_ticks > 0) continue;
         if (rival_faction_only && !(o->faction_id >= 0 && o->faction_id != a->faction_id)) continue;
+        if (vis && !agent_can_see(w, a, (int)o->x, (int)o->y)) continue;   /* stalk prey in sight */
         double dx = o->x - a->x, dy = o->y - a->y, dd = dx*dx + dy*dy;
         if (dd < bd) { bd = dd; best = o; }
     }
@@ -661,13 +663,16 @@ static const char *choose_crime_kind(World *w, Agent *a, Agent *target) {
 }
 
 static Agent *nearest_other(World *w, Agent *a, int radius) {
-    Agent *best = NULL; int bd = radius * radius + 1;
+    Agent *best = NULL; int bd = radius * radius + 1; int vis = get_vision();
     for (int i = 0; i < w->n_agents; i++) {
         Agent *o = &w->agents[i];
         if (!o->alive || o->id == a->id) continue;
         int d = ((int)o->x - (int)a->x) * ((int)o->x - (int)a->x) +
                 ((int)o->y - (int)a->y) * ((int)o->y - (int)a->y);
-        if (d <= bd) { bd = d; best = o; }
+        if (d <= bd) {
+            if (vis && !agent_can_see(w, a, (int)o->x, (int)o->y)) continue;  /* only who you can see */
+            bd = d; best = o;
+        }
     }
     return best;
 }
