@@ -896,17 +896,21 @@ void economy_daily(World *w) {
                 double rent = RENT_TO_LANDLORD * e->goods_price;
                 if (rent > a->needs.money) rent = a->needs.money;
                 a->needs.money -= rent;
+                a->day_income -= rent;                      /* rent paid (net income) */
                 Agent *ll = world_agent_by_id(w, hb->owner_id);
-                if (ll && ll->alive) ll->needs.money += rent;
+                if (ll && ll->alive) { ll->needs.money += rent; ll->day_income += rent; }  /* rent received */
             }
         }
         /* municipal upkeep (a modest sink) */
-        a->needs.money = clampd(a->needs.money - a->needs.money * UPKEEP_FRACTION, 0.0, 1e9);
+        double upkeep = a->needs.money * UPKEEP_FRACTION;
+        a->needs.money = clampd(a->needs.money - upkeep, 0.0, 1e9);
+        a->day_income -= upkeep;                            /* cost of living (net income) */
 
         /* ── credit: interest accrues; repay when flush, borrow when destitute ── */
         /* Banking (tech) lowers the rate as it spreads */
         double interest = DAILY_INTEREST * (1.0 - 0.5 * w->sci.adoption[TECH_BANKING]);
         if (a->debt > 0.0) {
+            a->day_income -= a->debt * interest;            /* interest expense (net income) */
             a->debt *= (1.0 + interest);
             if (a->needs.money > LOW_MONEY * 2) {
                 double repay = a->needs.money - LOW_MONEY * 2;
@@ -923,11 +927,16 @@ void economy_daily(World *w) {
         if (a->injury > 0.0f) a->injury = (float)clampd(a->injury - 0.08, 0, 2);            /* wounds slowly heal */
         a->reputation = (float)clampd(a->reputation + (a->reputation > 0 ? -0.01 : 0.01), -1, 1);  /* drift to neutral */
 
-        /* recompute social tier from wealth + reputation + role + debt */
+        /* recompute social tier from household wealth + reputation + role + debt.
+         * Class is household-based: a low-wage spouse in a rich home still reads well-off.
+         * (hh_wealth is last day's aggregate; a 1-day lag on a display tier is fine.) */
+        double pcwealth = a->needs.money;
+        if (a->home_id >= 0 && w->buildings[a->home_id].hh_size > 0)
+            pcwealth = w->buildings[a->home_id].hh_wealth / w->buildings[a->home_id].hh_size;
         int tier = 2;
-        if (a->needs.money > 400) tier++;
-        if (a->needs.money > 1000) tier++;
-        if (a->needs.money < LOW_MONEY) tier--;
+        if (pcwealth > 400) tier++;
+        if (pcwealth > 1000) tier++;
+        if (pcwealth < LOW_MONEY) tier--;
         if (a->reputation > 0.3f) tier++;
         if (a->reputation < -0.3f) tier--;
         if (a->crime_role == CR_KINGPIN) tier++;
@@ -966,8 +975,10 @@ void economy_daily(World *w) {
                 double share = (cc - paid) / (np - p);             /* split the remainder evenly */
                 if (share > pr[p]->needs.money) share = pr[p]->needs.money;
                 pr[p]->needs.money -= share; paid += share;
+                pr[p]->day_income -= share;                        /* child upkeep paid (net income) */
             }
             c->needs.money += paid;                                /* the child's allowance */
+            c->day_income += paid;                                 /* allowance received (net income) */
             if (paid < cc * 0.5) {                                 /* under-provided: a child goes without */
                 c->needs.hunger = clampd(c->needs.hunger - 0.08, 0, 1);
                 c->needs.safety = clampd(c->needs.safety - 0.04, 0, 1);

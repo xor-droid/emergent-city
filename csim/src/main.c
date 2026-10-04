@@ -31,6 +31,9 @@ static void usage(const char *argv0) {
     printf("                        (default 1.0; 0 = flat wages, higher = skill matters more).\n");
     printf("  --child-cost N        daily upkeep each dependent child costs its parents\n");
     printf("                        (default 3; 0 = children are free).\n");
+    printf("  --occ-pay-spread F    how much occupation sets base pay (socioeconomic class):\n");
+    printf("                        0 = flat/legacy (default), 1 = full tier spread (officer/\n");
+    printf("                        shopkeep earn more than laborers). Drives wealth inequality.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -80,6 +83,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_RESEARCH_RATE  knowledge/tech discovery pace (same as --research-rate).\n");
     printf("    CSIM_PRODUCTION     craft/output pay weight (same as --production).\n");
     printf("    CSIM_CHILD_COST     per-child daily upkeep (same as --child-cost).\n");
+    printf("    CSIM_OCC_PAY_SPREAD occupation pay-tier spread (same as --occ-pay-spread).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
@@ -132,6 +136,7 @@ int main(int argc, char **argv) {
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
     const char *metrics = NULL;        /* balance CSV export path; NULL = off */
     double metricsevery = -1.0;        /* sample cadence in game-hours; <0 = unset */
+    double occspread = -1.0;           /* occupation pay-tier spread; <0 = unset */
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -170,6 +175,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc) { metricsevery = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--metrics-every=", 16)) { metricsevery = atof(argv[i] + 16); }
         else if (!strcmp(argv[i], "--metrics-hourly")) { metricsevery = 1.0; }
+        else if (!strcmp(argv[i], "--occ-pay-spread") && i + 1 < argc) { occspread = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--occ-pay-spread=", 17)) { occspread = atof(argv[i] + 17); }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -217,6 +224,8 @@ int main(int argc, char **argv) {
     if (!metrics) metrics = getenv("CSIM_METRICS");
     if (metricsevery < 0.0) { const char *e = getenv("CSIM_METRICS_EVERY"); if (e) metricsevery = atof(e); }
     if (metricsevery > 0.0) set_metrics_every(metricsevery);
+    if (occspread < 0.0) { const char *e = getenv("CSIM_OCC_PAY_SPREAD"); if (e) occspread = atof(e); }
+    if (occspread >= 0.0) set_occ_pay_spread(occspread);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

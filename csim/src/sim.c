@@ -174,6 +174,17 @@ double get_child_cost(void) { return g_child_cost; }
 static double g_metrics_every = METRICS_EVERY_HOURS;  /* dashboard sample cadence, game-hours */
 void   set_metrics_every(double h) { if (h > 0.0) g_metrics_every = h; }
 double get_metrics_every(void) { return g_metrics_every; }
+
+/* Occupation pay tiers: relative base pay per OCC_* (the structural root of class).
+ * Index order matches the OCC_* enum: NONE, LABORER, SHOPKEEP, BARKEEP, CLERGY, OFFICER. */
+static const double OCC_WAGE[OCC_COUNT] = { 1.00, 0.85, 1.25, 1.00, 1.15, 1.40 };
+static double g_occ_pay_spread = OCC_PAY_SPREAD;   /* 0 = flat (legacy, byte-identical); 1 = full table */
+void   set_occ_pay_spread(double s) { if (s >= 0.0) g_occ_pay_spread = s; }
+double get_occ_pay_spread(void) { return g_occ_pay_spread; }
+double occ_base_wage(unsigned char occ) {
+    double base = (occ < OCC_COUNT) ? OCC_WAGE[occ] : 1.0;
+    return 1.0 + g_occ_pay_spread * (base - 1.0);   /* spread 0 -> 1.0 for all (no change) */
+}
 /* a worker's pay/output factor: a skilled, schooled hand earns more than a novice.
    (City-wide Tooling tech is applied separately via the wage multiplier.) */
 double worker_output(const Agent *a) {

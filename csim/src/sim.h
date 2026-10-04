@@ -287,6 +287,7 @@ typedef struct {
     /* ── economy ── */
     unsigned char occupation;   /* OCC_* derived from workplace */
     double debt;                /* outstanding credit (accrues daily interest) */
+    double day_income;          /* net legitimate cash flow accumulated this day (transient) */
 
     /* ── culture ── */
     unsigned char faith;        /* FAITH_* religion followed */
@@ -317,6 +318,10 @@ typedef struct {
     int n_residents;        /* for homes */
     int n_workers;          /* for workplaces */
     int owner_id;           /* landlord who owns this building (-1 none) */
+    /* household aggregates (homes only; recomputed daily by households_daily) */
+    int    hh_size;         /* living residents */
+    double hh_wealth;       /* sum of residents' money */
+    double hh_income;       /* residents' net legitimate income for the last day */
 } Building;
 
 /* City-wide economy: markets, prevailing wages. */
@@ -491,6 +496,13 @@ double get_craft_bonus(void);
 void   set_child_cost(double c);            /* --child-cost / CSIM_CHILD_COST */
 double get_child_cost(void);
 double worker_output(const Agent *a);       /* pay/output factor from craft + education */
+
+/* ── Socioeconomics: occupation pay tiers + households (dashboard diversity) ──── */
+#define OCC_PAY_SPREAD 0.0                   /* default: flat pay (legacy); 1.0 = full tier spread */
+double occ_base_wage(unsigned char occ);     /* occupation pay multiplier, scaled by the spread knob */
+void   set_occ_pay_spread(double s);         /* --occ-pay-spread / CSIM_OCC_PAY_SPREAD */
+double get_occ_pay_spread(void);
+void   households_daily(World *w);            /* recompute per-home hh_size/hh_wealth/hh_income (day change) */
 
 /* ── Balance metrics export (dashboard): one CSV row per sample ─────────────── */
 #define METRICS_EVERY_HOURS 24.0             /* default sampling cadence: once per game-day */

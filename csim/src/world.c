@@ -313,6 +313,7 @@ void world_populate(World *w, int n) {
     factions_populate(w);    /* enlist members into gangs/cults so factions are real actors */
     economy_setup(w);        /* occupations, landlords/tenants */
     culture_setup(w);        /* faith, cultural group, language, schooling */
+    households_daily(w);     /* seed per-home aggregates so class/metrics work from day 0 */
 }
 
 Agent *world_agent_by_id(World *w, int id) {
@@ -860,8 +861,9 @@ static void execute_action(World *w, Agent *a) {
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
         case A_WORK: {  /* pay scales with the worker's craft + schooling (human capital) */
-                        double pay = WAGE_PER_SHIFT * w->econ.wage_mult * worker_output(a);
+                        double pay = WAGE_PER_SHIFT * w->econ.wage_mult * worker_output(a) * occ_base_wage(a->occupation);
                         n->money += pay;
+                        a->day_income += pay;     /* household net income (dashboard) */
                         w->wages_earned += pay;   /* cumulative legal income (dashboard) */
                         n->energy = clampd(n->energy - 0.1, 0, 1);
                         n->meaning = clampd(n->meaning + 0.05, 0, 1);
@@ -1030,7 +1032,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); households_daily(w); }
     metrics_sample_maybe(w);   /* samples on the configured cadence (default once/day) */
 }
 
@@ -1049,6 +1051,28 @@ int world_load(World *w, const char *path) {
     fclose(f);
     if (rd == 1) { compute_components(w); compute_services(w); }   /* derived, not stored */
     return rd == 1;
+}
+
+/* ── Households: recompute per-home aggregates (call on day change) ────────────
+ * A household = living agents sharing a home_id. hh_wealth = Σ residents' money;
+ * hh_income = Σ residents' net legitimate cash flow for the day (day_income), which
+ * is then reset for the next day. Pure accounting over existing state. */
+void households_daily(World *w) {
+    for (int b = 0; b < w->n_buildings; b++)
+        if (w->buildings[b].type == T_HOME) {
+            w->buildings[b].hh_size = 0; w->buildings[b].hh_wealth = 0; w->buildings[b].hh_income = 0;
+        }
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive) continue;
+        if (a->home_id >= 0 && w->buildings[a->home_id].type == T_HOME) {
+            Building *hb = &w->buildings[a->home_id];
+            hb->hh_size++;
+            hb->hh_wealth += a->needs.money;
+            hb->hh_income += a->day_income;
+        }
+        a->day_income = 0;   /* reset the accumulator for the next day */
+    }
 }
 
 /* ── Balance metrics: one CSV row per game-day for the monitoring dashboard ────
@@ -1099,8 +1123,18 @@ void metrics_open(const char *path) {
     for (int i = 0; i < FAITH_COUNT; i++) fput_slug(g_metrics, "faith_", faith_name((unsigned char)i));
     for (int i = 0; i < LANG_COUNT; i++) fput_slug(g_metrics, "lang_", language_name((unsigned char)i));
     /* governance / factions */
-    fprintf(g_metrics, ",factions,wars,war_casualties,crackdown\n");
+    fprintf(g_metrics, ",factions,wars,war_casualties,crackdown");
+    /* socioeconomics: wealth inequality + household income distribution + class tiers */
+    fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
+    for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
+    fprintf(g_metrics, "\n");
     fflush(g_metrics);
+}
+
+/* ascending qsort comparator for doubles (metrics quantiles) */
+static int cmp_double(const void *a, const void *b) {
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
 }
 
 void metrics_tick(World *w) {     /* called on day change; no-op unless a file is open */
@@ -1133,6 +1167,23 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     int techs=0; for(int k=0;k<TECH_COUNT;k++) techs+=w->sci.discovered[k];
     double crime_income=0; for(int k=0;k<CK_COUNT;k++) crime_income+=w->crime_take[k];
 
+    /* ── socioeconomics: wealth Gini, household-income quartiles, class tiers ── */
+    static double mv[MAX_AGENTS];        /* living agents' money, for the Gini */
+    int nm=0; int cls[5]={0,0,0,0,0};
+    for (int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i]; if(!a->alive) continue;
+        mv[nm++]=a->needs.money; if(a->status<5) cls[a->status]++; }
+    double gini=0;
+    if (nm>0){ qsort(mv,nm,sizeof(double),cmp_double);
+        double cum=0,wsum=0; for(int i=0;i<nm;i++){ cum+=(double)(i+1)*mv[i]; wsum+=mv[i]; }
+        if (wsum>0) gini = (2.0*cum)/(nm*wsum) - (double)(nm+1)/nm; }
+    static double hi[MAX_BUILDINGS];     /* occupied homes' net income, for quartiles */
+    int nh=0; double hisum=0;
+    for (int b=0;b<w->n_buildings;b++) if(w->buildings[b].type==T_HOME && w->buildings[b].hh_size>0){
+        hi[nh++]=w->buildings[b].hh_income; hisum+=w->buildings[b].hh_income; }
+    double hp25=0,hmed=0,hp75=0,hmean=0;
+    if (nh>0){ qsort(hi,nh,sizeof(double),cmp_double);
+        hp25=hi[nh/4]; hmed=hi[nh/2]; hp75=hi[(nh*3)/4]; hmean=hisum/nh; }
+
     fprintf(g_metrics, "%.4f,%d,%.2f,%d,%d,%d,%d,%d,%ld",
         w->day + w->hour / 24.0, w->day, w->hour, alive, ch, yo, ad, el, alive?agesum/alive:0);
     fprintf(g_metrics, ",%d,%d,%d,%d,%d,%d,%.2f,%d",
@@ -1151,7 +1202,10 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%d,%d", relig, common);
     for (int i=0;i<FAITH_COUNT;i++) fprintf(g_metrics, ",%d", faith[i]);
     for (int i=0;i<LANG_COUNT;i++) fprintf(g_metrics, ",%d", lang[i]);
-    fprintf(g_metrics, ",%d,%d,%d,%d\n", factions, wars, war_cas, w->crackdown_days>0?1:0);
+    fprintf(g_metrics, ",%d,%d,%d,%d", factions, wars, war_cas, w->crackdown_days>0?1:0);
+    fprintf(g_metrics, ",%.4f,%.0f,%.0f,%.0f,%.0f", gini, hp25, hmed, hp75, hmean);
+    for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
+    fprintf(g_metrics, "\n");
     fflush(g_metrics);
 }
 
@@ -1185,6 +1239,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "production=%g\n", get_craft_bonus());
     fprintf(f, "child_cost=%g\n", get_child_cost());
     fprintf(f, "metrics_every=%g\n", get_metrics_every());
+    fprintf(f, "occ_pay_spread=%g\n", get_occ_pay_spread());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

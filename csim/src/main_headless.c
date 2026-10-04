@@ -47,6 +47,7 @@ static void husage(const char *a0) {
     printf("  CSIM_YEARS_PER_DAY CSIM_FAMILY_SHARE CSIM_FAMILY_KIDS_MIN/MAX CSIM_POP_TARGET\n");
     printf("  CSIM_RESEARCH_RATE CSIM_PRODUCTION CSIM_CHILD_COST CSIM_VISION[_RADIUS]\n");
     printf("  CSIM_HEARING[_RADIUS] CSIM_NOISE_WORLDGEN CSIM_SEED CSIM_DAYS CSIM_METRICS\n");
+    printf("  CSIM_OCC_PAY_SPREAD (--occ-pay-spread F: 0 flat/legacy .. 1 full occupation pay tiers)\n");
     printf("\n");
     printf("Examples:\n");
     printf("  %s --days 40 --metrics tools/dashboard/metrics.csv   record a 40-day run\n", a0);
@@ -109,6 +110,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "production"))      set_craft_bonus(d);
         else if (!strcmp(key, "child_cost"))      set_child_cost(d);
         else if (!strcmp(key, "metrics_every"))   set_metrics_every(d);
+        else if (!strcmp(key, "occ_pay_spread"))  set_occ_pay_spread(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -123,6 +125,7 @@ int main(int argc, char **argv) {
     const char *metrics = NULL, *replay_in = NULL, *rerun_in = NULL;
     double replay_interval = 0.3;
     double mevery = -1.0;   /* metrics cadence (game-hours); <0 = unset, CLI wins */
+    double ospread = -1.0;  /* occupation pay-tier spread; <0 = unset, CLI wins */
     long seed = -1;      /* <0 = unset */
     int  days = -1;      /* <0 = unset */
 
@@ -137,6 +140,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc)    mevery = atof(argv[++i]);
         else if (!strncmp(argv[i], "--metrics-every=", 16))              mevery = atof(argv[i] + 16);
         else if (!strcmp(argv[i], "--metrics-hourly"))                   mevery = 1.0;
+        else if (!strcmp(argv[i], "--occ-pay-spread") && i + 1 < argc)   ospread = atof(argv[++i]);
+        else if (!strncmp(argv[i], "--occ-pay-spread=", 17))             ospread = atof(argv[i] + 17);
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc)           replay_in = argv[++i];
         else if (!strncmp(argv[i], "--replay=", 9))                      replay_in = argv[i] + 9;
         else if (!strcmp(argv[i], "--replay-interval") && i + 1 < argc)  replay_interval = atof(argv[++i]);
@@ -167,6 +172,7 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_HEARING"); if (e) set_hearing(atoi(e)); }
     { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) set_noise_worldgen(atoi(e)); }
     { const char *e = getenv("CSIM_METRICS_EVERY"); if (e) set_metrics_every(atof(e)); }
+    { const char *e = getenv("CSIM_OCC_PAY_SPREAD"); if (e) set_occ_pay_spread(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;
@@ -177,6 +183,7 @@ int main(int argc, char **argv) {
     }
 
     if (mevery > 0.0) set_metrics_every(mevery);   /* CLI --metrics-every wins over env/manifest */
+    if (ospread >= 0.0) set_occ_pay_spread(ospread);  /* CLI --occ-pay-spread wins over env/manifest */
 
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
