@@ -379,6 +379,8 @@ typedef struct {
     /* stats for HUD / headless */
     int deaths, crimes;
     int crime_kind[CK_COUNT];   /* per-kind crime tally */
+    double wages_earned;        /* cumulative legal income (wages paid to workers) */
+    double crime_take[CK_COUNT];/* cumulative illegal proceeds, per crime kind */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
 

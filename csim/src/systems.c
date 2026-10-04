@@ -256,6 +256,7 @@ static void do_deal(World *w, Agent *d) {
     if (price < 1.0) return;   /* broke customer */
     Agent *rival = turf_conflict(w, d, cust);
     cust->needs.money -= price; d->needs.money += price; d->drug_stock--;
+    w->crime_take[CK_DEALING] += price;   /* cumulative illegal proceeds (dashboard) */
     cust->addiction = (float)clampd(cust->addiction + 0.07, 0, 1);
     cust->needs.social = clampd(cust->needs.social + 0.15, 0, 1);  /* the high */
     cust->dealer_id = d->id;
@@ -288,6 +289,7 @@ static void do_traffic(World *w, Agent *p) {
         if (cost > p->needs.money) { units = (int)(p->needs.money / DRUG_WHOLESALE); cost = units * DRUG_WHOLESALE; }
         if (units <= 0) return;
         p->needs.money -= cost; kp->needs.money += cost; kp->drug_stock -= units; p->drug_stock += units;
+        w->crime_take[CK_TRAFFICKING] += cost;   /* cumulative illegal proceeds (dashboard) */
         snprintf(t, sizeof(t), "%.20s bought %d units wholesale from %.20s ($%.0f)", p->name, units, kp->name, cost);
         events_post(w, EV_CRIME, p->id, kp->id, (int)p->x, (int)p->y, 0.4, t);
     }
@@ -412,6 +414,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         else if (!strcmp(kind, "extortion")) loot = rng_range(&w->rng, 15, 50);
         else if (!strcmp(kind, "riot"))      loot = rng_range(&w->rng, 5, 40);
         perp->needs.money += loot;
+        if (loot > 0) w->crime_take[ck_index(kind)] += loot;   /* cumulative illegal proceeds (dashboard) */
         if (target) {
             if (loot > 0) target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
             target->needs.safety = clampd(target->needs.safety - (!strcmp(kind,"assault")?0.5:0.3), 0, 1);

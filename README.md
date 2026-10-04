@@ -118,8 +118,9 @@ Run `./build/csim --help` for the full, categorized list (aging pace, population
 ### Balance dashboard
 
 Pass `--metrics <path.csv>` (GUI or headless) to log a CSV row with every aggregate the
-city tracks — population by life stage, births/deaths, economy, every crime kind,
-knowledge/tech adoption, culture, factions/wars — once per game-day, or finer with
+city tracks — population by life stage, births/deaths, economy (incl. cumulative legal
+income from wages vs. illegal income from crime, and per-crime proceeds), every crime
+kind, knowledge/tech adoption, culture, factions/wars — once per game-day, or finer with
 `--metrics-every <game-hours>` / `--metrics-hourly` (rows carry a fractional-day `t`
 column). A static, auto-refreshing web dashboard in [`tools/dashboard/`](tools/dashboard/)
 (vendored Chart.js, no build step) polls that CSV and redraws ~16 charts live — no page

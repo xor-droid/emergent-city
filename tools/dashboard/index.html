@@ -107,8 +107,11 @@ const CHARTS = [
   {title:"Household & bonds", s:[
     {col:"couples",color:C.pink},{col:"pregnant",color:C.violet},
     {col:"in_faction",label:"in faction",color:C.orange},{col:"avg_friends",label:"avg friends",color:C.teal}]},
-  {title:"Wealth", s:[{col:"avg_money",label:"avg money",color:C.green},
-    {col:"total_debt",label:"total debt",color:C.red}]},
+  {title:"Wealth & income", s:[
+    {col:"avg_money",label:"avg money",color:C.green},
+    {col:"total_debt",label:"total debt",color:C.red},
+    {col:"wages_earned",label:"legal income (wages, cum)",color:C.blue,axis:"y1"},
+    {col:"crime_income",label:"illegal income (crime, cum)",color:C.orange,axis:"y1"}]},
   {title:"Markets (multipliers)", s:[
     {col:"goods_price",label:"goods price",color:C.amber},{col:"wage",color:C.blue}]},
   {title:"Debt & property", s:[
@@ -123,6 +126,13 @@ const CHARTS = [
     {col:"crime_assault",label:"assault",color:C.pink},{col:"crime_riot",label:"riot",color:C.violet},
     {col:"crime_dealing",label:"dealing",color:C.cyan},{col:"crime_trafficking",label:"trafficking",color:C.blue},
     {col:"crime_murder",label:"murder",color:C.red}]},
+  {title:"Crime proceeds by kind ($, cumulative)", s:[
+    {col:"take_theft",label:"theft",color:C.slate},{col:"take_burglary",label:"burglary",color:C.teal},
+    {col:"take_robbery",label:"robbery",color:C.amber},{col:"take_extortion",label:"extortion",color:C.gold},
+    {col:"take_vandalism",label:"vandalism",color:C.lime},{col:"take_arson",label:"arson",color:C.orange},
+    {col:"take_assault",label:"assault",color:C.pink},{col:"take_riot",label:"riot",color:C.violet},
+    {col:"take_dealing",label:"dealing",color:C.cyan},{col:"take_trafficking",label:"trafficking",color:C.blue},
+    {col:"take_murder",label:"murder",color:C.red}]},
   {title:"Knowledge", s:[
     {col:"theories",color:C.violet},{col:"techs",color:C.blue},{col:"research",color:C.slate}]},
   {title:"Skills (%)", s:[
@@ -187,14 +197,18 @@ function datasetsFor(used){
     label: sp.label || sp.col,
     data: [], borderColor: sp.color || PAL[i%PAL.length],
     backgroundColor:"transparent", borderWidth:1.8, pointRadius:0,
-    tension:.25, spanGaps:true,
+    tension:.25, spanGaps:true, yAxisID: sp.axis || "y",
+    borderDash: sp.axis==="y1" ? [5,3] : undefined,   // right-axis series dashed to tell them apart
   }));
 }
 function optionsFor(used, big){
+  const hasRight = used.some(sp=>sp.axis==="y1");
+  const scales = { x:{ title:{display:true,text:"day"}, ticks:{maxTicksLimit: big?14:8} },
+                   y:{ beginAtZero:true, position:"left" } };
+  if(hasRight) scales.y1 = { beginAtZero:true, position:"right",
+    grid:{drawOnChartArea:false}, title:{display:true,text:"cumulative $"} };
   return { responsive:true, maintainAspectRatio:false, animation:false,
-    interaction:{mode:"index",intersect:false},
-    scales:{ x:{ title:{display:true,text:"day"}, ticks:{maxTicksLimit: big?14:8} },
-             y:{ beginAtZero:true } },
+    interaction:{mode:"index",intersect:false}, scales,
     plugins:{ legend:{display: used.length>1, position:"bottom",
                 labels:{boxWidth:10,boxHeight:10,padding:8}},
               tooltip:{enabled:true} } };

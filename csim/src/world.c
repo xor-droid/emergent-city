@@ -859,15 +859,17 @@ static void execute_action(World *w, Agent *a) {
             break;
         case A_SLEEP:   n->energy = clampd(n->energy + 0.35, 0, 1); break;
         case A_GO_HOME: n->energy = clampd(n->energy + 0.08, 0, 1); break;
-        case A_WORK:    /* pay scales with the worker's craft + schooling (human capital) */
-                        n->money += WAGE_PER_SHIFT * w->econ.wage_mult * worker_output(a);
+        case A_WORK: {  /* pay scales with the worker's craft + schooling (human capital) */
+                        double pay = WAGE_PER_SHIFT * w->econ.wage_mult * worker_output(a);
+                        n->money += pay;
+                        w->wages_earned += pay;   /* cumulative legal income (dashboard) */
                         n->energy = clampd(n->energy - 0.1, 0, 1);
                         n->meaning = clampd(n->meaning + 0.05, 0, 1);
                         a->reputation = (float)clampd(a->reputation + 0.004, -1, 1);
                         /* learn the trade by doing — diminishing, faster for the bright */
                         if (a->craft < 1.0f)
                             a->craft = (float)clampd(a->craft + CRAFT_GAIN * (1.0 - a->craft) * (0.5 + a->intellect), 0, 1);
-                        break;
+                        break; }
         case A_SOCIALIZE: do_socialize(w, a); break;
         case A_DRINK: { double price = DRINK_PRICE * w->econ.goods_price;
                         if (n->money >= price) { n->money -= price;
@@ -1084,9 +1086,11 @@ void metrics_open(const char *path) {
         "t,day,hour,alive,children,youths,adults,elders,avg_age,"
         "couples,married,pregnant,born_alive,deaths,in_faction,avg_friends,max_friends,"
         "avg_money,goods_price,wage,indebted,total_debt,landlords,"
+        "wages_earned,crime_income,"
         "crimes,wanted,jailed");
-    /* per-crime-kind columns */
+    /* per-crime-kind columns: count, then cumulative $ proceeds */
     for (int i = 0; i < CK_COUNT; i++) fput_slug(g_metrics, "crime_", crime_kind_name(i));
+    for (int i = 0; i < CK_COUNT; i++) fput_slug(g_metrics, "take_", crime_kind_name(i));
     /* knowledge */
     fprintf(g_metrics, ",research,theories,techs,avg_edu,avg_craft,avg_intellect");
     for (int t = 0; t < TECH_COUNT; t++) fput_slug(g_metrics, "tech_", tech_name(t));
@@ -1127,6 +1131,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     for(int i=0;i<w->n_factions;i++){ if(w->factions[i].war_with>i) wars++; war_cas+=w->factions[i].casualties; }
     int factions=0; for(int i=0;i<w->n_factions;i++) if(w->factions[i].active && w->factions[i].members) factions++;
     int techs=0; for(int k=0;k<TECH_COUNT;k++) techs+=w->sci.discovered[k];
+    double crime_income=0; for(int k=0;k<CK_COUNT;k++) crime_income+=w->crime_take[k];
 
     fprintf(g_metrics, "%.4f,%d,%.2f,%d,%d,%d,%d,%d,%ld",
         w->day + w->hour / 24.0, w->day, w->hour, alive, ch, yo, ad, el, alive?agesum/alive:0);
@@ -1135,8 +1140,10 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
         alive?(double)total_friends/alive:0.0, max_friends);
     fprintf(g_metrics, ",%.0f,%.2f,%.2f,%d,%.0f,%d",
         alive?money/alive:0.0, w->econ.goods_price, w->econ.wage_mult, indebt, debt, landlords);
+    fprintf(g_metrics, ",%.0f,%.0f", w->wages_earned, crime_income);
     fprintf(g_metrics, ",%d,%d,%d", w->crimes, crime_wanted_count(w), crime_jailed_count(w));
     for (int i=0;i<CK_COUNT;i++) fprintf(g_metrics, ",%d", w->crime_kind[i]);
+    for (int i=0;i<CK_COUNT;i++) fprintf(g_metrics, ",%.0f", w->crime_take[i]);
     fprintf(g_metrics, ",%.0f,%d,%d,%.1f,%.1f,%.1f",
         w->sci.research, w->sci.theories, techs,
         alive?edu/alive*100:0.0, alive?craft/alive*100:0.0, alive?intel/alive*100:0.0);
