@@ -51,7 +51,8 @@ static void usage(const char *argv0) {
     printf("  drag/wheel  pan + zoom          click a citizen  inspect\n");
     printf("  1-6  speed 1x-6x                Space  pause          q/Esc  quit\n");
     printf("  g god mode (1-8 tools)          T  tuning panel       E  city dashboard\n");
-    printf("  O overlay (heat/turf/culture)   F factions   J jail   C crime-watch\n");
+    printf("  K family tree (selected)        O overlay (heat/turf/culture)\n");
+    printf("  F factions   J jail   C crime-watch\n");
     printf("  Tab feed   L legend   a ASCII mode\n");
     printf("\n");
     printf("Environment variables:\n");

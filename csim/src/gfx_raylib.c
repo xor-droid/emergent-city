@@ -22,7 +22,7 @@ static int rl_key(int k){
         case GFX_KEY_PGUP:return KEY_PAGE_UP; case GFX_KEY_PGDN:return KEY_PAGE_DOWN;
         case GFX_KEY_G:return KEY_G; case GFX_KEY_J:return KEY_J; case GFX_KEY_F:return KEY_F; case GFX_KEY_L:return KEY_L;
         case GFX_KEY_A:return KEY_A; case GFX_KEY_Q:return KEY_Q; case GFX_KEY_C:return KEY_C;
-        case GFX_KEY_O:return KEY_O; case GFX_KEY_E:return KEY_E; case GFX_KEY_W:return KEY_W; case GFX_KEY_T:return KEY_T;
+        case GFX_KEY_O:return KEY_O; case GFX_KEY_E:return KEY_E; case GFX_KEY_W:return KEY_W; case GFX_KEY_T:return KEY_T; case GFX_KEY_K:return KEY_K;
         default: if(k>=GFX_KEY_1 && k<=GFX_KEY_9) return KEY_ONE+(k-GFX_KEY_1); return 0;
     }
 }

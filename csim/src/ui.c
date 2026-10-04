@@ -156,9 +156,11 @@ int run_ui(World *w){
     int show_right=1, show_jail=0, show_factions=0, show_legend=1, show_crime=0;
     int show_city=0, overlay=0;   /* city dashboard (E); map overlay cycle (O): heat/turf/culture */
     int show_tune=0;              /* live tuning panel (T): aging pace, pop target, family knobs */
+    int show_family=0;           /* family/genealogy panel (K) for the selected citizen */
     { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%4; } }
     if(getenv("CSIM_CITY")) show_city=1;
     if(getenv("CSIM_TUNE")) show_tune=1;
+    if(getenv("CSIM_KIN")) show_family=1;
     int ascii = getenv("CSIM_ASCII") ? 1 : 0;   /* Dwarf-Fortress ASCII render mode (toggle: a) */
     int selected=-1, list_scroll=0, follow=0;    /* follow = keep camera on the selected citizen */
 
@@ -269,6 +271,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_E)) show_city=!show_city;
         if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%4;
         if(G->key_pressed(GFX_KEY_T)) show_tune=!show_tune;
+        if(G->key_pressed(GFX_KEY_K)) show_family=!show_family;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
             if(god){ if(k<G_NTOOLS) tool=k; }
             else if(k<6) speed=(float)(k+1);   /* keys 1-6 -> 1x..6x */
@@ -335,7 +338,34 @@ int run_ui(World *w){
                 break;
             }
         }
-        if(G->mouse_pressed(GFX_MBTN_LEFT) && !tuneClick){
+
+        /* family/genealogy panel geometry + relatives (shared by click + draw) */
+        int famIds[32]; const char *famRel[32]; int famN=0;
+        int famPW=US(306), famPX=W/2-famPW/2, famPY=hudH+US(30), famRowH=US(20), famTop=famPY+US(40);
+        if(show_family && selected>=0){
+            Agent *sa=world_agent_by_id(w,selected);
+            if(sa){
+                if(sa->mother_id>=0 && famN<32){ famIds[famN]=sa->mother_id; famRel[famN]="Mother"; famN++; }
+                if(sa->father_id>=0 && famN<32){ famIds[famN]=sa->father_id; famRel[famN]="Father"; famN++; }
+                if(sa->spouse_id>=0 && famN<32){ famIds[famN]=sa->spouse_id; famRel[famN]="Spouse"; famN++; }
+                for(int i=0;i<w->n_agents && famN<32;i++){ Agent *o=&w->agents[i];
+                    if(o->mother_id==sa->id || o->father_id==sa->id){ famIds[famN]=o->id; famRel[famN]="Child"; famN++; } }
+                for(int i=0;i<w->n_agents && famN<32;i++){ Agent *o=&w->agents[i];
+                    if(o->id==sa->id) continue;
+                    if((sa->mother_id>=0 && o->mother_id==sa->mother_id) ||
+                       (sa->father_id>=0 && o->father_id==sa->father_id)){ famIds[famN]=o->id; famRel[famN]="Sibling"; famN++; } }
+            }
+        }
+        int famPH=US(50)+(famN?famN:1)*famRowH;
+        int famClick=0;
+        if(show_family && selected>=0 && G->mouse_pressed(GFX_MBTN_LEFT) &&
+           mx>=famPX && mx<=famPX+famPW && my>=famPY && my<=famPY+famPH){
+            famClick=1;
+            int row=(my-famTop)/famRowH;
+            if(row>=0 && row<famN){ selected=famIds[row]; follow=1; }   /* jump to the relative */
+        }
+
+        if(G->mouse_pressed(GFX_MBTN_LEFT) && !tuneClick && !famClick){
             if(overPanel && my>=listTop){
                 int row=list_scroll+(my-listTop)/rowh;
                 int trackX=W-US(6), trackY=listTop, trackH=listRows*rowh;
@@ -694,6 +724,26 @@ int run_ui(World *w){
             G->text("click -/+ to adjust (applies live)",tunePX+US(12),tunePY+tunePH-US(18),US(10),COL_GRAY);
         }
 
+        /* ── family / genealogy panel [K]: the selected citizen's kin (clickable) ── */
+        if(show_family && selected>=0){
+            Agent *sa=world_agent_by_id(w,selected);
+            G->fill_rect(famPX,famPY,famPW,famPH,gfx_rgba(20,22,28,243));
+            G->rect_lines(famPX,famPY,famPW,famPH,COL_GOLD);
+            snprintf(buf,sizeof(buf),"FAMILY — %.20s  [K]", sa?sa->name:"?");
+            G->text(buf,famPX+US(12),famPY+US(10),US(14),COL_GOLD);
+            if(famN==0) G->text("(no known kin)",famPX+US(14),famTop+US(2),US(12),COL_GRAY);
+            const char *prevrel="";
+            for(int i=0;i<famN;i++){ int ry=famTop+i*famRowH;
+                Agent *o=world_agent_by_id(w,famIds[i]);
+                int diff = strcmp(famRel[i],prevrel)!=0; prevrel=famRel[i];
+                GfxColor rc = (o&&o->alive)?gfx_rgb(214,210,200):COL_GRAY;
+                if(o&&o->alive) snprintf(buf,sizeof(buf),"%-8s %.18s  %d (%s)",diff?famRel[i]:"",o->name,o->age,life_stage_name(o));
+                else            snprintf(buf,sizeof(buf),"%-8s %s",diff?famRel[i]:"",o?"(deceased)":"(unknown)");
+                G->text(buf,famPX+US(14),ry,US(12),rc);
+            }
+            G->text("click a name to jump to them",famPX+US(12),famPY+famPH-US(16),US(10),COL_GRAY);
+        }
+
         /* ── crime watch: live crimes + who's on the run (with lie-low cooldown) ── */
         if(show_crime){
             int nwanted=0; for(int i=0;i<w->n_agents;i++) if(w->agents[i].alive && w->agents[i].wanted) nwanted++;
@@ -842,7 +892,7 @@ int run_ui(World *w){
 
         /* ── controls hint (bottom, with the legend) ── */
         if(show_legend){
-            const char *keys="E city   T tune   O overlay   F factions   C crime   J jail   Tab feed   G god   L legend   Space pause   Q quit";
+            const char *keys="E city   T tune   K family   O overlay   F factions   C crime   J jail   Tab feed   G god   L legend   Space pause   Q quit";
             int tw=G->text_w(keys,US(11));
             int hx=W/2-tw/2; if(hx<US(8)) hx=US(8);
             G->text(keys,hx,Hs-US(17),US(11),gfx_rgb(158,154,148));
