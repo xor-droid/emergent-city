@@ -65,20 +65,22 @@ or you can `scp`/copy it there.
 ### Live instance (home-ubuntu, 10.0.0.134)
 
 Deployed on the shared `nginx-unified` container (host networking) at
-**http://10.0.0.134:8098/** — zero-downtime vhost, no container recreate:
+**http://10.0.0.134:8098/** — reboot-durable:
 
-- web root: `/tmp/emergent-city-dash/` on the host (already bind-mounted into the
-  container via `-v /tmp:/tmp`); holds `index.html`, `chart.umd.min.js`, `metrics.csv`
+- web root: `/opt/docker/deploy/emergent-city/web/` on the host, bind-mounted into the
+  container (`-v …:…:ro` in `docker-run.sh`); holds `index.html`, `chart.umd.min.js`,
+  `metrics.csv`
 - vhost: `/opt/docker/deploy/nginx-unified/conf.d/emergent-city.conf` (listen 8098)
-- added with: `docker exec nginx-unified nginx -t && docker exec nginx-unified nginx -s reload`
-- **revert:** delete that conf file + reload
+- the mount is served **read-only**, so nginx reads the CSV while the sim (running as a
+  normal user on the host) writes it — no permission clash
+- **revert:** delete the conf file + the `-v` line in `docker-run.sh`, then recreate the
+  container (`docker rm -f nginx-unified && docker-run.sh`); `docker-run.sh.bak-*` backups exist
 - **feed it:** write the CSV into the web root, e.g.
-  `./csim/build/csim_headless --days 40 --metrics /tmp/emergent-city-dash/metrics.csv`
+  `./csim/build/csim_headless --days 40 --metrics /opt/docker/deploy/emergent-city/web/metrics.csv`
   run on the host, or `scp` your `metrics.csv` there.
 
-> `/tmp` is wiped on reboot. For a reboot-durable root, move the files to
-> `/opt/docker/deploy/emergent-city/web`, add a matching `-v` bind mount in
-> `/opt/docker/deploy/nginx-unified/docker-run.sh`, and recreate the container.
+> Recreating this shared container briefly drops every nginx-unified vhost, so only do it
+> for mount changes; day-to-day edits (conf tweaks) just need `nginx -s reload`.
 
 ## 3. Auto-refresh
 
