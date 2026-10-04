@@ -66,8 +66,9 @@ static int default_cap(TileType t) {
 /* Pick a building type for a lot given its normalised distance from downtown
  * (0 = city centre, 1 = edge). Gives a real city gradient: a dense office/retail
  * core, mixed commercial inner ring, residential belt, and a sparse rural fringe. */
-static TileType district_building(Rng *r, double d) {
-    double roll = rng_double(r);
+/* pick a building type from a pre-drawn roll + centrality (one rng draw lives in the
+   callers, so the biome variant consumes exactly the same randomness → determinism). */
+static TileType pick_building(double roll, double d) {
     if (d < 0.20)                 /* downtown: offices + retail, some nightlife */
         return roll<0.55?T_WORK : roll<0.85?T_SHOP : roll<0.95?T_BAR : T_HOME;
     if (d < 0.38)                 /* inner ring: mixed commercial */
@@ -77,6 +78,19 @@ static TileType district_building(Rng *r, double d) {
         return roll<0.78?T_HOME : roll<0.88?T_SHOP : roll<0.93?T_CHURCH
              : roll<0.97?T_WORK : T_BAR;
     return roll<0.88?T_HOME : roll<0.95?T_SHOP : T_CHURCH;  /* outskirts */
+}
+static TileType district_building(Rng *r, double d) { return pick_building(rng_double(r), d); }
+
+/* land use seeded by terrain (Phase 3): floodplain → industry, hills → leafy residential,
+   waterfront → market/nightlife; plain/parkland keep the centrality mix. Same single draw. */
+static TileType district_building_biome(Rng *r, double d, int biome) {
+    double roll = rng_double(r);
+    switch (biome) {
+        case B_FLOODPLAIN:  return roll<0.55?T_WORK : roll<0.75?T_HOME : roll<0.88?T_SHOP : roll<0.95?T_BAR : T_CHURCH;
+        case B_HILLS:       return roll<0.82?T_HOME : roll<0.90?T_SHOP : roll<0.96?T_CHURCH : T_WORK;
+        case B_WATERFRONT:  return roll<0.40?T_SHOP : roll<0.60?T_HOME : roll<0.78?T_BAR : roll<0.90?T_WORK : T_CHURCH;
+        default:            return pick_building(roll, d);   /* plain/parkland: as the centrality mix */
+    }
 }
 
 /* Probability a buildable lot is actually built, by district — leaves yards,
@@ -270,7 +284,8 @@ void world_init(World *w, uint64_t seed) {
                 fill = district_fill(d);
             }
             if (rng_double(r) > fill) continue;   /* leave as yard/grass */
-            TileType t = district_building(r, dtype);
+            TileType t = get_biomes() ? district_building_biome(r, dtype, w->biome_[x][y])
+                                      : district_building(r, dtype);
             place_building(w, x, y, t, default_cap(t));
         }
 built:;
