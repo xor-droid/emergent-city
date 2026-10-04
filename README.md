@@ -41,8 +41,10 @@ A city's worth of interacting systems, all emergent from the agents:
 - **🔬 Knowledge & technology** — educated scholars accrue **research** into **theories**, which unlock a chain of **technologies** (writing, tooling, medicine, banking, printing, civics) that **diffuse** through the city and modestly lift wages, healing, interest, research and policing as they're adopted.
 - **👶 Life cycle** — courtship → **marriage** → **children** who inherit the family's culture and faith; citizens **age** through life stages (Child → Youth → Adult → Elder) and eventually **die of old age**. Immigration brings young families so the city's age pyramid stays healthy. Click a citizen and press **`K`** to walk their **family tree** (parents, spouse, children, siblings). The whole pace is tunable.
 - **👁️ Perception (opt-in)** — turn on **field of view** and agents only witness crimes / spot fugitives they can actually *see* (line-of-sight blocked by buildings), so crime goes stealthy in blind spots. Add **hearing** and loud acts — gunshots, brawls, arson, riots — still carry *around corners*, while a quiet pickpocket doesn't (serial killers are quieter still). The two together make a realistic cat-and-mouse.
+- **🌦️ Weather (opt-in)** — deterministic **temperature, rain and fog** (`--weather`), driven by coherent noise over time (its own cycle via `--weather-period`), so it's a pure function of the seed and never perturbs the sim. It's **mechanical**: fog shortens sight and rain masks sound, so **storms are crime cover** (more gets away) — and cold snaps bring **heating costs that hit the poor hardest** (a cheap, badly-insulated home pays more), pushing them toward debt. HUD readout + ambient tint, and `temp/rain/fog` on the dashboard to correlate with crime and deaths.
 - **🗺️ Pathfinding & worldgen** — agents navigate with grid **A\*** + **Jump Point Search**, routing **around water** instead of walking over it. The city can be generated the default way (a sine river + district gradient) or with coherent **FastNoiseLite** noise (`--noise-worldgen`) for organic lakes and neighbourhoods.
 - **🎲 Determinism** — the core is a deterministic PCG32 sim with a fixed timestep; a run is **bit-for-bit reproducible from its seed** (headless, or the GUI with `--fixed-step`, LLM off). Binary save/load snapshots the whole world.
+- **⏺️ Record, replay & fork** — record a whole session (`--record`): the seed, config and the tick-stamped timeline of your live interventions (tuning changes, god-mode actions). Replay it **byte-for-byte** (a final-state checksum proves it), re-run it anywhere with `--replay-session`, or **archive it to OpenSearch** (via Data Prepper) and recall it with `--replay-session os:<id>`. In the GUI you can watch a recorded run play back, and the moment you tweak a value it **forks** a new deterministic timeline that's itself recorded.
 
 ![City dashboard](docs/dashboard.png)
 
@@ -105,8 +107,11 @@ Most sim parameters are flags **and** environment variables **and** live-adjusta
 ```bash
 ./build/csim --pop-target 250 --years-per-day 4      # bigger city, faster life cycle
 ./build/csim --vision --hearing                      # perception on: stealthy, cat-and-mouse crime
+./build/csim --weather --vision --hearing            # storms as crime cover; fog/rain reduce witnesses
+./build/csim --occ-pay-spread 1 --neighborhoods --crime-wealth --police-bias money  # full socioeconomics
 ./build/csim --noise-worldgen                        # organic FastNoiseLite city (lakes, districts)
 ./build/csim --fixed-step                            # deterministic, reproducible run
+./build/csim --record run.sess                       # record for byte-identical replay / archive
 ./build/csim --family-share 0.6 --family-kids-max 5  # more children
 ./build/csim --production 2 --research-rate 0.1      # skill matters more; faster tech
 CSIM_WARMDAYS=12 ./build/csim --pop-target 250       # open on an already-grown city
@@ -133,6 +138,18 @@ see [the dashboard README](tools/dashboard/README.md) for nginx notes.
 ### Reproducibility
 
 The simulation is deterministic given a seed. **Headless** runs are bit-identical by default; the **GUI** is real-time-paced (variable timestep) by default, so pass **`--fixed-step`** to make it reproducible and frame-rate-independent. In both cases the **LLM must be off** for strict reproducibility (it's an async network call), and floating-point identity holds within one build/machine.
+
+### Record, replay & archive
+
+`--record <file>` captures a session as its **seed + config + a tick-stamped timeline of your live interventions** (tuning changes, god-mode actions) — no per-tick state dumps, just the inputs, because the sim is deterministic. Replay it byte-for-byte and have it self-verify against a final-state checksum:
+
+```bash
+./build/csim --record run.sess                       # record a GUI session (forces --fixed-step)
+./build/csim_headless --replay-session run.sess      # re-run deterministically; asserts the checksum
+./build/csim --replay-session run.sess               # watch it play back; edit a value to FORK a new timeline
+```
+
+Set `CSIM_OS_INGEST_URL` (an OpenSearch/Data-Prepper endpoint) and the session — plus its per-day metrics — is **archived to OpenSearch**; recall and replay it anywhere with `--replay-session os:<session_id>` (`CSIM_OS_QUERY_URL`/`CSIM_OS_USER`/`CSIM_OS_PASS`). Weather and all opt-in systems are part of the recorded config, so a replay reproduces the exact weather timeline too.
 
 ### LLM (optional)
 

@@ -16,8 +16,14 @@ tools/dashboard/
 
 Both the GUI and the headless binary emit the same CSV — one row per game-day, every
 aggregate the city tracks (population by life stage, births/deaths, economy, every crime
-kind, knowledge/tech adoption, culture, factions/wars …). Point the output at this
-directory so the web server serves the same file the sim writes:
+kind, knowledge/tech adoption, culture, factions/wars, socioeconomics — Gini, income
+distribution, segregation, mobility, loot & crime by wealth — and **weather** temp/rain/fog
+when `--weather` is on). Point the output at this directory so the web server serves the
+same file the sim writes:
+
+> The same per-day metrics also stream to **OpenSearch** (via Data Prepper) when a session
+> is recorded with `CSIM_OS_INGEST_URL` set — see the "Record, replay & archive" section of
+> the [top-level README](../../README.md).
 
 ```sh
 # headless — record a 40-day run

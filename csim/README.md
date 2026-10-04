@@ -1,17 +1,30 @@
-# Emergent City — C port
+# Emergent City — C core
 
-A full POSIX-C port of the simulation. Ports the real logic from the Python sim:
-**Needs decay, Personality (Big Five + traits + all derived weights), UtilityAI,
-Relationships (friends/rivals + decay), Memory, a layered **crime underworld**
-(career criminals who escalate for profit, a wholesale→dealer→user **drug
-trade** with turf/customer **retaliation**, faction turf wars, extortion, plus
-a rare latent **serial killer**), Wanted + Jail (severity-scaled hunts/sentences),
-police hunting + lie-low, Factions (gangs &
-cults), Economy (cost of living), an Event feed, greedy pathing, and the
-World/agent/time loop** — deterministic PCG32 RNG, binary save/load, a raylib
-GPU-window renderer, and **LLM-driven decisions** (libcurl + cJSON against the
-local Qwen server, on a background thread so the sim never blocks). Feature
-parity with the Python sim.
+A POSIX-C reimplementation of the Python/pygame original that has since grown **far
+beyond it**. It keeps the original's skeleton — Needs, Big-Five Personality, Utility-AI,
+Relationships, Memory, Events, Factions, a basic Economy and the world/agent/time loop —
+and adds a city's worth of systems on top (see the [top-level README](../README.md) for
+the full tour):
+
+- **Crime underworld** — career escalation, a wholesale→dealer→user **drug trade** with
+  turf/customer retaliation, extortion, serial killers, wanted/jail (severity-scaled
+  hunts + sentences), jail gangs, injuries/treatment.
+- **Factions & warfare**, **law** (crackdowns, sentencing), a deeper **economy**
+  (occupations, wages, landlords/rent, credit/debt, craft skill).
+- **Knowledge/tech**, **culture** (faith/language/education), a full **life cycle**
+  (marriage→birth→aging→death, family tree).
+- **Perception** (field-of-view + hearing), **A\*+JPS pathfinding** + flow fields,
+  **FastNoiseLite** worldgen.
+- **Socioeconomics** (households, occupation pay tiers, rich/poor neighbourhoods,
+  wealth-scaled crime, police-bias), **weather** (deterministic temp/rain/fog with
+  crime-cover + heating effects).
+- A **metrics CSV + live web dashboard**, and **session recording → OpenSearch →
+  byte-identical replay** with a GUI pause-to-edit fork.
+
+Deterministic PCG32 RNG (bit-reproducible from the seed), binary save/load, a raylib
+GPU-window renderer, and optional **LLM-driven decisions** (libcurl + cJSON on a
+background thread so the sim never blocks). Almost all the newer systems are **opt-in
+flags, default off**, so the baseline stays simple and byte-identical.
 
 ## LLM decisions
 Set `OPENROUTER_API_KEY` (any value locally) to enable Qwen consults; the client
@@ -25,17 +38,24 @@ shows the running call count. Needs `libcurl` + `libcjson` at build time
 ```
 csim/
   src/rng.h             PCG32 deterministic PRNG (header-only)
-  src/sim.c             core leaf systems (needs/personality/utility/rels/mem/events/pathing/buildings)
-  src/systems.c         crime+wanted+jail, factions, economy
-  src/world.c           worldgen, population, tick orchestration, save/load
+  src/sim.c             leaf systems + all config knobs (needs/personality/utility/rels/mem/
+                        events/pathing; occupation pay, weather accessors, …)
+  src/systems.c         crime/underworld, factions, law, economy, knowledge, culture, perception
+  src/world.c           worldgen (+FastNoiseLite), population, tick loop, households, weather,
+                        metrics export, save/load
   src/sim.h             full data model + API (no graphics deps)
-  src/viz.h / viz.c     render helpers (tile colors, legend, HUD string)
+  src/viz.h / viz.c     god-mode actions + render helpers (now in the core, used by replay)
+  src/record.c/.h       session recording + byte-identical replay + GUI player/fork
+  src/os_client.c/.h    OpenSearch archive (via Data Prepper) + session recall (libcurl/cJSON)
+  src/harness.c         native common-random-numbers harness (csim_harness)
+  src/llm.c/.h          background LLM decision client (libcurl + cJSON) or no-op stubs
+  src/FastNoiseLite.h   vendored MIT noise header (worldgen + weather)
   src/gfx.h             gfx abstraction (drawing + input + backend vtable)
   src/ui.c              the whole UI, written against gfx.h
   src/gfx_raylib.c      the raylib backend (GPU window; TTF UI font)
-  src/main.c            entry point
-  src/main_headless.c   runs the core and prints a report (plain gcc, no deps)
-  CMakeLists.txt        builds raylib (fetched)
+  src/main.c            GUI entry point
+  src/main_headless.c   headless run / report + --metrics / --replay-session / --rerun
+  CMakeLists.txt        builds csim (raylib, fetched), csim_headless, csim_harness
 ```
 
 ## Rendering (raylib GPU window)
@@ -47,9 +67,9 @@ re-added just by providing a `GfxBackend` vtable.)
 ./build/csim --help     # controls + env vars
 ```
 Controls: drag (right-mouse) pan · wheel zoom · click a citizen to inspect ·
-`g` god mode · `1`-`8` tool · `j` jail · `f` factions · `c` crime-watch · `l` legend · `a` ASCII
-(Dwarf-Fortress) mode · `Tab` feed · arrows/PgUp/PgDn browse list · Space pause ·
-`1`/`2`/`3` speed · `q` or Esc to quit. Zoom in and buildings show a type glyph: `H` home,
+`E` city dashboard · `T` tuning panel · `K` family tree · `O` map overlay · `g` god mode
+(`1`-`8` tool) · `j` jail · `f` factions · `c` crime-watch · `l` legend · `a` ASCII
+(Dwarf-Fortress) mode · `Tab` feed · Space pause · `1`-`6` speed (1x–6x) · `q`/Esc quit. Zoom in and buildings show a type glyph: `H` home,
 `$` shop, `O` office, `B` bar, `+` church, `P` police. Small UI text uses an
 antialiased TTF (DejaVu Sans) for legibility, scaled for the display.
 
@@ -93,10 +113,14 @@ libxcursor-dev libxi-dev`). Under WSL, run GUI apps with `export DISPLAY=:0`
 Note: build single-threaded in this project — `cmake --build build -j1`.
 
 ## Build & run the headless core (no dependencies)
-Proves the port works with just a C compiler + libm:
+Runs the full core with just a C compiler + libm (LLM/OpenSearch compile as no-op stubs
+without libcurl/cJSON):
 ```sh
-cc -O2 -o csim_headless src/main_headless.c src/sim.c -lm
+cc -O2 -o csim_headless src/main_headless.c src/sim.c src/systems.c src/world.c \
+   src/viz.c src/record.c src/os_client.c src/llm.c -lm
 ./csim_headless
+./csim_headless --days 40 --metrics m.csv            # 40-day run, balance CSV
+./csim_headless --replay-session run.sess            # byte-identical replay (checksum-verified)
 ```
 
 ## Build & run the graphical version (raylib)
@@ -107,7 +131,7 @@ present). Requires network on first configure:
 cmake -B build -S . && cmake --build build -j
 ./build/csim
 ```
-Controls: drag/arrows pan · wheel zoom · Space pause · 1/2/3 speed · Esc quit.
+Controls: drag pan · wheel zoom · Space pause · 1-6 speed · Esc quit.
 
 If you'd rather vendor raylib yourself:
 ```sh
@@ -115,15 +139,18 @@ git clone --depth 1 -b 5.5 https://github.com/raysan5/raylib.git
 cd raylib/src && make PLATFORM=PLATFORM_DESKTOP && sudo make install
 ```
 
-## What this demonstrates
-- The logic layer ports to C almost mechanically (dataclasses → structs,
-  pure scoring functions → C functions). Same behavior, far faster.
-- Graphics is a thin layer: pygame *is* SDL2, and raylib (or SDL2) gives the
-  same rect/text drawing in portable C.
+## Relationship to the Python original
+The Python/pygame sim at the repo root is the **reference**; this C core reimplements its
+concepts and then goes well past them. Nothing links or runs the Python — it's a clean
+reimplementation (dataclasses → structs, scoring functions → C functions), far faster, and
+everything the original left as "future work" (A\*, the crime/jail/faction systems, LLM via
+libcurl+cJSON, save/load) is **done**, alongside the many systems listed up top that the
+original never had.
 
-## What a full port would still add
-- A* pathfinding (here movement is a greedy step) — direct to port.
-- The crime/wanted/jail/faction/relationship systems — all pure logic.
-- LLM integration: **libcurl** + **cJSON** (both already installed) replacing
-  `requests`, with a pthread pool for the async, non-blocking calls.
-- Save/load via cJSON; `.env` via getenv.
+## Determinism & reproducibility
+The core is bit-reproducible from its seed (headless always; GUI with `--fixed-step`; LLM
+off). `--record <file>` captures a session (seed + config + tick-stamped interventions) for
+**byte-identical replay** (`--replay-session`, self-verified by a World checksum), optionally
+archived to OpenSearch via Data Prepper and recalled with `--replay-session os:<id>`. See the
+[top-level README](../README.md) for the feature tour and flags, and
+[`tools/dashboard/`](../tools/dashboard/) for the live metrics dashboard.
