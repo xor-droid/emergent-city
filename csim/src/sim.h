@@ -191,6 +191,10 @@ typedef enum {
     T_GRASS, T_ROAD, T_HOME, T_SHOP, T_WORK, T_BAR, T_CHURCH, T_POLICE,
     T_PARK, T_WATER, T_TYPE_COUNT
 } TileType;
+/* City "biomes" — terrain character that shapes land value (--biomes). */
+enum {
+    B_PLAIN, B_HILLS, B_FLOODPLAIN, B_WATERFRONT, B_PARKLAND, B_COUNT
+};
 
 typedef enum {
     A_EAT, A_SLEEP, A_WORK, A_SOCIALIZE, A_DRINK, A_PRAY, A_SHOP,
@@ -366,6 +370,7 @@ typedef struct {
     uint8_t tile[WORLD_W][WORLD_H];     /* TileType */
     uint8_t danger_[WORLD_W][WORLD_H];  /* 0..255 danger (crime heat) */
     uint8_t affluence_[WORLD_W][WORLD_H];/* 0..255 local household wealth (neighborhoods overlay) */
+    uint8_t biome_[WORLD_W][WORLD_H];   /* B_* terrain class (--biomes); shapes home value */
 
     Agent agents[MAX_AGENTS];
     int n_agents;
@@ -523,6 +528,14 @@ int    get_crime_wealth(void);
 #define WEATHER_PERIOD 5.0                    /* default game-days per weather cycle */
 void   set_weather(int on);                   /* --weather / CSIM_WEATHER */
 int    get_weather(void);
+
+/* ── Biomes (terrain character shapes land value; --biomes) ─────────────────── */
+void   set_biomes(int on);                    /* --biomes / CSIM_BIOMES (startup-only gen) */
+int    get_biomes(void);
+void   set_biome_value_weight(double w);      /* --biome-value-weight / CSIM_BIOME_VALUE_WEIGHT (live) */
+double get_biome_value_weight(void);
+double biome_delta(int biome);                /* value nudge for a biome class (signed, pre-weight) */
+const char *biome_name(int biome);
 void   set_weather_period(double days);       /* --weather-period / CSIM_WEATHER_PERIOD */
 double get_weather_period(void);
 void   set_heat_cost(double f);               /* --heat-cost / CSIM_HEAT_COST (phase 2 scale) */

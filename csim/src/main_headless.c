@@ -128,6 +128,8 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "weather"))         set_weather(iv);
         else if (!strcmp(key, "weather_period"))  set_weather_period(d);
         else if (!strcmp(key, "heat_cost"))       set_heat_cost(d);
+        else if (!strcmp(key, "biomes"))          set_biomes(iv);
+        else if (!strcmp(key, "biome_value_weight")) set_biome_value_weight(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -217,6 +219,8 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_WEATHER"); if (e) set_weather(atoi(e)); }
     { const char *e = getenv("CSIM_WEATHER_PERIOD"); if (e) set_weather_period(atof(e)); }
     { const char *e = getenv("CSIM_HEAT_COST"); if (e) set_heat_cost(atof(e)); }
+    { const char *e = getenv("CSIM_BIOMES"); if (e) set_biomes(atoi(e)); }
+    { const char *e = getenv("CSIM_BIOME_VALUE_WEIGHT"); if (e) set_biome_value_weight(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;

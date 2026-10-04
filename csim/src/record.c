@@ -45,6 +45,8 @@ static double gf_fdt(void){return get_fixed_dt();}                static void sf
 static double gf_weather(void){return get_weather();}             static void sf_weather(double v){set_weather((int)v);}
 static double gf_wperiod(void){return get_weather_period();}      static void sf_wperiod(double v){set_weather_period(v);}
 static double gf_heatc(void){return get_heat_cost();}             static void sf_heatc(double v){set_heat_cost(v);}
+static double gf_biomes(void){return get_biomes();}               static void sf_biomes(double v){set_biomes((int)v);}
+static double gf_bweight(void){return get_biome_value_weight();}  static void sf_bweight(double v){set_biome_value_weight(v);}
 
 static const Knob KNOBS[] = {
     {"years_per_day",gf_ypd,sf_ypd}, {"family_share",gf_fshare,sf_fshare},
@@ -57,6 +59,7 @@ static const Knob KNOBS[] = {
     {"crime_wealth",gf_cw,sf_cw}, {"police_bias",gf_pbias,sf_pbias},
     {"fixed_step",gf_fstep,sf_fstep}, {"fixed_dt",gf_fdt,sf_fdt},
     {"weather",gf_weather,sf_weather}, {"weather_period",gf_wperiod,sf_wperiod}, {"heat_cost",gf_heatc,sf_heatc},
+    {"biomes",gf_biomes,sf_biomes}, {"biome_value_weight",gf_bweight,sf_bweight},
 };
 static const int N_KNOBS = (int)(sizeof(KNOBS)/sizeof(KNOBS[0]));
 static int knob_index(const char *name) {

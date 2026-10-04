@@ -50,6 +50,11 @@ static void usage(const char *argv0) {
     printf("                        and cold drives heating costs that hit poor homes hardest.\n");
     printf("                        D = game-days per weather cycle (default 5). Default off.\n");
     printf("  --heat-cost F         scale the cold-weather heating money sink (default 1; 0 = none).\n");
+    printf("  --biomes              terrain biomes (hills/floodplain/waterfront/parkland) that shape\n");
+    printf("                        land value — rich cluster on hills, poor in the floodplain. Pairs\n");
+    printf("                        with --neighborhoods (value) + --noise-worldgen (organic terrain).\n");
+    printf("                        BIOMES map overlay (O). Startup-only; default off.\n");
+    printf("  --biome-value-weight W  how strongly terrain shapes value (default 1; live in T-panel).\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -109,6 +114,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_CRIME_WEALTH=1   wealth-scaled loot + EV targeting (same as --crime-wealth).\n");
     printf("    CSIM_POLICE_BIAS=MODE crime|money|balanced patrol bias (same as --police-bias).\n");
     printf("    CSIM_WEATHER=1  CSIM_WEATHER_PERIOD=D  CSIM_HEAT_COST=F   weather (as --weather).\n");
+    printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
@@ -182,6 +188,8 @@ int main(int argc, char **argv) {
     int weather = -1;                  /* deterministic weather; <0 = unset */
     double weatherperiod = -1.0;       /* days per weather cycle; <0 = unset */
     double heatcost = -1.0;            /* heating-cost scale; <0 = unset */
+    int biomes = -1;                   /* terrain biomes; <0 = unset */
+    double biomeweight = -1.0;         /* biome value weight; <0 = unset */
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -238,6 +246,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--weather-period=", 17)) { weatherperiod = atof(argv[i] + 17); weather = (weather<0)?1:weather; }
         else if (!strcmp(argv[i], "--heat-cost") && i + 1 < argc) { heatcost = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--heat-cost=", 12)) { heatcost = atof(argv[i] + 12); }
+        else if (!strcmp(argv[i], "--biomes")) { biomes = 1; }
+        else if (!strcmp(argv[i], "--no-biomes")) { biomes = 0; }
+        else if (!strcmp(argv[i], "--biome-value-weight") && i + 1 < argc) { biomeweight = atof(argv[++i]); biomes = (biomes<0)?1:biomes; }
+        else if (!strncmp(argv[i], "--biome-value-weight=", 21)) { biomeweight = atof(argv[i] + 21); biomes = (biomes<0)?1:biomes; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -299,6 +311,10 @@ int main(int argc, char **argv) {
     if (weatherperiod > 0) set_weather_period(weatherperiod);
     if (heatcost < 0) { const char *e = getenv("CSIM_HEAT_COST"); if (e) heatcost = atof(e); }
     if (heatcost >= 0) set_heat_cost(heatcost);
+    if (biomes < 0) { const char *e = getenv("CSIM_BIOMES"); if (e) biomes = atoi(e); }
+    if (biomes >= 0) set_biomes(biomes);         /* must precede world_init */
+    if (biomeweight < 0) { const char *e = getenv("CSIM_BIOME_VALUE_WEIGHT"); if (e) biomeweight = atof(e); }
+    if (biomeweight >= 0) set_biome_value_weight(biomeweight);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

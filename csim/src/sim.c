@@ -208,6 +208,22 @@ double get_weather_period(void) { return g_weather_period; }
 void   set_heat_cost(double f) { if (f >= 0.0) g_heat_cost = f; }
 double get_heat_cost(void) { return g_heat_cost; }
 
+static int    g_biomes = 0;                 /* terrain biomes on/off (startup gen) */
+static double g_biome_value_weight = 1.0;   /* how strongly terrain shapes home value (live) */
+void   set_biomes(int on) { g_biomes = on ? 1 : 0; }
+int    get_biomes(void) { return g_biomes; }
+void   set_biome_value_weight(double w) { if (w >= 0.0) g_biome_value_weight = w; }
+double get_biome_value_weight(void) { return g_biome_value_weight; }
+/* signed value nudge per biome (scaled by the weight knob in home_value) */
+double biome_delta(int b) {
+    switch (b) { case B_HILLS: return 0.20; case B_WATERFRONT: return 0.12;
+                 case B_PARKLAND: return 0.08; case B_FLOODPLAIN: return -0.20; default: return 0.0; }
+}
+const char *biome_name(int b) {
+    switch (b) { case B_HILLS: return "hills"; case B_FLOODPLAIN: return "floodplain";
+                 case B_WATERFRONT: return "waterfront"; case B_PARKLAND: return "parkland"; default: return "plain"; }
+}
+
 /* perception multipliers: fog blinds, rain muffles. 1.0 = clear. Only meaningful when
  * weather is on (callers gate on get_weather via these returning 1.0 otherwise). */
 double weather_vision_mult(const World *w) {

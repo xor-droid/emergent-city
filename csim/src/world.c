@@ -169,6 +169,29 @@ static int building_nearest_reachable(const World *w, int fx, int fy, TileType t
     return best >= 0 ? best : any;
 }
 
+/* Classify each land tile into a terrain "biome" from an elevation field + water/park
+ * proximity (pure fn of seed — no w->rng). Shapes home value (Phase 2) and land use
+ * (Phase 3). biome_ is memset to B_PLAIN(0) in world_init, so --biomes off = all plain. */
+static void classify_biomes(World *w, uint64_t seed) {
+    if (!get_biomes()) return;
+    fnl_state ne = fnlCreateState(); ne.seed = (int)seed + 555; ne.noise_type = FNL_NOISE_OPENSIMPLEX2; ne.frequency = 0.045f;
+    const int R = 3;
+    for (int y = 0; y < WORLD_H; y++) for (int x = 0; x < WORLD_W; x++) {
+        TileType t = (TileType)w->tile[x][y];
+        if (t == T_WATER) { w->biome_[x][y] = B_PLAIN; continue; }
+        if (t == T_PARK)  { w->biome_[x][y] = B_PARKLAND; continue; }
+        int wf = 0;
+        for (int dy = -R; dy <= R && !wf; dy++) for (int dx = -R; dx <= R; dx++) {
+            int xx = x+dx, yy = y+dy;
+            if (xx<0||yy<0||xx>=WORLD_W||yy>=WORLD_H) continue;
+            if (w->tile[xx][yy] == T_WATER) { wf = 1; break; }
+        }
+        if (wf) { w->biome_[x][y] = B_WATERFRONT; continue; }
+        float e = fnlGetNoise2D(&ne, (float)x, (float)y);         /* -1..1 elevation */
+        w->biome_[x][y] = (e > 0.25f) ? B_HILLS : (e < -0.25f) ? B_FLOODPLAIN : B_PLAIN;
+    }
+}
+
 void world_init(World *w, uint64_t seed) {
     memset(w, 0, sizeof(*w));
     w->seed = seed;                  /* for pure-function systems (weather) */
@@ -227,6 +250,8 @@ void world_init(World *w, uint64_t seed) {
                     if (w->tile[x][y] == T_GRASS) w->tile[x][y] = T_PARK;
         }
     }
+
+    classify_biomes(w, seed);   /* terrain biomes (after water+parks; before lots/value) */
 
     /* 4. Fill lots with buildings. Default = a smooth downtown-to-fringe density
      *    gradient; noise mode = organic neighborhoods clustered where a density
@@ -1477,6 +1502,8 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "weather=%d\n", get_weather());
     fprintf(f, "weather_period=%g\n", get_weather_period());
     fprintf(f, "heat_cost=%g\n", get_heat_cost());
+    fprintf(f, "biomes=%d\n", get_biomes());
+    fprintf(f, "biome_value_weight=%g\n", get_biome_value_weight());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());
