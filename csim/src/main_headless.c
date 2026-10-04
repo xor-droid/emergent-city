@@ -49,6 +49,7 @@ static void husage(const char *a0) {
     printf("  CSIM_HEARING[_RADIUS] CSIM_NOISE_WORLDGEN CSIM_SEED CSIM_DAYS CSIM_METRICS\n");
     printf("  CSIM_OCC_PAY_SPREAD (--occ-pay-spread F: 0 flat/legacy .. 1 full occupation pay tiers)\n");
     printf("  CSIM_NEIGHBORHOODS  (--neighborhoods: home value + residential sorting by wealth)\n");
+    printf("  CSIM_CRIME_WEALTH   (--crime-wealth: loot scales with target wealth + EV targeting)\n");
     printf("\n");
     printf("Examples:\n");
     printf("  %s --days 40 --metrics tools/dashboard/metrics.csv   record a 40-day run\n", a0);
@@ -113,6 +114,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "metrics_every"))   set_metrics_every(d);
         else if (!strcmp(key, "occ_pay_spread"))  set_occ_pay_spread(d);
         else if (!strcmp(key, "neighborhoods"))   set_neighborhoods(iv);
+        else if (!strcmp(key, "crime_wealth"))    set_crime_wealth(iv);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -176,6 +178,7 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_METRICS_EVERY"); if (e) set_metrics_every(atof(e)); }
     { const char *e = getenv("CSIM_OCC_PAY_SPREAD"); if (e) set_occ_pay_spread(atof(e)); }
     { const char *e = getenv("CSIM_NEIGHBORHOODS"); if (e) set_neighborhoods(atoi(e)); }
+    { const char *e = getenv("CSIM_CRIME_WEALTH"); if (e) set_crime_wealth(atoi(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;

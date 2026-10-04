@@ -388,6 +388,9 @@ typedef struct {
     int crime_kind[CK_COUNT];   /* per-kind crime tally */
     double wages_earned;        /* cumulative legal income (wages paid to workers) */
     double crime_take[CK_COUNT];/* cumulative illegal proceeds, per crime kind */
+    double median_wealth;       /* city median per-capita household wealth (set daily) */
+    double loot_tier[3];        /* cumulative loot stolen from poor/mid/rich targets */
+    int    crimes_tier[3];      /* count of money crimes against poor/mid/rich targets */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
 
@@ -507,6 +510,8 @@ double get_occ_pay_spread(void);
 void   households_daily(World *w);            /* recompute per-home hh_size/hh_wealth/hh_income (day change) */
 void   set_neighborhoods(int on);             /* --neighborhoods / CSIM_NEIGHBORHOODS: home value + sorting + overlay */
 int    get_neighborhoods(void);
+void   set_crime_wealth(int on);              /* --crime-wealth / CSIM_CRIME_WEALTH: wealth-scaled loot + EV targeting */
+int    get_crime_wealth(void);
 
 /* ── Balance metrics export (dashboard): one CSV row per sample ─────────────── */
 #define METRICS_EVERY_HOURS 24.0             /* default sampling cadence: once per game-day */

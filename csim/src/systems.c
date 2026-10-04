@@ -390,6 +390,51 @@ int combat_attack(World *w, Agent *att, Agent *def, const char *context, double 
     return 0;
 }
 
+/* size the take for a property crime. Legacy (crime-wealth off): flat ranges that
+ * draw from w->rng exactly as before. Wealth mode: a fraction of the target's money
+ * (the nearest-richest resident when there's no explicit victim), clamped per kind —
+ * so a mansion is a real score and a tenement nets pennies. Draws no rng. */
+static double crime_loot(World *w, Agent *perp, Agent *target, const char *kind) {
+    if (!get_crime_wealth()) {
+        if      (!strcmp(kind, "theft"))     return rng_range(&w->rng, 5, 25);
+        else if (!strcmp(kind, "burglary"))  return rng_range(&w->rng, 25, 90);
+        else if (!strcmp(kind, "robbery"))   return rng_range(&w->rng, 15, 55);
+        else if (!strcmp(kind, "extortion")) return rng_range(&w->rng, 15, 50);
+        else if (!strcmp(kind, "riot"))      return rng_range(&w->rng, 5, 40);
+        return 0.0;
+    }
+    double tw;
+    if (target) tw = target->needs.money;
+    else {   /* burglary / untargeted: size by the richest resident on the block */
+        double bw = 0; int x = (int)perp->x, y = (int)perp->y;
+        for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+            if (!o->alive || o->id == perp->id || o->is_police) continue;
+            if (abs((int)o->x - x) + abs((int)o->y - y) > WITNESS_RADIUS*4) continue;
+            if (o->needs.money > bw) bw = o->needs.money;
+        }
+        tw = bw;
+    }
+    double frac, lo, hi;
+    if      (!strcmp(kind, "theft"))     { frac = 0.15; lo = 3; hi = 60;  }
+    else if (!strcmp(kind, "burglary"))  { frac = 0.30; lo = 5; hi = 300; }
+    else if (!strcmp(kind, "robbery"))   { frac = 0.35; lo = 5; hi = 200; }
+    else if (!strcmp(kind, "extortion")) { frac = 0.25; lo = 5; hi = 150; }
+    else if (!strcmp(kind, "riot"))      { frac = 0.10; lo = 3; hi = 60;  }
+    else return 0.0;
+    if (tw <= 0) return 0.0;
+    double loot = frac * tw;
+    if (loot < lo) loot = lo; if (loot > hi) loot = hi; if (loot > tw) loot = tw;
+    return loot;
+}
+/* tally loot against the victim's wealth tier (poor/mid/rich vs the city median) —
+ * for the dashboard; runs regardless of the crime-wealth flag. */
+static void crime_tier_add(World *w, double victim_wealth, double loot) {
+    double med = w->median_wealth > 0 ? w->median_wealth : 1.0;
+    int tier = (victim_wealth < 0.5 * med) ? 0 : (victim_wealth > 2.0 * med) ? 2 : 1;
+    w->loot_tier[tier] += loot;
+    w->crimes_tier[tier]++;
+}
+
 void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     if (!strcmp(kind, "dealing"))     { do_deal(w, perp);          return; }
     if (!strcmp(kind, "trafficking")) { do_traffic(w, perp);       return; }
@@ -407,28 +452,36 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
     char t[96];
 
     if (success) {
-        double loot = 0;
-        if      (!strcmp(kind, "theft"))     loot = rng_range(&w->rng, 5, 25);
-        else if (!strcmp(kind, "burglary"))  loot = rng_range(&w->rng, 25, 90);
-        else if (!strcmp(kind, "robbery"))   loot = rng_range(&w->rng, 15, 55);
-        else if (!strcmp(kind, "extortion")) loot = rng_range(&w->rng, 15, 50);
-        else if (!strcmp(kind, "riot"))      loot = rng_range(&w->rng, 5, 40);
+        double loot = crime_loot(w, perp, target, kind);
         perp->needs.money += loot;
         if (loot > 0) w->crime_take[ck_index(kind)] += loot;   /* cumulative illegal proceeds (dashboard) */
         if (target) {
-            if (loot > 0) target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
+            double vw = target->needs.money;                   /* victim wealth before the take */
+            if (loot > 0) { target->needs.money = clampd(target->needs.money - loot, 0, 1e9);
+                            crime_tier_add(w, vw, loot); }
             target->needs.safety = clampd(target->needs.safety - (!strcmp(kind,"assault")?0.5:0.3), 0, 1);
             if (!strcmp(kind, "assault")) combat_attack(w, perp, target, "assault", ASSAULT_INJURY);
         } else if (loot > 0) {
-            /* (D) no direct target (e.g. burglary) — take it from the nearest resident
-             * so stolen money is transferred, not injected into the economy */
-            Agent *v = NULL; int bd = 0;
-            for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
-                if (!o->alive || o->id == perp->id || o->needs.money < loot) continue;
-                int d = abs((int)o->x - x) + abs((int)o->y - y);
-                if (d <= WITNESS_RADIUS*4 && (!v || d < bd)) { v = o; bd = d; }
+            /* (D) no direct target (e.g. burglary) — take it from a nearby resident so
+             * stolen money is transferred, not injected. Wealth mode robs the richest on
+             * the block; legacy robs the nearest who can cover the (flat) loot. */
+            Agent *v = NULL;
+            if (get_crime_wealth()) {
+                double bw = -1;
+                for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+                    if (!o->alive || o->id == perp->id || o->is_police) continue;
+                    if (abs((int)o->x - x) + abs((int)o->y - y) <= WITNESS_RADIUS*4 && o->needs.money > bw) { bw = o->needs.money; v = o; }
+                }
+            } else {
+                int bd = 0;
+                for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+                    if (!o->alive || o->id == perp->id || o->needs.money < loot) continue;
+                    int d = abs((int)o->x - x) + abs((int)o->y - y);
+                    if (d <= WITNESS_RADIUS*4 && (!v || d < bd)) { v = o; bd = d; }
+                }
             }
-            if (v) v->needs.money = clampd(v->needs.money - loot, 0, 1e9);
+            if (v) { double vw = v->needs.money; v->needs.money = clampd(v->needs.money - loot, 0, 1e9);
+                     crime_tier_add(w, vw, loot); }
         }
         if (!strcmp(kind, "extortion") && perp->faction_id >= 0)
             w->factions[perp->faction_id].treasury += loot * 0.5;
@@ -902,6 +955,7 @@ void economy_daily(World *w) {
       for (int i = 0; i < w->n_agents; i++) if (w->agents[i].alive) tmp[n++] = agent_pcwealth(w, &w->agents[i]);
       if (n) { qsort(tmp, n, sizeof(double), cmp_dbl_asc); wref = tmp[n/2]; } }
     if (wref < 1.0) wref = 1.0;   /* guard against an all-broke city */
+    w->median_wealth = wref;      /* published for crime wealth-tier classification */
 
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];

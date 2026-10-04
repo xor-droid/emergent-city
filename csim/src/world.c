@@ -779,6 +779,37 @@ static Agent *seek_victim(World *w, Agent *a, int rival_faction_only) {
     return best;
 }
 
+/* EV victim (crime-wealth mode): go where the money is. Pick the nearby mark that
+ * maximises expected take ≈ wealth · P(success) / distance, where P(success) rises
+ * with the perp's skill and falls in high-heat (well-watched) areas. No rng. */
+static Agent *ev_victim(World *w, Agent *a) {
+    Agent *best = NULL; double bestEV = -1; int vis = get_vision();
+    double skill = a->crime_skill;
+    for (int i = 0; i < w->n_agents; i++) { Agent *o = &w->agents[i];
+        if (!o->alive || o->id == a->id || o->is_police || o->arrested_ticks > 0) continue;
+        if (vis && !agent_can_see(w, a, (int)o->x, (int)o->y)) continue;
+        double dx = o->x - a->x, dy = o->y - a->y, dist = sqrt(dx*dx + dy*dy);
+        if (dist > 16.0) continue;
+        double risk = w->danger_[(int)o->x][(int)o->y] / 255.0;
+        double psucc = clampd(0.4 + 0.5*skill - 0.3*risk, 0.1, 0.95);
+        double ev = o->needs.money * psucc / (1.0 + 0.12*dist);
+        if (ev > bestEV) { bestEV = ev; best = o; }
+    }
+    return best;
+}
+/* richest nearby home to burgle (crime-wealth mode): wealth discounted by distance. */
+static int richest_home(World *w, Agent *a) {
+    int best = -1; double bestScore = -1;
+    for (int b = 0; b < w->n_buildings; b++) { Building *hb = &w->buildings[b];
+        if (hb->type != T_HOME || hb->hh_size <= 0) continue;
+        double dx = hb->x - a->x, dy = hb->y - a->y, dist = sqrt(dx*dx + dy*dy);
+        if (dist > 30.0) continue;
+        double score = hb->hh_wealth / (1.0 + 0.1*dist);
+        if (score > bestScore) { bestScore = score; best = b; }
+    }
+    return best >= 0 ? best : building_nearest_reachable(w, (int)a->x, (int)a->y, T_HOME);
+}
+
 static void set_target(World *w, Agent *a) {
     int b = -1;
     switch (a->action) {
@@ -800,9 +831,10 @@ static void set_target(World *w, Agent *a) {
             else if (a->crime_role == CR_DEALER) tgt = a->drug_stock > 0 ? seek_customer(w, a) : seek_kingpin(w, a);
             else if (a->crime_role == CR_KILLER) tgt = seek_victim(w, a, 0);
             else if (a->faction_id >= 0) { tgt = seek_victim(w, a, 1); if (!tgt) tgt = seek_victim(w, a, 0); }
-            else tgt = seek_victim(w, a, 0);
+            else tgt = get_crime_wealth() ? ev_victim(w, a) : seek_victim(w, a, 0);   /* go where the money is */
             if (tgt) { a->tx = (int)tgt->x; a->ty = (int)tgt->y; return; }
-            if (a->crime_role == CR_CAREER) b = building_nearest_reachable(w, (int)a->x, (int)a->y, T_HOME);  /* go burgle */
+            if (a->crime_role == CR_CAREER)   /* go burgle: the richest nearby home in wealth mode */
+                b = get_crime_wealth() ? richest_home(w, a) : building_nearest_reachable(w, (int)a->x, (int)a->y, T_HOME);
             break;
         }
         default: break;
@@ -1217,6 +1249,7 @@ void metrics_open(const char *path) {
     fprintf(g_metrics, ",factions,wars,war_casualties,crackdown");
     /* socioeconomics: wealth inequality + household income distribution + class tiers */
     fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
+    fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1295,6 +1328,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     for (int i=0;i<LANG_COUNT;i++) fprintf(g_metrics, ",%d", lang[i]);
     fprintf(g_metrics, ",%d,%d,%d,%d", factions, wars, war_cas, w->crackdown_days>0?1:0);
     fprintf(g_metrics, ",%.4f,%.0f,%.0f,%.0f,%.0f", gini, hp25, hmed, hp75, hmean);
+    fprintf(g_metrics, ",%.0f,%.0f,%.0f", w->loot_tier[0], w->loot_tier[1], w->loot_tier[2]);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1332,6 +1366,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "metrics_every=%g\n", get_metrics_every());
     fprintf(f, "occ_pay_spread=%g\n", get_occ_pay_spread());
     fprintf(f, "neighborhoods=%d\n", get_neighborhoods());
+    fprintf(f, "crime_wealth=%d\n", get_crime_wealth());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());
