@@ -112,6 +112,9 @@ const CHARTS = [
     {col:"total_debt",label:"total debt",color:C.red},
     {col:"wages_earned",label:"legal income (wages, cum)",color:C.blue,axis:"y1"},
     {col:"crime_income",label:"illegal income (crime, cum)",color:C.orange,axis:"y1"}]},
+  {title:"Income rate: legal vs illegal (per sample)", s:[
+    {col:"wages_earned",label:"legal / sample (left)",color:C.blue,delta:true},
+    {col:"crime_income",label:"illegal / sample (right)",color:C.orange,delta:true,axis:"y1"}]},
   {title:"Markets (multipliers)", s:[
     {col:"goods_price",label:"goods price",color:C.amber},{col:"wage",color:C.blue}]},
   {title:"Debt & property", s:[
@@ -206,7 +209,7 @@ function optionsFor(used, big){
   const scales = { x:{ title:{display:true,text:"day"}, ticks:{maxTicksLimit: big?14:8} },
                    y:{ beginAtZero:true, position:"left" } };
   if(hasRight) scales.y1 = { beginAtZero:true, position:"right",
-    grid:{drawOnChartArea:false}, title:{display:true,text:"cumulative $"} };
+    grid:{drawOnChartArea:false}, title:{display:true,text:"$ (right)"} };
   return { responsive:true, maintainAspectRatio:false, animation:false,
     interaction:{mode:"index",intersect:false}, scales,
     plugins:{ legend:{display: used.length>1, position:"bottom",
