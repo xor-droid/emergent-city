@@ -6,6 +6,7 @@
  */
 #include "gfx.h"
 #include "viz.h"
+#include "record.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -362,6 +363,11 @@ int run_ui(World *w){
                     case 10: set_hearing(!get_hearing()); break;   /* toggle */
                     case 11: set_hearing_radius(get_hearing_radius()+dir); break;
                     case 12:{ double v=get_child_cost()+dir*1.0; if(v<0)v=0; set_child_cost(v);} break;
+                }
+                if(rec_active()){
+                    static const char *TK[13]={"years_per_day","pop_target","family_share","kids_min","kids_max",
+                        "fixed_step","research_rate","production","vision","vision_radius","hearing","hearing_radius","child_cost"};
+                    if(i>=0 && i<13) rec_tune_now(w, TK[i]);   /* record this live change for replay */
                 } }
                 break;
             }
@@ -426,7 +432,8 @@ int run_ui(World *w){
             } else if(!overPanel){
                 float wx,wy; s2w(&cam,mx,my,&wx,&wy);
                 int tx=(int)(wx/TILE_PX), ty=(int)(wy/TILE_PX);
-                if(god){ god_apply(w,tool,tx,ty,flash,sizeof(flash)); flash_until=now_sec()+2.5; }
+                if(god){ god_apply(w,tool,tx,ty,flash,sizeof(flash)); flash_until=now_sec()+2.5;
+                         if(rec_active()) rec_god(w,tool,tx,ty); }   /* record for replay */
                 else { Agent *a=world_agent_at(w,tx,ty,5);
                     if(a){ selected=a->id; cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; follow=1; if(cam.zoom<1.6f)cam.zoom=2.2f; }
                     else { selected=-1; follow=0; } }

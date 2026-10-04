@@ -381,6 +381,7 @@ typedef struct {
 
     double hour;    /* 0..24 */
     int day;
+    uint64_t tick;  /* monotonic world_tick count — the deterministic clock for replay */
     Rng rng;
 
     /* stats for HUD / headless */

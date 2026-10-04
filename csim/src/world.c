@@ -1051,6 +1051,7 @@ static int should_consult(World *w, Agent *a) {
 
 /* ── Tick ────────────────────────────────────────────────────────────────── */
 void world_tick(World *w, double dt_seconds) {
+    w->tick++;                       /* deterministic step clock (replay stamps events by it) */
     double game_hours = dt_seconds * TIME_SCALE / 3600.0;
     int prev_day = w->day;
     w->hour += game_hours;

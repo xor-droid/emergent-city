@@ -8,6 +8,7 @@
 #include "sim.h"
 #include "gfx.h"
 #include "llm.h"
+#include "record.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -59,6 +60,9 @@ static void usage(const char *argv0) {
     printf("                        Also writes PATH.meta (seed+config) for deterministic re-run.\n");
     printf("  --metrics-every H     sample cadence in game-hours (default 24 = once/day); e.g. 1\n");
     printf("  --metrics-hourly      for hourly, 0.5 for twice an hour. Finer = smoother graphs.\n");
+    printf("  --record PATH         record this session (seed+config+live changes) to PATH for\n");
+    printf("                        byte-identical replay; forces --fixed-step. Replay headless\n");
+    printf("                        with: csim_headless --replay-session PATH.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -155,6 +159,7 @@ int main(int argc, char **argv) {
     int hearing = -1, hearradius = -1; /* hearing; <0 = unset */
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
     const char *metrics = NULL;        /* balance CSV export path; NULL = off */
+    const char *record = NULL;         /* session recording path; NULL = off */
     double metricsevery = -1.0;        /* sample cadence in game-hours; <0 = unset */
     double occspread = -1.0;           /* occupation pay-tier spread; <0 = unset */
     int neighborhoods = -1;            /* home value + residential sorting; <0 = unset */
@@ -195,6 +200,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-noise-worldgen")) { noisegen = 0; }
         else if (!strcmp(argv[i], "--metrics") && i + 1 < argc) { metrics = argv[++i]; }
         else if (!strncmp(argv[i], "--metrics=", 10)) { metrics = argv[i] + 10; }
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc) { record = argv[++i]; }
+        else if (!strncmp(argv[i], "--record=", 9)) { record = argv[i] + 9; }
         else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc) { metricsevery = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--metrics-every=", 16)) { metricsevery = atof(argv[i] + 16); }
         else if (!strcmp(argv[i], "--metrics-hourly")) { metricsevery = 1.0; }
@@ -266,14 +273,19 @@ int main(int argc, char **argv) {
 
     G = gfx_raylib();
 
+    if (!record) record = getenv("CSIM_RECORD");
+    if (record && *record) set_fixed_step(1);   /* recording needs deterministic stepping to replay */
+
     World w;
     world_init(&w, (unsigned int)seed);
     world_populate(&w, 150);
     if (metrics && *metrics) { metrics_open(metrics); metrics_write_manifest(metrics, (unsigned int)seed, 0); }
+    if (record && *record) rec_begin((unsigned int)seed, 150, "gui");   /* snapshot config before the run */
     dotenv_autoload();   /* pick up the project .env (OPENROUTER_* vars) */
     llm_init();          /* enabled only if OPENROUTER_API_KEY is set */
 
     int rc = run_ui(&w);
+    if (rec_active()) { rec_end(&w); if (rec_save_file(record)) fprintf(stderr, "recorded session -> %s\n", record); }
     llm_shutdown();
     return rc;
 }

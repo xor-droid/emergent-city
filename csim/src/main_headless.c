@@ -14,6 +14,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "sim.h"
 #include "llm.h"
+#include "record.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,9 @@ static void husage(const char *a0) {
     printf("                        stdout) at --replay-interval seconds each (pure playback,\n");
     printf("                        no simulation). Lets the dashboard animate a past session.\n");
     printf("  --replay-interval S   seconds between replayed rows (default 0.3).\n");
+    printf("  --record PATH         record this run as a replayable session (seed+config+events).\n");
+    printf("  --replay-session FILE re-run a recorded session deterministically and verify its\n");
+    printf("                        final-state checksum (byte-identical proof).\n");
     printf("  --rerun IN.meta       re-run deterministically from a PATH.meta manifest; the\n");
     printf("                        regenerated CSV reproduces the original run byte-for-byte\n");
     printf("                        (with the LLM off — OPENROUTER_* unset — as reproducibility\n");
@@ -129,6 +133,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
 
 int main(int argc, char **argv) {
     const char *metrics = NULL, *replay_in = NULL, *rerun_in = NULL;
+    const char *record = NULL, *replay_session = NULL;
     double replay_interval = 0.3;
     double mevery = -1.0;   /* metrics cadence (game-hours); <0 = unset, CLI wins */
     double ospread = -1.0;  /* occupation pay-tier spread; <0 = unset, CLI wins */
@@ -154,6 +159,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--replay-interval=", 18))            replay_interval = atof(argv[i] + 18);
         else if (!strcmp(argv[i], "--rerun") && i + 1 < argc)            rerun_in = argv[++i];
         else if (!strncmp(argv[i], "--rerun=", 8))                       rerun_in = argv[i] + 8;
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc)           record = argv[++i];
+        else if (!strncmp(argv[i], "--record=", 9))                      record = argv[i] + 9;
+        else if (!strcmp(argv[i], "--replay-session") && i + 1 < argc)   replay_session = argv[++i];
+        else if (!strncmp(argv[i], "--replay-session=", 17))             replay_session = argv[i] + 17;
         else { fprintf(stderr, "unknown argument: %s\n", argv[i]); husage(argv[0]); return 2; }
     }
 
@@ -162,6 +171,10 @@ int main(int argc, char **argv) {
     /* Replay mode: pure playback of a recorded CSV — no simulation. */
     if (replay_in)
         return do_replay(replay_in, metrics, replay_interval);
+
+    /* Session replay: re-run a recorded session deterministically + verify checksum. */
+    if (replay_session)
+        return replay_session_file(replay_session, 1);
 
     /* --- config knobs: env first; --rerun manifest overrides; CLI seed/days last --- */
     { const char *e = getenv("CSIM_YEARS_PER_DAY"); if (e) set_years_per_day(atof(e)); }
@@ -207,6 +220,8 @@ int main(int argc, char **argv) {
         metrics_open(metrics);
         metrics_write_manifest(metrics, (unsigned int)seed, days);
     }
+    if (!record) record = getenv("CSIM_RECORD");
+    if (record && *record) rec_begin((unsigned int)seed, 150, "headless");   /* snapshot config */
     dotenv_autoload();   /* pick up the project .env */
     llm_init();          /* set OPENROUTER_API_KEY to enable Qwen consults */
     int start = w.n_agents;
@@ -236,6 +251,12 @@ int main(int argc, char **argv) {
                    w.day, alive, mo, crime_wanted_count(&w), crime_jailed_count(&w),
                    w.deaths, w.crimes);
         }
+    }
+
+    if (rec_active()) {
+        rec_end(&w);
+        if (rec_save_file(record)) printf("\nrecorded session -> %s (tick=%llu, checksum=%llu)\n",
+                                          record, (unsigned long long)w.tick, (unsigned long long)world_checksum(&w));
     }
 
     /* friendship + faction summary */

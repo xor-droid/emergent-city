@@ -30,7 +30,7 @@ function(apply_llm tgt)
   endif()
 endfunction()
 
-set(CORE_SOURCES src/sim.c src/systems.c src/world.c src/llm.c)
+set(CORE_SOURCES src/sim.c src/systems.c src/world.c src/llm.c src/viz.c src/record.c)
 
 # ── Headless core (libm + optional LLM). Always builds. ──
 add_executable(csim_headless src/main_headless.c ${CORE_SOURCES})
@@ -45,7 +45,7 @@ apply_llm(csim_harness)
 # ── Graphical build: the UI (src/ui.c) over the raylib backend (gfx.h). ──
 # The gfx.h abstraction stays so another backend could be re-added easily, but
 # raylib is the only one shipped.
-set(CSIM_SOURCES src/main.c src/ui.c src/viz.c src/gfx_raylib.c ${CORE_SOURCES})
+set(CSIM_SOURCES src/main.c src/ui.c src/gfx_raylib.c ${CORE_SOURCES})
 set(CSIM_DEFS HAVE_RAYLIB)
 set(CSIM_LIBS m)
 
