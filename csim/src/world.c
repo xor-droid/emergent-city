@@ -1028,7 +1028,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); metrics_tick(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */
@@ -1046,4 +1046,127 @@ int world_load(World *w, const char *path) {
     fclose(f);
     if (rd == 1) { compute_components(w); compute_services(w); }   /* derived, not stored */
     return rd == 1;
+}
+
+/* ── Balance metrics: one CSV row per game-day for the monitoring dashboard ────
+ * Exports *all* daily aggregates (not a curated subset) — one row is tiny and you
+ * can't chart a variable you never recorded. The header and the row are emitted
+ * from the SAME loops over the enums (crime kinds, techs, faiths, languages), so
+ * the columns and values can never drift. Per-agent data is deliberately excluded:
+ * it is not a time series and would be megabytes per day. These are pure read-only
+ * observers of World — they draw no w->rng numbers, so default runs stay
+ * byte-identical whether or not export is enabled. */
+static FILE *g_metrics = NULL;
+
+/* Write ",<prefix><slug>" — a CSV-safe column name: lowercase, non-alphanumerics
+ * (spaces, etc.) collapsed to '_'. Keeps headers machine-friendly ("Old Faith"
+ * -> "faith_old_faith") regardless of the display names the name functions return. */
+static void fput_slug(FILE *f, const char *prefix, const char *name) {
+    fprintf(f, ",%s", prefix);
+    for (const char *p = name; *p; p++) {
+        char c = *p;
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+        else if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) c = '_';
+        fputc(c, f);
+    }
+}
+
+void metrics_open(const char *path) {
+    if (!path || !*path) return;
+    if (g_metrics) { fclose(g_metrics); g_metrics = NULL; }
+    g_metrics = fopen(path, "w");
+    if (!g_metrics) return;
+    /* fixed columns */
+    fprintf(g_metrics,
+        "day,alive,children,youths,adults,elders,avg_age,"
+        "couples,married,pregnant,born_alive,deaths,in_faction,avg_friends,max_friends,"
+        "avg_money,goods_price,wage,indebted,total_debt,landlords,"
+        "crimes,wanted,jailed");
+    /* per-crime-kind columns */
+    for (int i = 0; i < CK_COUNT; i++) fput_slug(g_metrics, "crime_", crime_kind_name(i));
+    /* knowledge */
+    fprintf(g_metrics, ",research,theories,techs,avg_edu,avg_craft,avg_intellect");
+    for (int t = 0; t < TECH_COUNT; t++) fput_slug(g_metrics, "tech_", tech_name(t));
+    /* culture */
+    fprintf(g_metrics, ",religious,common_tongue");
+    for (int i = 0; i < FAITH_COUNT; i++) fput_slug(g_metrics, "faith_", faith_name((unsigned char)i));
+    for (int i = 0; i < LANG_COUNT; i++) fput_slug(g_metrics, "lang_", language_name((unsigned char)i));
+    /* governance / factions */
+    fprintf(g_metrics, ",factions,wars,war_casualties,crackdown\n");
+    fflush(g_metrics);
+}
+
+void metrics_tick(World *w) {     /* called on day change; no-op unless a file is open */
+    if (!g_metrics) return;
+    int alive=0,ch=0,yo=0,ad=0,el=0,couples=0,preg=0,born=0,indebt=0,relig=0,common=0;
+    int in_faction=0, landlords=0, total_friends=0, max_friends=0;
+    long agesum=0; double money=0,debt=0,edu=0,craft=0,intel=0;
+    int faith[FAITH_COUNT]={0}, lang[LANG_COUNT]={0};
+    for (int i=0;i<w->n_agents;i++){ Agent *a=&w->agents[i];
+        if(a->mother_id>=0) born++;            /* cumulative: born into the city */
+        if(!a->alive) continue;
+        alive++; agesum+=a->age; money+=a->needs.money; edu+=a->education; craft+=a->craft; intel+=a->intellect;
+        switch(life_stage(a)){ case LS_CHILD:ch++;break; case LS_YOUTH:yo++;break; case LS_ELDER:el++;break; default:ad++; }
+        if(a->spouse_id>=0) couples++;         /* counts both partners; halved below */
+        if(a->pregnant_ticks>0) preg++;
+        if(a->debt>0.5) indebt++;
+        debt+=a->debt;
+        if(a->faction_id!=-1) in_faction++;
+        if(count_properties(w,a->id)>0) landlords++;
+        int fr=0; for(int j=0;j<a->rels.n;j++) if(a->rels.rel[j].affinity>=FRIENDSHIP_AFFINITY) fr++;
+        total_friends+=fr; if(fr>max_friends) max_friends=fr;
+        if(a->faith!=FAITH_NONE) relig++;
+        if(a->language==LANG_COMMON) common++;
+        faith[a->faith]++; lang[a->language]++;
+    }
+    int married = couples;                      /* married agents (both partners) */
+    int wars=0, war_cas=0;
+    for(int i=0;i<w->n_factions;i++){ if(w->factions[i].war_with>i) wars++; war_cas+=w->factions[i].casualties; }
+    int factions=0; for(int i=0;i<w->n_factions;i++) if(w->factions[i].active && w->factions[i].members) factions++;
+    int techs=0; for(int k=0;k<TECH_COUNT;k++) techs+=w->sci.discovered[k];
+
+    fprintf(g_metrics, "%d,%d,%d,%d,%d,%d,%ld",
+        w->day, alive, ch, yo, ad, el, alive?agesum/alive:0);
+    fprintf(g_metrics, ",%d,%d,%d,%d,%d,%d,%.2f,%d",
+        couples/2, married, preg, born, w->deaths, in_faction,
+        alive?(double)total_friends/alive:0.0, max_friends);
+    fprintf(g_metrics, ",%.0f,%.2f,%.2f,%d,%.0f,%d",
+        alive?money/alive:0.0, w->econ.goods_price, w->econ.wage_mult, indebt, debt, landlords);
+    fprintf(g_metrics, ",%d,%d,%d", w->crimes, crime_wanted_count(w), crime_jailed_count(w));
+    for (int i=0;i<CK_COUNT;i++) fprintf(g_metrics, ",%d", w->crime_kind[i]);
+    fprintf(g_metrics, ",%.0f,%d,%d,%.1f,%.1f,%.1f",
+        w->sci.research, w->sci.theories, techs,
+        alive?edu/alive*100:0.0, alive?craft/alive*100:0.0, alive?intel/alive*100:0.0);
+    for (int t=0;t<TECH_COUNT;t++) fprintf(g_metrics, ",%.0f", w->sci.adoption[t]*100);
+    fprintf(g_metrics, ",%d,%d", relig, common);
+    for (int i=0;i<FAITH_COUNT;i++) fprintf(g_metrics, ",%d", faith[i]);
+    for (int i=0;i<LANG_COUNT;i++) fprintf(g_metrics, ",%d", lang[i]);
+    fprintf(g_metrics, ",%d,%d,%d,%d\n", factions, wars, war_cas, w->crackdown_days>0?1:0);
+    fflush(g_metrics);
+}
+
+/* Sidecar manifest written beside the metrics CSV: records seed + days + every knob
+ * so a session can be reproduced deterministically (--rerun). Plain KEY=VALUE lines. */
+void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
+    if (!csv_path || !*csv_path) return;
+    char mpath[1024];
+    snprintf(mpath, sizeof mpath, "%s.meta", csv_path);
+    FILE *f = fopen(mpath, "w");
+    if (!f) return;
+    fprintf(f, "seed=%u\n", seed);
+    fprintf(f, "days=%d\n", days);
+    fprintf(f, "years_per_day=%g\n", get_years_per_day());
+    fprintf(f, "family_share=%g\n", get_family_share());
+    fprintf(f, "kids_min=%d\n", get_family_kids_min());
+    fprintf(f, "kids_max=%d\n", get_family_kids_max());
+    fprintf(f, "pop_target=%d\n", get_pop_target());
+    fprintf(f, "research_rate=%g\n", get_research_rate());
+    fprintf(f, "production=%g\n", get_craft_bonus());
+    fprintf(f, "child_cost=%g\n", get_child_cost());
+    fprintf(f, "vision=%d\n", get_vision());
+    fprintf(f, "vision_radius=%d\n", get_vision_radius());
+    fprintf(f, "hearing=%d\n", get_hearing());
+    fprintf(f, "hearing_radius=%d\n", get_hearing_radius());
+    fprintf(f, "noise_worldgen=%d\n", get_noise_worldgen());
+    fclose(f);
 }

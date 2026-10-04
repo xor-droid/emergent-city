@@ -1,13 +1,151 @@
 /* main_headless.c — run the full C core without graphics and print a report.
  * Builds with just a C compiler + libm.
  *   cc -O2 -o csim_headless src/main_headless.c src/sim.c src/systems.c src/world.c -lm
+ *
+ * Flags (all also available as CSIM_* env vars):
+ *   --seed N            worldgen seed (default 1337)
+ *   --days N            game-days to simulate (default 6)
+ *   --metrics PATH      append one CSV row of all daily aggregates per game-day to PATH
+ *                       (live; also writes PATH.meta recording seed+config for re-run)
+ *   --replay IN.csv     stream a recorded CSV back out (to --metrics, else stdout) one
+ *     [--replay-interval SECS]   row at a time (default 0.3s) so a dashboard animates it
+ *   --rerun IN.meta     deterministically re-run from a recorded manifest (seed+config)
  */
+#define _POSIX_C_SOURCE 200809L
 #include "sim.h"
 #include "llm.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
-int main(void) {
+static void husage(const char *a0) {
+    printf("usage: %s [--seed N] [--days N] [--metrics PATH]\n", a0);
+    printf("       %s --replay IN.csv [--metrics OUT.csv] [--replay-interval SECS]\n", a0);
+    printf("       %s --rerun IN.meta [--metrics OUT.csv]\n", a0);
+    printf("\n");
+    printf("Runs the full city core headless and prints an end-of-run report. With\n");
+    printf("--metrics it also writes one CSV row of ALL daily aggregates per game-day\n");
+    printf("(and PATH.meta: seed+config) for the live web dashboard in tools/dashboard/.\n");
+    printf("\n");
+    printf("  --seed N              worldgen seed (default 1337); same seed+config = same run.\n");
+    printf("  --days N              game-days to simulate (default 6).\n");
+    printf("  --metrics PATH        live balance CSV export (point at the dashboard dir).\n");
+    printf("  --replay IN.csv       replay a recorded run: stream its rows to --metrics (or\n");
+    printf("                        stdout) at --replay-interval seconds each (pure playback,\n");
+    printf("                        no simulation). Lets the dashboard animate a past session.\n");
+    printf("  --replay-interval S   seconds between replayed rows (default 0.3).\n");
+    printf("  --rerun IN.meta       re-run deterministically from a PATH.meta manifest; the\n");
+    printf("                        regenerated CSV reproduces the original run byte-for-byte\n");
+    printf("                        (with the LLM off — OPENROUTER_* unset — as reproducibility\n");
+    printf("                        always requires; an LLM consult makes the run non-deterministic).\n");
+    printf("  -h, --help            show this help.\n");
+    printf("\n");
+    printf("Config knobs (env, applied unless --rerun overrides them):\n");
+    printf("  CSIM_YEARS_PER_DAY CSIM_FAMILY_SHARE CSIM_FAMILY_KIDS_MIN/MAX CSIM_POP_TARGET\n");
+    printf("  CSIM_RESEARCH_RATE CSIM_PRODUCTION CSIM_CHILD_COST CSIM_VISION[_RADIUS]\n");
+    printf("  CSIM_HEARING[_RADIUS] CSIM_NOISE_WORLDGEN CSIM_SEED CSIM_DAYS CSIM_METRICS\n");
+    printf("\n");
+    printf("Examples:\n");
+    printf("  %s --days 40 --metrics tools/dashboard/metrics.csv   record a 40-day run\n", a0);
+    printf("  %s --replay old.csv --metrics tools/dashboard/metrics.csv   animate it\n", a0);
+    printf("  %s --rerun tools/dashboard/metrics.csv.meta          reproduce that run\n", a0);
+}
+
+static void sleep_seconds(double s) {
+    if (s <= 0) return;
+    struct timespec ts;
+    ts.tv_sec  = (time_t)s;
+    ts.tv_nsec = (long)((s - (double)ts.tv_sec) * 1e9);
+    nanosleep(&ts, NULL);
+}
+
+/* Playback: copy IN.csv to out_path (or stdout) one row at a time, sleeping between
+ * data rows, so a polling dashboard animates the recorded run. No simulation. */
+static int do_replay(const char *in_path, const char *out_path, double interval) {
+    FILE *in = fopen(in_path, "r");
+    if (!in) { fprintf(stderr, "replay: cannot open %s\n", in_path); return 1; }
+    FILE *out = (out_path && *out_path) ? fopen(out_path, "w") : stdout;
+    if (!out) { fprintf(stderr, "replay: cannot open %s\n", out_path); fclose(in); return 1; }
+    char line[16384];
+    int lineno = 0, rows = 0;
+    while (fgets(line, sizeof line, in)) {
+        fputs(line, out);
+        fflush(out);
+        if (lineno++ == 0) continue;     /* header row: emit immediately, no delay */
+        rows++;
+        sleep_seconds(interval);
+    }
+    fclose(in);
+    if (out != stdout) fclose(out);
+    fprintf(stderr, "replay: streamed %d row(s) from %s%s%s at %.2fs/row\n",
+            rows, in_path, (out_path && *out_path) ? " -> " : "",
+            (out_path && *out_path) ? out_path : "", interval);
+    return 0;
+}
+
+/* Apply a KEY=VALUE manifest (written by metrics_write_manifest) to the global knobs.
+ * Fills *seed and *days from it. Returns 0 on success. */
+static int load_manifest(const char *path, long *seed, int *days) {
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "rerun: cannot open %s\n", path); return 1; }
+    char line[256];
+    while (fgets(line, sizeof line, f)) {
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        const char *key = line, *val = eq + 1;
+        double d = atof(val); int iv = atoi(val);
+        if      (!strcmp(key, "seed"))           *seed = atol(val);
+        else if (!strcmp(key, "days"))           *days = iv;
+        else if (!strcmp(key, "years_per_day"))  set_years_per_day(d);
+        else if (!strcmp(key, "family_share"))   set_family_share(d);
+        else if (!strcmp(key, "kids_min"))       set_family_kids(iv, get_family_kids_max());
+        else if (!strcmp(key, "kids_max"))       set_family_kids(get_family_kids_min(), iv);
+        else if (!strcmp(key, "pop_target"))     set_pop_target(iv);
+        else if (!strcmp(key, "research_rate"))  set_research_rate(d);
+        else if (!strcmp(key, "production"))      set_craft_bonus(d);
+        else if (!strcmp(key, "child_cost"))      set_child_cost(d);
+        else if (!strcmp(key, "vision"))          set_vision(iv);
+        else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
+        else if (!strcmp(key, "hearing"))         set_hearing(iv);
+        else if (!strcmp(key, "hearing_radius"))  set_hearing_radius(iv);
+        else if (!strcmp(key, "noise_worldgen"))  set_noise_worldgen(iv);
+    }
+    fclose(f);
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    const char *metrics = NULL, *replay_in = NULL, *rerun_in = NULL;
+    double replay_interval = 0.3;
+    long seed = -1;      /* <0 = unset */
+    int  days = -1;      /* <0 = unset */
+
+    for (int i = 1; i < argc; i++) {
+        if      (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) { husage(argv[0]); return 0; }
+        else if (!strcmp(argv[i], "--seed") && i + 1 < argc)            seed = atol(argv[++i]);
+        else if (!strncmp(argv[i], "--seed=", 7))                        seed = atol(argv[i] + 7);
+        else if (!strcmp(argv[i], "--days") && i + 1 < argc)             days = atoi(argv[++i]);
+        else if (!strncmp(argv[i], "--days=", 7))                        days = atoi(argv[i] + 7);
+        else if (!strcmp(argv[i], "--metrics") && i + 1 < argc)          metrics = argv[++i];
+        else if (!strncmp(argv[i], "--metrics=", 10))                    metrics = argv[i] + 10;
+        else if (!strcmp(argv[i], "--replay") && i + 1 < argc)           replay_in = argv[++i];
+        else if (!strncmp(argv[i], "--replay=", 9))                      replay_in = argv[i] + 9;
+        else if (!strcmp(argv[i], "--replay-interval") && i + 1 < argc)  replay_interval = atof(argv[++i]);
+        else if (!strncmp(argv[i], "--replay-interval=", 18))            replay_interval = atof(argv[i] + 18);
+        else if (!strcmp(argv[i], "--rerun") && i + 1 < argc)            rerun_in = argv[++i];
+        else if (!strncmp(argv[i], "--rerun=", 8))                       rerun_in = argv[i] + 8;
+        else { fprintf(stderr, "unknown argument: %s\n", argv[i]); husage(argv[0]); return 2; }
+    }
+
+    if (!metrics) metrics = getenv("CSIM_METRICS");
+
+    /* Replay mode: pure playback of a recorded CSV — no simulation. */
+    if (replay_in)
+        return do_replay(replay_in, metrics, replay_interval);
+
+    /* --- config knobs: env first; --rerun manifest overrides; CLI seed/days last --- */
     { const char *e = getenv("CSIM_YEARS_PER_DAY"); if (e) set_years_per_day(atof(e)); }
     { const char *e = getenv("CSIM_FAMILY_SHARE"); if (e) set_family_share(atof(e)); }
     { const char *lo = getenv("CSIM_FAMILY_KIDS_MIN"), *hi = getenv("CSIM_FAMILY_KIDS_MAX");
@@ -21,9 +159,27 @@ int main(void) {
     { const char *e = getenv("CSIM_HEARING_RADIUS"); if (e) set_hearing_radius(atoi(e)); }
     { const char *e = getenv("CSIM_HEARING"); if (e) set_hearing(atoi(e)); }
     { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) set_noise_worldgen(atoi(e)); }
+
+    if (rerun_in) {
+        long mseed = -1; int mdays = -1;
+        if (load_manifest(rerun_in, &mseed, &mdays) != 0) return 1;
+        if (seed < 0 && mseed >= 0) seed = mseed;   /* CLI --seed still wins if given */
+        if (days < 0 && mdays >= 0) days = mdays;
+        fprintf(stderr, "rerun: reproducing %s (seed=%ld, days=%d)\n", rerun_in, seed, days);
+    }
+
+    if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
+    if (seed < 0) seed = 1337;
+    if (days < 0) { const char *e = getenv("CSIM_DAYS"); if (e) days = atoi(e); }
+    if (days < 0) days = 6;
+
     World w;
-    world_init(&w, 1337);
+    world_init(&w, (unsigned int)seed);
     world_populate(&w, 150);
+    if (metrics && *metrics) {
+        metrics_open(metrics);
+        metrics_write_manifest(metrics, (unsigned int)seed, days);
+    }
     dotenv_autoload();   /* pick up the project .env */
     llm_init();          /* set OPENROUTER_API_KEY to enable Qwen consults */
     int start = w.n_agents;
@@ -32,11 +188,11 @@ int main(void) {
     for (int i = 0; i < w.n_agents; i++) police += w.agents[i].is_police;
 
     printf("Emergent City — C core (headless, full port)\n");
-    printf("world %dx%d, %d agents (%d police), %d buildings, %d factions, seed 1337\n\n",
-           WORLD_W, WORLD_H, start, police, w.n_buildings, w.n_factions);
+    printf("world %dx%d, %d agents (%d police), %d buildings, %d factions, seed %ld\n\n",
+           WORLD_W, WORLD_H, start, police, w.n_buildings, w.n_factions, seed);
 
     const double DT = 0.25;
-    const int DAYS = 6;
+    const int DAYS = days;
     long ticks = (long)(DAYS * 24 * SECONDS_PER_HOUR / DT);
 
     int prev_day = w.day;

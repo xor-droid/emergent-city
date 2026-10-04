@@ -489,6 +489,12 @@ double get_craft_bonus(void);
 void   set_child_cost(double c);            /* --child-cost / CSIM_CHILD_COST */
 double get_child_cost(void);
 double worker_output(const Agent *a);       /* pay/output factor from craft + education */
+
+/* ── Balance metrics export (dashboard): one CSV row per game-day ───────────── */
+void metrics_open(const char *path);        /* CSV_METRICS / --metrics; "" / NULL = off */
+void metrics_tick(World *w);                 /* call on day change; no-op unless opened */
+void metrics_write_manifest(const char *csv_path, unsigned int seed, int days);
+
 const char *faith_name(unsigned char f);
 const char *culture_name(unsigned char c);
 const char *language_name(unsigned char l);

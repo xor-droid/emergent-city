@@ -39,6 +39,12 @@ static void usage(const char *argv0) {
     printf("                        stealthy, serial killers quieter still. Rebalances --vision.\n");
     printf("  --noise-worldgen      generate the city with coherent (FastNoiseLite) noise for\n");
     printf("                        organic rivers/districts instead of the default sine/gradient.\n");
+    printf("  --seed N              worldgen seed (default 1337); same seed+config = same run.\n");
+    printf("\n");
+    printf("Balance metrics (feeds the live web dashboard in tools/dashboard/):\n");
+    printf("  --metrics PATH        append one CSV row of all daily aggregates per game-day to\n");
+    printf("                        PATH (live; point it at the dashboard dir so nginx serves it).\n");
+    printf("                        Also writes PATH.meta (seed+config) for deterministic re-run.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -75,6 +81,8 @@ static void usage(const char *argv0) {
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
+    printf("    CSIM_SEED=N         worldgen seed (as --seed).\n");
+    printf("    CSIM_METRICS=PATH   live balance CSV export (as --metrics).\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
@@ -103,6 +111,7 @@ static void usage(const char *argv0) {
     printf("  CSIM_WARMDAYS=12 %s --pop-target 250    open on an already-grown city\n", argv0);
     printf("  CSIM_SHOT=out.png %s                  render ./out.png and exit\n", argv0);
     printf("  %s --tileset dawnlike                 run with the DawnLike sprite tileset\n", argv0);
+    printf("  %s --metrics tools/dashboard/metrics.csv   live-feed the balance dashboard\n", argv0);
 }
 
 int main(int argc, char **argv) {
@@ -118,6 +127,8 @@ int main(int argc, char **argv) {
     int vision = -1, visradius = -1;   /* field of view; <0 = unset */
     int hearing = -1, hearradius = -1; /* hearing; <0 = unset */
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
+    const char *metrics = NULL;        /* balance CSV export path; NULL = off */
+    long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
@@ -150,6 +161,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--hearing-radius=", 17)) { hearradius = atoi(argv[i] + 17); hearing = (hearing < 0) ? 1 : hearing; }
         else if (!strcmp(argv[i], "--noise-worldgen")) { noisegen = 1; }
         else if (!strcmp(argv[i], "--no-noise-worldgen")) { noisegen = 0; }
+        else if (!strcmp(argv[i], "--metrics") && i + 1 < argc) { metrics = argv[++i]; }
+        else if (!strncmp(argv[i], "--metrics=", 10)) { metrics = argv[i] + 10; }
+        else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
+        else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -192,12 +207,16 @@ int main(int argc, char **argv) {
     if (hearing >= 0) set_hearing(hearing);
     if (noisegen < 0) { const char *e = getenv("CSIM_NOISE_WORLDGEN"); if (e) noisegen = atoi(e); }
     if (noisegen >= 0) set_noise_worldgen(noisegen);   /* must precede world_init */
+    if (!metrics) metrics = getenv("CSIM_METRICS");
+    if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
+    if (seed < 0) seed = 1337;
 
     G = gfx_raylib();
 
     World w;
-    world_init(&w, 1337);
+    world_init(&w, (unsigned int)seed);
     world_populate(&w, 150);
+    if (metrics && *metrics) { metrics_open(metrics); metrics_write_manifest(metrics, (unsigned int)seed, 0); }
     dotenv_autoload();   /* pick up the project .env (OPENROUTER_* vars) */
     llm_init();          /* enabled only if OPENROUTER_API_KEY is set */
 

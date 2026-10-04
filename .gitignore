@@ -51,3 +51,8 @@ screenshot.png
 
 # Tileset assets are fetched by tools/fetch-tilesets.sh, not committed (licensing/size)
 csim/tilesets/*.png
+
+# Dashboard: runtime-generated metrics (the sim writes these; not source)
+tools/dashboard/metrics.csv
+tools/dashboard/*.csv
+tools/dashboard/*.meta

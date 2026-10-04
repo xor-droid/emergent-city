@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emergent City — Balance Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d222b; --ink:#e7ebf0; --muted:#9aa4b2;
+    --line:#2a313c; --accent:#5cc8ff; --ok:#3ddc84; --warn:#ffb454; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:14px 22px;
+    align-items:baseline;padding:14px 20px;background:rgba(15,17,21,.92);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  header h1 .sub{color:var(--muted);font-weight:400;margin-left:8px;font-size:13px}
+  .stat{display:flex;gap:6px;align-items:baseline}
+  .stat .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .stat .v{font-variant-numeric:tabular-nums;font-weight:650}
+  #status{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 rgba(0,0,0,0)}
+  .dot.live{background:var(--ok);animation:pulse 1.6s infinite}
+  .dot.idle{background:var(--warn)}
+  .dot.err{background:var(--bad)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,132,.5)}70%{box-shadow:0 0 0 7px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
+  main{padding:18px;max-width:1600px;margin:0 auto}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(360px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px 6px}
+  .card h2{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink);letter-spacing:.2px}
+  .card .wrap{position:relative;height:210px}
+  #empty{color:var(--muted);padding:40px 8px;text-align:center}
+  a{color:var(--accent)}
+  footer{color:var(--muted);font-size:12px;padding:8px 20px 28px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>Emergent City <span class="sub">balance dashboard</span></h1>
+  <div class="stat"><span class="k">day</span><span class="v" id="s-day">–</span></div>
+  <div class="stat"><span class="k">alive</span><span class="v" id="s-alive">–</span></div>
+  <div class="stat"><span class="k">deaths</span><span class="v" id="s-deaths">–</span></div>
+  <div class="stat"><span class="k">crimes</span><span class="v" id="s-crimes">–</span></div>
+  <div class="stat"><span class="k">factions</span><span class="v" id="s-fac">–</span></div>
+  <div id="status"><span class="dot" id="dot"></span><span id="s-text">connecting…</span></div>
+</header>
+<main>
+  <div id="empty">Waiting for <code>metrics.csv</code>… run the sim with
+    <code>--metrics &lt;this-dir&gt;/metrics.csv</code> (or <code>CSIM_METRICS</code>).</div>
+  <div class="grid" id="grid" hidden></div>
+</main>
+<footer>auto-refreshing every <span id="poll-s">1.5</span>s · no manual reload needed ·
+  <span id="src">metrics.csv</span></footer>
+
+<script src="chart.umd.min.js"></script>
+<script>
+/* ── config ─────────────────────────────────────────────────────────────── */
+const SRC = new URLSearchParams(location.search).get("src") || "metrics.csv";
+const POLL_MS = (+(new URLSearchParams(location.search).get("poll")) || 1500);
+document.getElementById("poll-s").textContent = (POLL_MS/1000).toFixed(1);
+document.getElementById("src").textContent = SRC;
+
+const C = {  // palette
+  blue:"#5cc8ff", green:"#3ddc84", amber:"#ffb454", red:"#ff6b6b", violet:"#b48cff",
+  pink:"#ff8fc7", teal:"#4fd6c8", lime:"#c3e88d", orange:"#ff9966", slate:"#9aa4b2",
+  gold:"#ffd166", cyan:"#56e0e0",
+};
+const PAL = Object.values(C);
+
+/* Each chart: title + series. A series is {col, label?, color?, delta?}.
+ * delta:true plots the per-day change of a cumulative counter.
+ * Missing columns are skipped silently, so the dashboard tolerates CSV changes. */
+const CHARTS = [
+  {title:"Population by life stage", s:[
+    {col:"alive",color:C.blue},{col:"children",color:C.lime},{col:"youths",color:C.teal},
+    {col:"adults",color:C.amber},{col:"elders",color:C.slate}]},
+  {title:"Average age (years)", s:[{col:"avg_age",label:"avg age",color:C.gold}]},
+  {title:"Vital events per day", s:[
+    {col:"born_alive",label:"births/day",color:C.green,delta:true},
+    {col:"deaths",label:"deaths/day",color:C.red,delta:true}]},
+  {title:"Household & bonds", s:[
+    {col:"couples",color:C.pink},{col:"pregnant",color:C.violet},
+    {col:"in_faction",label:"in faction",color:C.orange},{col:"avg_friends",label:"avg friends",color:C.teal}]},
+  {title:"Wealth", s:[{col:"avg_money",label:"avg money",color:C.green},
+    {col:"total_debt",label:"total debt",color:C.red}]},
+  {title:"Markets (multipliers)", s:[
+    {col:"goods_price",label:"goods price",color:C.amber},{col:"wage",color:C.blue}]},
+  {title:"Debt & property", s:[
+    {col:"indebted",color:C.red},{col:"landlords",color:C.gold}]},
+  {title:"Crime totals", s:[
+    {col:"crimes",label:"crimes (cum)",color:C.red},
+    {col:"wanted",color:C.amber},{col:"jailed",color:C.blue}]},
+  {title:"Crime by kind (cumulative)", s:[
+    {col:"crime_theft",label:"theft",color:C.slate},{col:"crime_burglary",label:"burglary",color:C.teal},
+    {col:"crime_robbery",label:"robbery",color:C.amber},{col:"crime_extortion",label:"extortion",color:C.gold},
+    {col:"crime_vandalism",label:"vandalism",color:C.lime},{col:"crime_arson",label:"arson",color:C.orange},
+    {col:"crime_assault",label:"assault",color:C.pink},{col:"crime_riot",label:"riot",color:C.violet},
+    {col:"crime_dealing",label:"dealing",color:C.cyan},{col:"crime_trafficking",label:"trafficking",color:C.blue},
+    {col:"crime_murder",label:"murder",color:C.red}]},
+  {title:"Knowledge", s:[
+    {col:"theories",color:C.violet},{col:"techs",color:C.blue},{col:"research",color:C.slate}]},
+  {title:"Skills (%)", s:[
+    {col:"avg_edu",label:"education",color:C.green},{col:"avg_craft",label:"craft",color:C.amber},
+    {col:"avg_intellect",label:"intellect",color:C.violet}]},
+  {title:"Tech adoption (%)", s:[
+    {col:"tech_writing",label:"writing",color:C.blue},{col:"tech_tooling",label:"tooling",color:C.amber},
+    {col:"tech_medicine",label:"medicine",color:C.green},{col:"tech_banking",label:"banking",color:C.gold},
+    {col:"tech_printing",label:"printing",color:C.violet},{col:"tech_civics",label:"civics",color:C.teal}]},
+  {title:"Faith", s:[
+    {col:"faith_secular",label:"secular",color:C.slate},{col:"faith_orthodox",label:"orthodox",color:C.blue},
+    {col:"faith_reformed",label:"reformed",color:C.green},{col:"faith_old_faith",label:"old faith",color:C.amber},
+    {col:"faith_mystic",label:"mystic",color:C.violet}]},
+  {title:"Language", s:[
+    {col:"lang_common",label:"common",color:C.blue},{col:"lang_high_tongue",label:"high tongue",color:C.amber},
+    {col:"lang_coastal",label:"coastal",color:C.teal},{col:"lang_old_speech",label:"old speech",color:C.violet}]},
+  {title:"Governance", s:[
+    {col:"factions",color:C.gold},{col:"wars",color:C.red},
+    {col:"war_casualties",label:"war casualties",color:C.orange},{col:"crackdown",color:C.violet}]},
+];
+
+/* ── CSV parsing (plain, numeric) ───────────────────────────────────────── */
+function parseCSV(text){
+  const lines = text.trim().split(/\r?\n/);
+  if(lines.length < 1) return {header:[], rows:[]};
+  const header = lines[0].split(",");
+  const idx = {}; header.forEach((h,i)=>idx[h.trim()]=i);
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    if(!lines[i]) continue;
+    const parts = lines[i].split(",");
+    if(parts.length < header.length) continue;   // skip a half-written final row
+    const row = {};
+    for(const h of header){ const v = parts[idx[h.trim()]]; row[h.trim()] = v===undefined?null:(+v); }
+    rows.push(row);
+  }
+  return {header, rows, idx};
+}
+function hasCol(data, c){ return data.header.some(h=>h.trim()===c); }
+function series(data, spec){
+  const raw = data.rows.map(r=>r[spec.col]);
+  if(!spec.delta) return raw;
+  return raw.map((v,i)=> i===0 ? v : (v - raw[i-1]));   // per-day change
+}
+
+/* ── chart construction ─────────────────────────────────────────────────── */
+Chart.defaults.color = "#9aa4b2";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = "#2a313c";
+const charts = [];   // {def, chart}
+let built = false;
+
+function buildGrid(data){
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  charts.length = 0;
+  for(const def of CHARTS){
+    const used = def.s.filter(sp=>hasCol(data, sp.col));
+    if(used.length === 0) continue;               // nothing in this CSV for this card
+    const card = document.createElement("div"); card.className="card";
+    const h = document.createElement("h2"); h.textContent = def.title; card.appendChild(h);
+    const wrap = document.createElement("div"); wrap.className="wrap";
+    const cv = document.createElement("canvas"); wrap.appendChild(cv); card.appendChild(wrap);
+    grid.appendChild(card);
+    const chart = new Chart(cv, {
+      type:"line",
+      data:{ labels:[], datasets: used.map((sp,i)=>({
+        label: sp.label || sp.col,
+        data: [], borderColor: sp.color || PAL[i%PAL.length],
+        backgroundColor:"transparent", borderWidth:1.8, pointRadius:0,
+        tension:.25, spanGaps:true,
+      })) },
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{mode:"index",intersect:false},
+        scales:{ x:{ title:{display:true,text:"day"}, ticks:{maxTicksLimit:8} },
+                 y:{ beginAtZero:true } },
+        plugins:{ legend:{display: used.length>1, position:"bottom",
+                    labels:{boxWidth:10,boxHeight:10,padding:8}},
+                  tooltip:{enabled:true} } }
+    });
+    charts.push({def, used, chart});
+  }
+  built = true;
+}
+
+function refresh(data){
+  const labels = data.rows.map(r=>r.day);
+  for(const {used, chart} of charts){
+    chart.data.labels = labels;
+    used.forEach((sp,i)=>{ chart.data.datasets[i].data = series(data, sp); });
+    chart.update("none");   // no animation, no flicker
+  }
+}
+
+/* ── header stats + status ──────────────────────────────────────────────── */
+function setStatus(cls, text){
+  const dot=document.getElementById("dot"); dot.className="dot "+cls;
+  document.getElementById("s-text").textContent=text;
+}
+function last(data,col){ const r=data.rows[data.rows.length-1]; return r? r[col] : null; }
+function fmt(v){ return v==null||Number.isNaN(v) ? "–" : (Number.isInteger(v)? v : v.toFixed(1)); }
+function updateHeader(data){
+  document.getElementById("s-day").textContent    = fmt(last(data,"day"));
+  document.getElementById("s-alive").textContent  = fmt(last(data,"alive"));
+  document.getElementById("s-deaths").textContent = fmt(last(data,"deaths"));
+  document.getElementById("s-crimes").textContent = fmt(last(data,"crimes"));
+  document.getElementById("s-fac").textContent    = fmt(last(data,"factions"));
+}
+
+/* ── poll loop ──────────────────────────────────────────────────────────── */
+let lastRowCount = -1, idleTicks = 0;
+async function tick(){
+  try{
+    const res = await fetch(SRC + "?t=" + Date.now(), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text = await res.text();
+    const data = parseCSV(text);
+    if(data.rows.length === 0){ setStatus("idle","no data rows yet"); return; }
+
+    document.getElementById("empty").hidden = true;
+    document.getElementById("grid").hidden = false;
+
+    // (re)build the grid if columns changed (e.g. first load or a new CSV schema)
+    const sig = data.header.join(",");
+    if(!built || sig !== buildGrid._sig){ buildGrid(data); buildGrid._sig = sig; }
+
+    refresh(data);
+    updateHeader(data);
+
+    if(data.rows.length !== lastRowCount){ lastRowCount = data.rows.length; idleTicks = 0;
+      setStatus("live","live · "+data.rows.length+" days");
+    } else {
+      idleTicks++;
+      setStatus(idleTicks>2 ? "idle":"live",
+                idleTicks>2 ? "idle · "+data.rows.length+" days (run ended or paused)"
+                            : "live · "+data.rows.length+" days");
+    }
+  }catch(e){
+    setStatus("err", "waiting for "+SRC+" ("+e.message+")");
+  }
+}
+tick();
+setInterval(tick, POLL_MS);
+</script>
+</body>
+</html>

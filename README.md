@@ -115,6 +115,17 @@ CSIM_SHOT=out.png ./build/csim                       # render one frame to ./out
 
 Run `./build/csim --help` for the full, categorized list (aging pace, population target, family demographics, perception, worldgen, knowledge/production, timestep/determinism, rendering, screenshots, LLM, …).
 
+### Balance dashboard
+
+Pass `--metrics <path.csv>` (GUI or headless) to log **one CSV row per game-day** with
+every aggregate the city tracks — population by life stage, births/deaths, economy, every
+crime kind, knowledge/tech adoption, culture, factions/wars. A static, auto-refreshing web
+dashboard in [`tools/dashboard/`](tools/dashboard/) (vendored Chart.js, no build step)
+polls that CSV and redraws ~16 charts live — no page reload — for both live runs and
+replays. Headless can **replay** a past run two ways: `--replay old.csv` (stream it back so
+the graphs animate) or `--rerun old.csv.meta` (deterministically reproduce it). Serve it
+with any static host; see [the dashboard README](tools/dashboard/README.md) for nginx notes.
+
 ### Reproducibility
 
 The simulation is deterministic given a seed. **Headless** runs are bit-identical by default; the **GUI** is real-time-paced (variable timestep) by default, so pass **`--fixed-step`** to make it reproducible and frame-rate-independent. In both cases the **LLM must be off** for strict reproducibility (it's an async network call), and floating-point identity holds within one build/machine.
