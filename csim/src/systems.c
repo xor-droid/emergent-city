@@ -260,8 +260,8 @@ static void do_deal(World *w, Agent *d) {
     cust->needs.social = clampd(cust->needs.social + 0.15, 0, 1);  /* the high */
     cust->dealer_id = d->id;
     d->crimes_committed++; d->reputation = (float)clampd(d->reputation - 0.03, -1, 1); tally(w, "dealing");
-    char t[96]; snprintf(t, sizeof(t), "%s sold drugs to %s ($%.0f)", d->name, cust->name, price);
-    events_post(w, EV_CRIME, d->id, cust->id, (int)d->x, (int)d->y, 0.45, t);
+    /* street corner sales to users are NOT posted to the feed (they'd drown it) —
+       only the wholesale supply chain (below) and busts/wanted notices surface. */
     if (civ && rng_double(&w->rng) < 0.3) mark_wanted(w, d, "dealing");
     if (rival && rival->id != d->id) retaliate(w, rival, d);
 }
@@ -288,7 +288,7 @@ static void do_traffic(World *w, Agent *p) {
         if (cost > p->needs.money) { units = (int)(p->needs.money / DRUG_WHOLESALE); cost = units * DRUG_WHOLESALE; }
         if (units <= 0) return;
         p->needs.money -= cost; kp->needs.money += cost; kp->drug_stock -= units; p->drug_stock += units;
-        snprintf(t, sizeof(t), "%.24s bought %d units wholesale from %.24s", p->name, units, kp->name);
+        snprintf(t, sizeof(t), "%.20s bought %d units wholesale from %.20s ($%.0f)", p->name, units, kp->name, cost);
         events_post(w, EV_CRIME, p->id, kp->id, (int)p->x, (int)p->y, 0.4, t);
     }
 }
