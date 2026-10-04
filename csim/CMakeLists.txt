@@ -37,6 +37,11 @@ add_executable(csim_headless src/main_headless.c ${CORE_SOURCES})
 target_link_libraries(csim_headless m)
 apply_llm(csim_headless)
 
+# ── Displacement harness: links the core, runs the sim in-process. ──
+add_executable(csim_harness src/harness.c ${CORE_SOURCES})
+target_link_libraries(csim_harness m)
+apply_llm(csim_harness)
+
 # ── Graphical build: the UI (src/ui.c) over the raylib backend (gfx.h). ──
 # The gfx.h abstraction stays so another backend could be re-added easily, but
 # raylib is the only one shipped.
