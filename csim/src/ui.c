@@ -310,7 +310,7 @@ int run_ui(World *w){
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
         /* live tuning panel geometry (shared by click-handling + draw) */
-        int tuneRows=6, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tuneRows=7, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
         int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
         int tuneBW=US(26), tuneBH=US(24);
         int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
@@ -329,6 +329,7 @@ int run_ui(World *w){
                     case 3: set_family_kids(get_family_kids_min()+dir, get_family_kids_max()); break;
                     case 4: set_family_kids(get_family_kids_min(), get_family_kids_max()+dir); break;
                     case 5: set_fixed_step(!get_fixed_step()); break;   /* toggle */
+                    case 6:{ double v=get_research_rate()+dir*0.01; if(v<0)v=0; set_research_rate(v);} break;
                 } }
                 break;
             }
@@ -615,7 +616,7 @@ int run_ui(World *w){
 
         /* ── city dashboard: aggregate economy / culture / governance  [E] ── */
         if(show_city){
-            int pw=US(372), ph=US(452), px=W/2-pw/2, py=hudH+US(18);
+            int pw=US(372), ph=US(524), px=W/2-pw/2, py=hudH+US(18);
             G->fill_rect(px,py,pw,ph,gfx_rgba(20,20,28,240)); G->rect_lines(px,py,pw,ph,COL_GOLD);
             int yy=py+US(12), lx=px+US(14);
             G->text("CITY DASHBOARD  [E]",lx,yy,US(15),COL_GOLD); yy+=US(24);
@@ -655,6 +656,14 @@ int run_ui(World *w){
             yy+=US(6); G->text("GOVERNANCE",lx,yy,US(12),hd); yy+=US(18);
             ROW("Faction wars %d    War deaths %d",wars,war_cas);
             ROW("Police crackdown: %s",w->crackdown_days>0?"ON":"off");
+            yy+=US(6); G->text("KNOWLEDGE",lx,yy,US(12),hd); yy+=US(18);
+            { double nextcost=THEORY_BASE*pow(THEORY_GROWTH,w->sci.theories);
+              ROW("Theories %d    Research %.0f/%.0f",w->sci.theories,w->sci.research,nextcost); }
+            { char tb[72]=""; int tn=0;
+              for(int t=0;t<TECH_COUNT;t++) if(w->sci.discovered[t]){ char one[20];
+                  snprintf(one,sizeof(one),"%s%.10s",tn?" ":"",tech_name(t)); strncat(tb,one,sizeof(tb)-strlen(tb)-1); tn++; }
+              if(!tn) snprintf(tb,sizeof(tb),"(researching...)");
+              ROW("Tech: %.44s",tb); }
             #undef ROW
         }
 
@@ -663,14 +672,15 @@ int run_ui(World *w){
             G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
             G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
             G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
-            const char *tlab[6]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep"};
-            char tv[6][24];
+            const char *tlab[7]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate"};
+            char tv[7][24];
             snprintf(tv[0],24,"%.1f",get_years_per_day());
             snprintf(tv[1],24,"%d",get_pop_target());
             snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
             snprintf(tv[3],24,"%d",get_family_kids_min());
             snprintf(tv[4],24,"%d",get_family_kids_max());
             snprintf(tv[5],24,"%s",get_fixed_step()?"Fixed":"Variable");
+            snprintf(tv[6],24,"%.2f",get_research_rate());
             for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
                 G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
                 G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));

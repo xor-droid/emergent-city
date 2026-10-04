@@ -272,6 +272,7 @@ static int spawn_child(World *w, Agent *mum, Agent *dad) {
     a->language = mum->language;
     a->faith = mum->faith != FAITH_NONE ? mum->faith : dad->faith;
     a->education = 0.0f;
+    a->intellect = (float)clampd((mum->intellect + dad->intellect) * 0.5 + rng_gauss(r, 0, 0.1), 0.05, 1.0);
     a->needs.hunger = a->needs.energy = a->needs.safety = 1.0;
     a->needs.social = a->needs.meaning = a->needs.belonging = 1.0;
     a->needs.money = 0;
@@ -462,6 +463,7 @@ static void culture_assign(World *w, Agent *a) {
     a->faith = pers_faith(&a->pers) > 0.55 && rng_double(r) < 0.8
              ? culture_faith(a->culture) : FAITH_NONE;
     a->education = (float)clampd(rng_gauss(r, 0.5, 0.2), 0.0, 1.0);
+    a->intellect = (float)clampd(rng_gauss(r, 0.5, 0.18), 0.05, 1.0);   /* innate research aptitude */
 }
 
 void culture_setup(World *w) {
@@ -479,13 +481,23 @@ void culture_setup(World *w) {
 void culture_daily(World *w) {
     Rng *r = &w->rng;
     int n0 = w->n_agents;
+    /* Writing (tech) speeds literacy; apprenticeship pulls adults toward the educated norm */
+    double writing = w->sci.discovered[TECH_WRITING] ? w->sci.adoption[TECH_WRITING] : 0.0;
+    double avgedu = 0; int na = 0;
+    for (int i = 0; i < n0; i++) if (w->agents[i].alive && w->agents[i].age >= EDU_ADULT_AGE) { avgedu += w->agents[i].education; na++; }
+    avgedu = na ? avgedu / na : 0.0;
+
     for (int i = 0; i < n0; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
 
-        /* schooling: the young grow literate */
+        /* schooling: the young grow literate (per childhood-year, so the pace is
+           independent of years-per-day; faster where there's writing) */
         if (a->age < EDU_ADULT_AGE && a->education < 1.0f)
-            a->education = (float)clampd(a->education + EDU_YOUTH_GAIN, 0, 1);
+            a->education = (float)clampd(a->education + EDU_PER_YEAR * get_years_per_day() * (1.0 + writing), 0, 1);
+        /* apprenticeship: adults learn on the job toward the city's educated norm */
+        else if (a->age >= EDU_ADULT_AGE && a->education < avgedu)
+            a->education = (float)clampd(a->education + 0.03 * (avgedu - a->education) * a->intellect * (0.6 + writing), 0, 1);
 
         /* conversion: a searching soul takes up a devout friend's faith */
         if (a->needs.meaning < 0.4 && rng_double(r) < CONVERT_CHANCE) {
@@ -730,11 +742,12 @@ static void execute_action(World *w, Agent *a) {
             crime_attempt(w, a, target, choose_crime_kind(w, a, target));
             break; }
         case A_FLEE:    n->safety = clampd(n->safety + 0.05, 0, 1); break;
-        case A_TREAT:
-            if (n->money >= TREAT_COST) { n->money -= TREAT_COST; a->injury = (float)clampd(a->injury - 0.6, 0, 2); }
-            else a->injury = (float)clampd(a->injury - 0.2, 0, 2);   /* self-care if you can't pay */
+        case A_TREAT: {
+            double med = 1.0 + 0.6 * w->sci.adoption[TECH_MEDICINE];   /* better medicine heals more */
+            if (n->money >= TREAT_COST) { n->money -= TREAT_COST; a->injury = (float)clampd(a->injury - 0.6*med, 0, 2); }
+            else a->injury = (float)clampd(a->injury - 0.2*med, 0, 2);   /* self-care if you can't pay */
             n->safety = clampd(n->safety + 0.1, 0, 1);
-            break;
+            break; }
         default: break;
     }
 }
@@ -852,7 +865,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); lifecycle_daily(w); danger_decay(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); }
 }
 
 /* ── Save / load (binary; World is pointer-free POD) ─────────────────────── */

@@ -141,6 +141,14 @@ static int g_pop_target = POP_TARGET;
 void set_pop_target(int t) { if (t >= 0) g_pop_target = t; }
 int  get_pop_target(void)  { return g_pop_target; }
 
+static double g_research_rate = RESEARCH_RATE;
+void   set_research_rate(double r) { if (r >= 0.0) g_research_rate = r; }
+double get_research_rate(void) { return g_research_rate; }
+const char *tech_name(int t) {
+    static const char *n[TECH_COUNT] = { "Writing","Tooling","Medicine","Banking","Printing","Civics" };
+    return (t >= 0 && t < TECH_COUNT) ? n[t] : "?";
+}
+
 /* GUI stepping: 0 = variable wall-clock dt (default, real-time, not reproducible),
    1 = fixed-timestep accumulator (deterministic, frame-rate-independent). Headless
    always uses its own fixed loop and ignores this. */

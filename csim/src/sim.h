@@ -104,13 +104,25 @@ enum { CK_THEFT, CK_BURGLARY, CK_ROBBERY, CK_EXTORTION, CK_VANDALISM, CK_ARSON,
 enum { OCC_NONE, OCC_LABORER, OCC_SHOPKEEP, OCC_BARKEEP,
        OCC_CLERGY, OCC_OFFICER, OCC_COUNT };
 
+/* ── Knowledge / technology / education ────────────────────────────────────── */
+/* A short prerequisite chain: tech i needs `theory_req` city theories AND tech i-1,
+   then an education/intellect-weighted discovery roll; once found it diffuses
+   (adoption 0..1) and its benefit scales with adoption. */
+enum { TECH_WRITING, TECH_TOOLING, TECH_MEDICINE, TECH_BANKING, TECH_PRINTING, TECH_CIVICS, TECH_COUNT };
+#define RESEARCH_RATE    0.05   /* city research per unit of scholarship per day (default) */
+#define THEORY_BASE      8.0    /* research for the 1st theory; cost rises with each */
+#define THEORY_GROWTH    1.6    /* per-theory cost multiplier on the base */
+#define DISCOVERY_BASE   0.25   /* daily discovery chance, scaled by top scholars' aptitude */
+#define ADOPT_RATE       0.06   /* daily diffusion of a discovered tech toward full adoption */
+#define CLERGY_SCHOLAR   2.0    /* clergy count double toward scholarship (monastic learning) */
+
 /* ── Culture: religion, cultural group, language, education ─────────────────── */
 enum { FAITH_NONE, FAITH_ORTHODOX, FAITH_REFORMED, FAITH_OLD, FAITH_MYSTIC, FAITH_COUNT };
 enum { CUL_HARBOR, CUL_HILL, CUL_OLDTOWN, CUL_NEWCOMER, CUL_COUNT };
 enum { LANG_COMMON, LANG_HIGH, LANG_COASTAL, LANG_OLD, LANG_COUNT };
 #define CONVERT_CHANCE    0.08   /* daily chance a searching soul adopts a devout friend's faith */
 #define ASSIMILATE_CHANCE 0.05   /* daily chance a minority-language agent picks up the Common tongue */
-#define EDU_YOUTH_GAIN    0.02    /* daily schooling gain for the young */
+#define EDU_PER_YEAR      0.035   /* schooling gained per year of childhood (scales with aging pace) */
 #define EDU_ADULT_AGE     18      /* schooling stops counting past this age */
 
 /* ── Life cycle: aging & mortality ─────────────────────────────────────────── */
@@ -265,7 +277,8 @@ typedef struct {
     unsigned char faith;        /* FAITH_* religion followed */
     unsigned char culture;      /* CUL_* cultural group */
     unsigned char language;     /* LANG_* mother tongue */
-    float education;            /* 0..1 schooling / literacy */
+    float education;            /* 0..1 learned schooling / literacy */
+    float intellect;            /* 0..1 innate research aptitude (reasoning/observation) */
 
     int wanted;
     int wanted_ticks;
@@ -295,6 +308,15 @@ typedef struct {
     double goods_price;     /* luxury/drink price multiplier */
     double wage_mult;       /* prevailing wage multiplier */
 } Economy;
+
+/* City-wide knowledge & technology: research accrues from educated scholars into
+   theories; theories (+ the prior tech) unlock discoveries, which then diffuse. */
+typedef struct {
+    double research;                      /* progress toward the next theory */
+    int    theories;                      /* city knowledge level */
+    unsigned char discovered[TECH_COUNT]; /* 0/1 per tech */
+    float  adoption[TECH_COUNT];          /* 0..1 how widely each is in use */
+} Science;
 
 typedef struct {
     int id, active;
@@ -345,6 +367,7 @@ typedef struct {
     int crackdown_days;         /* police crackdown time remaining (law response) */
 
     Economy econ;               /* city-wide markets, wages */
+    Science sci;                /* city-wide knowledge & technology */
 } World;
 
 /* ── Personality ─────────────────────────────────────────────────────────── */
@@ -425,6 +448,10 @@ int  count_properties(const World *w, int owner_id);  /* homes a landlord owns *
 const char *occupation_name(unsigned char occ);
 void culture_setup(World *w);               /* assign faith/culture/language/education */
 void culture_daily(World *w);               /* conversion, assimilation, schooling (diffusion) */
+void knowledge_daily(World *w);             /* research -> theories -> tech discovery + adoption */
+const char *tech_name(int t);
+void   set_research_rate(double r);         /* --research-rate / CSIM_RESEARCH_RATE */
+double get_research_rate(void);
 const char *faith_name(unsigned char f);
 const char *culture_name(unsigned char c);
 const char *language_name(unsigned char l);

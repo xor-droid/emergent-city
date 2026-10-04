@@ -74,7 +74,10 @@ static void jail(Agent *a, const char *kind) {
 }
 
 /* extra police effectiveness while a crackdown is in force (law responding to disorder) */
-double police_pressure(const World *w) { return w->crackdown_days > 0 ? CRACKDOWN_BONUS : 0.0; }
+double police_pressure(const World *w) {
+    return (w->crackdown_days > 0 ? CRACKDOWN_BONUS : 0.0)
+         + 0.1 * w->sci.adoption[TECH_CIVICS];   /* Civics (tech) = better law enforcement */
+}
 
 static void witnesses_at(World *w, Agent *perp, int *civ, int *pol) {
     int x = (int)perp->x, y = (int)perp->y; *civ = 0; *pol = 0;
@@ -237,6 +240,7 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
 /* add injury to a victim; may be fatal (shared by street assaults + jail brawls) */
 static void apply_injury(World *w, Agent *v, double amt, const char *cause, Agent *by) {
     if (!v || !v->alive) return;
+    amt *= (1.0 - 0.3 * w->sci.adoption[TECH_MEDICINE]);   /* Medicine (tech) softens wounds */
     v->injury = (float)clampd(v->injury + amt, 0, 2);
     if (v->injury >= INJURY_FATAL) {
         v->alive = 0; w->deaths++;
@@ -804,8 +808,10 @@ void economy_daily(World *w) {
         a->needs.money = clampd(a->needs.money - a->needs.money * UPKEEP_FRACTION, 0.0, 1e9);
 
         /* ── credit: interest accrues; repay when flush, borrow when destitute ── */
+        /* Banking (tech) lowers the rate as it spreads */
+        double interest = DAILY_INTEREST * (1.0 - 0.5 * w->sci.adoption[TECH_BANKING]);
         if (a->debt > 0.0) {
-            a->debt *= (1.0 + DAILY_INTEREST);
+            a->debt *= (1.0 + interest);
             if (a->needs.money > LOW_MONEY * 2) {
                 double repay = a->needs.money - LOW_MONEY * 2;
                 if (repay > a->debt) repay = a->debt;
@@ -849,4 +855,60 @@ void economy_daily(World *w) {
     double avg_money = alive ? money_sum / alive : 0.0;
     e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */
     e->wage_mult   = clampd(0.6 + e->goods_price * 0.5, 0.6, 1.6); /* wages chase the cost of living */
+    e->wage_mult  *= (1.0 + 0.2 * w->sci.adoption[TECH_TOOLING]);   /* better tools raise output/pay */
+}
+
+/* theory prerequisite before each tech can be attempted (chain prereq = prior tech) */
+static const int TECH_THEORY_REQ[TECH_COUNT] = { 1, 2, 3, 4, 6, 8 };
+
+/* Knowledge & technology (on day change): educated scholars accrue research into
+   theories; theories (+ the prior tech) unlock a discovery; discoveries diffuse. */
+void knowledge_daily(World *w) {
+    Science *s = &w->sci;
+
+    /* scholarship from educated adults (clergy weighted); track the top aptitude */
+    double scholarship = 0.0, top = 0.0, lit = 0.0; int adults = 0;
+    for (int i = 0; i < w->n_agents; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->age < AGE_ADULT) continue;
+        adults++; lit += a->education;
+        if (a->arrested_ticks > 0) continue;
+        double contrib = a->intellect * a->education;
+        if (a->occupation == OCC_CLERGY) contrib *= CLERGY_SCHOLAR;
+        scholarship += contrib;
+        double apt = a->intellect * (0.4 + 0.6 * a->education);
+        if (apt > top) top = apt;
+    }
+    lit = adults ? lit / adults : 0.0;
+
+    double printing = s->discovered[TECH_PRINTING] ? s->adoption[TECH_PRINTING] : 0.0;
+    s->research += scholarship * get_research_rate() * (1.0 + printing * 0.8);
+
+    /* research matures into theories (rising cost each time) */
+    double cost = THEORY_BASE * pow(THEORY_GROWTH, s->theories);
+    while (s->research >= cost) {
+        s->research -= cost; s->theories++;
+        char t[96]; snprintf(t, sizeof(t), "The city's scholars established a new theory (#%d)", s->theories);
+        events_post(w, EV_FACTION, -1, -1, WORLD_W/2, WORLD_H/2, 0.5, t);
+        cost = THEORY_BASE * pow(THEORY_GROWTH, s->theories);
+    }
+
+    /* discover the frontier tech once its prereqs are met */
+    for (int k = 0; k < TECH_COUNT; k++) {
+        if (s->discovered[k]) continue;
+        if (k > 0 && !s->discovered[k-1]) break;      /* chain: need the prior tech */
+        if (s->theories < TECH_THEORY_REQ[k]) break;  /* knowledge prerequisite */
+        if (rng_double(&w->rng) < DISCOVERY_BASE * (0.3 + top)) {
+            s->discovered[k] = 1; s->adoption[k] = 0.05f;
+            char t[96]; snprintf(t, sizeof(t), "Breakthrough: the city discovered %s", tech_name(k));
+            events_post(w, EV_FACTION, -1, -1, WORLD_W/2, WORLD_H/2, 0.85, t);
+        }
+        break;                                        /* one frontier attempt per day */
+    }
+
+    /* discovered tech diffuses into use (faster in a literate city, and with writing) */
+    double writing = s->discovered[TECH_WRITING] ? s->adoption[TECH_WRITING] : 0.0;
+    for (int k = 0; k < TECH_COUNT; k++)
+        if (s->discovered[k] && s->adoption[k] < 1.0f)
+            s->adoption[k] = (float)clampd(s->adoption[k] + ADOPT_RATE * (0.5 + lit + writing*0.5) * (1.0 - s->adoption[k]), 0, 1);
 }

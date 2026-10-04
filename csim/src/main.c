@@ -26,6 +26,7 @@ static void usage(const char *argv0) {
     printf("                        0 = adults only (adult-skewed); higher = more children.\n");
     printf("  --family-kids-min N   min kids per immigrant family (default 1).\n");
     printf("  --family-kids-max N   max kids per immigrant family (default 3).\n");
+    printf("  --research-rate R     pace of knowledge/technology discovery (default 0.05).\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -55,6 +56,7 @@ static void usage(const char *argv0) {
     printf("  sim (same as the flags above):\n");
     printf("    CSIM_YEARS_PER_DAY  CSIM_POP_TARGET  CSIM_FAMILY_SHARE\n");
     printf("    CSIM_FAMILY_KIDS_MIN  CSIM_FAMILY_KIDS_MAX  CSIM_FIXED_STEP=1  CSIM_FIXED_DT=N\n");
+    printf("    CSIM_RESEARCH_RATE  knowledge/tech discovery pace (same as --research-rate).\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
@@ -92,6 +94,7 @@ int main(int argc, char **argv) {
     int ptarget = -1;              /* living-population target; <0 = unset */
     int fixedstep = -1;            /* GUI fixed-timestep: -1 unset, 0 off, 1 on */
     double fixeddt = -1.0;         /* fixed step size; <0 = unset */
+    double rrate = -1.0;           /* research rate; <0 = unset */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
@@ -108,6 +111,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--variable-step")) { fixedstep = 0; }
         else if (!strcmp(argv[i], "--fixed-dt") && i + 1 < argc) { fixeddt = atof(argv[++i]); fixedstep = (fixedstep < 0) ? 1 : fixedstep; }
         else if (!strncmp(argv[i], "--fixed-dt=", 11)) { fixeddt = atof(argv[i] + 11); fixedstep = (fixedstep < 0) ? 1 : fixedstep; }
+        else if (!strcmp(argv[i], "--research-rate") && i + 1 < argc) { rrate = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--research-rate=", 16)) { rrate = atof(argv[i] + 16); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -134,6 +139,8 @@ int main(int argc, char **argv) {
     if (fixeddt > 0.0) set_fixed_dt(fixeddt);
     if (fixedstep < 0) { const char *e = getenv("CSIM_FIXED_STEP"); if (e) fixedstep = atoi(e); }
     if (fixedstep >= 0) set_fixed_step(fixedstep);
+    if (rrate < 0.0) { const char *e = getenv("CSIM_RESEARCH_RATE"); if (e) rrate = atof(e); }
+    if (rrate >= 0.0) set_research_rate(rrate);
 
     G = gfx_raylib();
 
