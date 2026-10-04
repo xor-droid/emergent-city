@@ -364,6 +364,7 @@ int run_ui(World *w){
                     case 11: set_hearing_radius(get_hearing_radius()+dir); break;
                     case 12:{ double v=get_child_cost()+dir*1.0; if(v<0)v=0; set_child_cost(v);} break;
                 }
+                if(replay_in_progress()) replay_fork(w);   /* editing during replay diverges into a new session */
                 if(rec_active()){
                     static const char *TK[13]={"years_per_day","pop_target","family_share","kids_min","kids_max",
                         "fixed_step","research_rate","production","vision","vision_radius","hearing","hearing_radius","child_cost"};
@@ -432,7 +433,8 @@ int run_ui(World *w){
             } else if(!overPanel){
                 float wx,wy; s2w(&cam,mx,my,&wx,&wy);
                 int tx=(int)(wx/TILE_PX), ty=(int)(wy/TILE_PX);
-                if(god){ god_apply(w,tool,tx,ty,flash,sizeof(flash)); flash_until=now_sec()+2.5;
+                if(god){ if(replay_in_progress()) replay_fork(w);   /* god action during replay forks */
+                         god_apply(w,tool,tx,ty,flash,sizeof(flash)); flash_until=now_sec()+2.5;
                          if(rec_active()) rec_god(w,tool,tx,ty); }   /* record for replay */
                 else { Agent *a=world_agent_at(w,tx,ty,5);
                     if(a){ selected=a->id; cam.tx=a->x*TILE_PX; cam.ty=a->y*TILE_PX; follow=1; if(cam.zoom<1.6f)cam.zoom=2.2f; }
@@ -443,14 +445,20 @@ int run_ui(World *w){
         /* ── advance sim ── */
         double t=now_sec(), dt=t-prev; prev=t; if(dt>0.1) dt=0.1;
         facc+=dt; frames++; if(facc>=0.5){ fps=(int)(frames/facc); frames=0; facc=0; }
-        if(!paused && dt>0 && !bench){
+        /* replay: pause the sim while the edit (tune) menu is open and taking input */
+        int eff_paused = paused || (replay_is_loaded() && show_tune);
+        if(!eff_paused && dt>0 && !bench){
             if(get_fixed_step()){
                 /* deterministic: accumulate real time (scaled by speed) and run
                    whole fixed steps — same step sequence as headless */
                 simacc += dt*speed;
                 double fdt=get_fixed_dt(); if(fdt<=0) fdt=0.25;
                 int guard=0;
-                while(simacc>=fdt && guard++<100000){ world_tick(w,(float)fdt); simacc-=fdt; }
+                while(simacc>=fdt && guard++<100000){
+                    if(replay_in_progress() && w->tick>=replay_end_tick()){ simacc=0; break; }  /* hold at end */
+                    replay_apply_due(w);              /* apply the recorded session's due events */
+                    world_tick(w,(float)fdt); simacc-=fdt;
+                }
             } else {
                 simacc=0;                     /* variable (real-time) stepping */
                 world_tick(w,(float)(dt*speed));
@@ -653,6 +661,15 @@ int run_ui(World *w){
         char hud[256]; hud_string(w,hud,sizeof(hud),speed,paused,fps,G->name);
         G->fill_rect(0,0,W,hudH,gfx_rgba(0,0,0,170));
         G->text(hud,US(8),US(5),US(14),gfx_rgb(230,225,215));
+        if(replay_is_loaded()){
+            char rb[160]; unsigned long long et=(unsigned long long)replay_end_tick();
+            if(replay_in_progress())
+                snprintf(rb,sizeof rb,"REPLAY %s  tick %llu/%llu%s  (T + edit a value to fork)",
+                         replay_session_name(),(unsigned long long)w->tick,et,
+                         (w->tick>=replay_end_tick())?"  [END]":"");
+            else snprintf(rb,sizeof rb,"FORKED from %s — now live & recording",replay_session_name());
+            G->text(rb,US(8),hudH+US(6),US(13),gfx_rgb(120,220,255));
+        }
 
         /* ── right panel: feed + citizens list ── */
         if(show_right){

@@ -9,6 +9,7 @@
 #include "gfx.h"
 #include "llm.h"
 #include "record.h"
+#include "os_client.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -63,6 +64,8 @@ static void usage(const char *argv0) {
     printf("  --record PATH         record this session (seed+config+live changes) to PATH for\n");
     printf("                        byte-identical replay; forces --fixed-step. Replay headless\n");
     printf("                        with: csim_headless --replay-session PATH.\n");
+    printf("  --replay-session F    watch a recorded session play back (F = file or os:<id>);\n");
+    printf("                        open T and change a value to FORK a new recorded timeline.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -164,6 +167,7 @@ int main(int argc, char **argv) {
     int noisegen = -1;                 /* noise worldgen; <0 = unset */
     const char *metrics = NULL;        /* balance CSV export path; NULL = off */
     const char *record = NULL;         /* session recording path; NULL = off */
+    const char *replay_session = NULL; /* GUI replay of a recorded session; NULL = off */
     double metricsevery = -1.0;        /* sample cadence in game-hours; <0 = unset */
     double occspread = -1.0;           /* occupation pay-tier spread; <0 = unset */
     int neighborhoods = -1;            /* home value + residential sorting; <0 = unset */
@@ -206,6 +210,8 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--metrics=", 10)) { metrics = argv[i] + 10; }
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) { record = argv[++i]; }
         else if (!strncmp(argv[i], "--record=", 9)) { record = argv[i] + 9; }
+        else if (!strcmp(argv[i], "--replay-session") && i + 1 < argc) { replay_session = argv[++i]; }
+        else if (!strncmp(argv[i], "--replay-session=", 17)) { replay_session = argv[i] + 17; }
         else if (!strcmp(argv[i], "--metrics-every") && i + 1 < argc) { metricsevery = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--metrics-every=", 16)) { metricsevery = atof(argv[i] + 16); }
         else if (!strcmp(argv[i], "--metrics-hourly")) { metricsevery = 1.0; }
@@ -276,6 +282,36 @@ int main(int argc, char **argv) {
     if (seed < 0) seed = 1337;
 
     G = gfx_raylib();
+
+    /* ── interactive replay mode: watch a recorded session; edits fork a new one ── */
+    if (replay_session) {
+        char tmp[256];
+        if (!strncmp(replay_session, "os:", 3)) {        /* recall from OpenSearch first */
+            snprintf(tmp, sizeof tmp, "/tmp/csim-recall-%s.sess", replay_session + 3);
+            if (os_fetch_session(replay_session + 3, tmp) != 0) {
+                fprintf(stderr, "recall failed for %s (CSIM_OS_QUERY_URL/USER/PASS set?)\n", replay_session + 3);
+                return 2;
+            }
+            replay_session = tmp;
+        }
+        uint64_t rseed = 1337; int rpop = 150;
+        if (replay_load(replay_session, &rseed, &rpop) != 0) {
+            fprintf(stderr, "cannot load session %s\n", replay_session); return 2;
+        }
+        set_fixed_step(1);                    /* deterministic playback (G already set above) */
+        World wr;
+        world_init(&wr, (unsigned int)rseed);
+        world_populate(&wr, rpop);
+        /* LLM intentionally NOT initialised in replay → off → byte-identical */
+        int rc = run_ui(&wr);
+        if (rec_active()) {                   /* a fork was made during replay */
+            rec_end(&wr);
+            char p[300]; const char *sp = record;
+            if (!sp || !*sp) { snprintf(p, sizeof p, "/tmp/%s.sess", rec_session_id()); sp = p; }
+            if (rec_save_file(sp)) fprintf(stderr, "forked session -> %s\n", sp);
+        }
+        return rc;
+    }
 
     if (!record) record = getenv("CSIM_RECORD");
     if (record && *record) set_fixed_step(1);   /* recording needs deterministic stepping to replay */

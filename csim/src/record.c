@@ -65,8 +65,10 @@ typedef struct { uint64_t tick; double gtime; char kind[8]; char knob[24]; doubl
 
 static struct {
     int active;
-    char session_id[64];
+    char session_id[128];       /* room for "<parent>-fork-<tick>" */
     char reason[96];
+    char parent_id[64];         /* set for a fork; "" otherwise */
+    uint64_t fork_tick;         /* tick the fork diverged from the parent */
     uint64_t seed; int pop;
     double cfg[32];              /* startup snapshot, parallel to KNOBS */
     RecEvent *ev; int n, cap;
@@ -118,6 +120,7 @@ static void rec_ship_opensearch(void) {
             S.session_id, (unsigned long long)S.seed, S.pop, S.reason, llm_enabled(),
             (unsigned long long)S.end_tick, (unsigned long long)S.checksum);
     for (int i = 0; i < N_KNOBS; i++) fprintf(m, ",\"cfg_%s\":%.10g", KNOBS[i].name, S.cfg[i]);
+    if (S.parent_id[0]) fprintf(m, ",\"parent_id\":\"%s\",\"fork_tick\":%llu", S.parent_id, (unsigned long long)S.fork_tick);
     fprintf(m, "}");
     for (int i = 0; i < S.n; i++) {
         RecEvent *e = &S.ev[i];
@@ -147,6 +150,7 @@ int rec_save_file(const char *path) {
     FILE *f = fopen(path, "w"); if (!f) return 0;
     fprintf(f, "session %s\n", S.session_id);
     fprintf(f, "reason %s\n", S.reason);
+    if (S.parent_id[0]) { fprintf(f, "parent %s\n", S.parent_id); fprintf(f, "fork_tick %llu\n", (unsigned long long)S.fork_tick); }
     fprintf(f, "seed %llu\n", (unsigned long long)S.seed);
     fprintf(f, "pop %d\n", S.pop);
     fprintf(f, "llm %d\n", llm_enabled());
@@ -164,64 +168,113 @@ int rec_save_file(const char *path) {
 
 /* ── replay (reader) ─────────────────────────────────────────────────────── */
 typedef struct { uint64_t tick; int is_tune; char knob[24]; double value; int tool, tx, ty; } PlayEvent;
+typedef struct { char sid[64]; uint64_t seed; int pop; uint64_t end_tick, checksum;
+                 double cfg[32]; PlayEvent *ev; int n; } Loaded;
 
-int replay_session_file(const char *path, int verbose) {
+/* parse a session file and APPLY its startup config (so seed+config are set for replay). */
+static int load_session(const char *path, Loaded *L) {
     FILE *f = fopen(path, "r"); if (!f) { fprintf(stderr, "replay: cannot open %s\n", path); return -1; }
-
-    uint64_t seed = 1337, end_tick = 0, want_sum = 0; int pop = 150; char sid[64] = "";
-    PlayEvent *ev = NULL; int nev = 0, cap = 0;
-    char line[256];
-    /* default fixed-step for a deterministic re-run; the cfg lines below set the real dt */
-    set_fixed_step(1);
+    memset(L, 0, sizeof *L); L->seed = 1337; L->pop = 150;
+    int cap = 0; char line[256];
+    set_fixed_step(1);   /* deterministic stepping; cfg lines below set the real dt */
     while (fgets(line, sizeof line, f)) {
-        if      (!strncmp(line, "session ", 8)) sscanf(line+8, "%63s", sid);
-        else if (!strncmp(line, "seed ", 5))    seed = strtoull(line+5, NULL, 10);
-        else if (!strncmp(line, "pop ", 4))     pop = atoi(line+4);
-        else if (!strncmp(line, "end_tick ", 9))end_tick = strtoull(line+9, NULL, 10);
-        else if (!strncmp(line, "checksum ", 9))want_sum = strtoull(line+9, NULL, 10);
+        if      (!strncmp(line, "session ", 8)) sscanf(line+8, "%63s", L->sid);
+        else if (!strncmp(line, "seed ", 5))    L->seed = strtoull(line+5, NULL, 10);
+        else if (!strncmp(line, "pop ", 4))     L->pop = atoi(line+4);
+        else if (!strncmp(line, "end_tick ", 9))L->end_tick = strtoull(line+9, NULL, 10);
+        else if (!strncmp(line, "checksum ", 9))L->checksum = strtoull(line+9, NULL, 10);
         else if (!strncmp(line, "cfg ", 4)) {
             char name[32]; double val;
-            if (sscanf(line+4, "%31s %lf", name, &val) == 2) { int k = knob_index(name); if (k >= 0) KNOBS[k].set(val); }
+            if (sscanf(line+4, "%31s %lf", name, &val) == 2) {
+                int k = knob_index(name); if (k >= 0) { L->cfg[k] = val; KNOBS[k].set(val); }
+            }
         } else if (!strncmp(line, "event ", 6)) {
             unsigned long long t; char kind[8];
             if (sscanf(line+6, "%llu %7s", &t, kind) == 2) {
-                if (nev == cap) { cap = cap ? cap*2 : 64; ev = realloc(ev, (size_t)cap*sizeof(PlayEvent)); }
-                PlayEvent *e = &ev[nev++]; memset(e, 0, sizeof *e); e->tick = t;
+                if (L->n == cap) { cap = cap ? cap*2 : 64; L->ev = realloc(L->ev, (size_t)cap*sizeof(PlayEvent)); }
+                PlayEvent *e = &L->ev[L->n++]; memset(e, 0, sizeof *e); e->tick = t;
                 if (!strcmp(kind, "tune")) { e->is_tune = 1; sscanf(line+6, "%*s %*s %23s %lf", e->knob, &e->value); }
                 else if (!strcmp(kind, "god")) { e->is_tune = 0; sscanf(line+6, "%*s %*s %d %d %d", &e->tool, &e->tx, &e->ty); }
             }
         }
     }
     fclose(f);
+    return 0;
+}
 
+static void play_event(World *w, const PlayEvent *e) {
+    if (e->is_tune) { int k = knob_index(e->knob); if (k >= 0) KNOBS[k].set(e->value); }
+    else { char fl[128]; god_apply(w, e->tool, e->tx, e->ty, fl, sizeof fl); }
+}
+
+int replay_session_file(const char *path, int verbose) {
+    Loaded L; if (load_session(path, &L) != 0) return -1;
     double dt = get_fixed_dt(); if (dt <= 0) dt = 0.25;
-    World *w = malloc(sizeof(World)); if (!w) { free(ev); return -2; }
-    world_init(w, seed);
-    world_populate(w, pop);
-
+    World *w = malloc(sizeof(World)); if (!w) { free(L.ev); return -2; }
+    world_init(w, L.seed);
+    world_populate(w, L.pop);
     int ei = 0;
-    while (w->tick < end_tick) {
-        while (ei < nev && ev[ei].tick == w->tick) {           /* apply this tick's events, then step */
-            PlayEvent *e = &ev[ei++];
-            if (e->is_tune) { int k = knob_index(e->knob); if (k >= 0) KNOBS[k].set(e->value); }
-            else { char fl[128]; god_apply(w, e->tool, e->tx, e->ty, fl, sizeof fl); }
-        }
+    while (w->tick < L.end_tick) {
+        while (ei < L.n && L.ev[ei].tick == w->tick) play_event(w, &L.ev[ei++]);
         world_tick(w, dt);
     }
-    while (ei < nev && ev[ei].tick == end_tick) {              /* final-tick interventions (no step after) */
-        PlayEvent *e = &ev[ei++];
-        if (e->is_tune) { int k = knob_index(e->knob); if (k >= 0) KNOBS[k].set(e->value); }
-        else { char fl[128]; god_apply(w, e->tool, e->tx, e->ty, fl, sizeof fl); }
-    }
-
+    while (ei < L.n && L.ev[ei].tick == L.end_tick) play_event(w, &L.ev[ei++]);  /* final-tick events */
     uint64_t got = world_checksum(w);
-    int ok = (got == want_sum);
+    int ok = (got == L.checksum);
     if (verbose) {
-        printf("replay %s: seed=%llu pop=%d ticks=%llu events=%d\n", sid, (unsigned long long)seed, pop,
-               (unsigned long long)end_tick, nev);
+        printf("replay %s: seed=%llu pop=%d ticks=%llu events=%d\n", L.sid, (unsigned long long)L.seed, L.pop,
+               (unsigned long long)L.end_tick, L.n);
         printf("  checksum recorded=%llu replayed=%llu  -> %s\n",
-               (unsigned long long)want_sum, (unsigned long long)got, ok ? "MATCH (byte-identical)" : "MISMATCH");
+               (unsigned long long)L.checksum, (unsigned long long)got, ok ? "MATCH (byte-identical)" : "MISMATCH");
     }
-    free(ev); free(w);
+    free(L.ev); free(w);
     return ok ? 0 : 1;
+}
+
+/* ── interactive player (GUI): step a recorded session, allow a fork on edit ─── */
+static struct { int loaded, forked; char sid[64]; uint64_t seed; int pop, idx, n;
+                uint64_t end_tick; double cfg[32]; PlayEvent *ev; } Pl;
+
+int replay_load(const char *path, uint64_t *seed_out, int *pop_out) {
+    Loaded L; if (load_session(path, &L) != 0) return -1;
+    memset(&Pl, 0, sizeof Pl);
+    Pl.loaded = 1; Pl.seed = L.seed; Pl.pop = L.pop; Pl.end_tick = L.end_tick;
+    snprintf(Pl.sid, sizeof Pl.sid, "%s", L.sid);
+    memcpy(Pl.cfg, L.cfg, sizeof Pl.cfg);
+    Pl.ev = L.ev; Pl.n = L.n; Pl.idx = 0;
+    if (seed_out) *seed_out = L.seed;
+    if (pop_out)  *pop_out  = L.pop;
+    return 0;
+}
+int      replay_in_progress(void)   { return Pl.loaded && !Pl.forked; }
+int      replay_is_loaded(void)     { return Pl.loaded; }
+uint64_t replay_end_tick(void)      { return Pl.end_tick; }
+const char *replay_session_name(void){ return Pl.loaded ? Pl.sid : ""; }
+
+void replay_apply_due(World *w) {
+    if (!Pl.loaded || Pl.forked) return;
+    while (Pl.idx < Pl.n && Pl.ev[Pl.idx].tick == w->tick) play_event(w, &Pl.ev[Pl.idx++]);
+}
+
+/* fork: from this tick on, stop replaying the parent and start recording a child
+ * session seeded with the parent's startup config + the parent events already applied,
+ * so the child replays byte-identically to the fork point then diverges. */
+void replay_fork(const World *w) {
+    if (!Pl.loaded || Pl.forked) return;
+    Pl.forked = 1;
+    memset(&S, 0, sizeof S);
+    S.active = 1; S.seed = Pl.seed; S.pop = Pl.pop;
+    snprintf(S.reason, sizeof S.reason, "fork");
+    snprintf(S.parent_id, sizeof S.parent_id, "%s", Pl.sid);
+    S.fork_tick = w->tick;
+    snprintf(S.session_id, sizeof S.session_id, "%s-fork-%llu", Pl.sid, (unsigned long long)w->tick);
+    memcpy(S.cfg, Pl.cfg, sizeof S.cfg);
+    for (int i = 0; i < Pl.n; i++) {                      /* inherit parent events before the fork */
+        if (Pl.ev[i].tick >= w->tick) break;
+        RecEvent e; memset(&e, 0, sizeof e); e.tick = Pl.ev[i].tick;
+        if (Pl.ev[i].is_tune) { snprintf(e.kind, sizeof e.kind, "tune");
+            snprintf(e.knob, sizeof e.knob, "%s", Pl.ev[i].knob); e.value = Pl.ev[i].value; }
+        else { snprintf(e.kind, sizeof e.kind, "god"); e.tool = Pl.ev[i].tool; e.tx = Pl.ev[i].tx; e.ty = Pl.ev[i].ty; }
+        push_event(e);
+    }
 }

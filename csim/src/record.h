@@ -32,4 +32,15 @@ const char *rec_session_id(void);                              /* active session
  * <0 = load/parse error. `verbose` prints a summary. */
 int replay_session_file(const char *path, int verbose);
 
+/* ── interactive player (GUI replay + fork) ──────────────────────────────── */
+/* Load a session for interactive replay: applies its startup config and returns the
+ * seed + pop so the caller can world_init/world_populate. 0 ok, <0 error. */
+int  replay_load(const char *path, uint64_t *seed_out, int *pop_out);
+int  replay_is_loaded(void);        /* a session is loaded for replay */
+int  replay_in_progress(void);      /* loaded and not yet forked (still playing the parent) */
+uint64_t replay_end_tick(void);     /* the parent's final tick */
+const char *replay_session_name(void);
+void replay_apply_due(World *w);    /* apply the parent's events due at w->tick (call each step) */
+void replay_fork(const World *w);   /* diverge here: start recording a child session */
+
 #endif /* RECORD_H */
