@@ -79,12 +79,52 @@ double police_pressure(const World *w) {
          + 0.1 * w->sci.adoption[TECH_CIVICS];   /* Civics (tech) = better law enforcement */
 }
 
+/* Bresenham line of sight; buildings between the two points block it. */
+static int line_of_sight(const World *w, int x0, int y0, int x1, int y1) {
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, x = x0, y = y0;
+    while (!(x == x1 && y == y1)) {
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+        if (x == x1 && y == y1) break;                /* reached the target: it's visible */
+        if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return 0;
+        { TileType tt = (TileType)w->tile[x][y];
+          if (tt >= T_HOME && tt <= T_POLICE) return 0; }       /* an opaque building blocks sight */
+    }
+    return 1;
+}
+
+/* Can `viewer` see tile (tx,ty)? 360deg within VISION_NEAR, a ~120deg forward cone
+   out to the vision radius, and line-of-sight the whole way. */
+int agent_can_see(const World *w, const Agent *viewer, int tx, int ty) {
+    int dx = tx - (int)viewer->x, dy = ty - (int)viewer->y;
+    int d2 = dx * dx + dy * dy;
+    if (d2 == 0) return 1;
+    int R = get_vision_radius();
+    if (d2 > R * R) return 0;                          /* out of range */
+    if (d2 > VISION_NEAR * VISION_NEAR) {              /* beyond the close ring -> must be in the cone */
+        int fx = 0, fy = 0;
+        switch (viewer->facing) { case 'N': fy = -1; break; case 'S': fy = 1; break;
+                                  case 'E': fx = 1; break;  case 'W': fx = -1; break; default: break; }
+        if (fx || fy) {                                /* has a facing: forward 120deg cone */
+            int fwd = dx * fx + dy * fy;
+            if (fwd <= 0) return 0;
+            if (fwd * fwd * 4 < d2) return 0;
+        }                                              /* facing==0 (idle): vigilant 360 within range */
+    }
+    return line_of_sight(w, (int)viewer->x, (int)viewer->y, tx, ty);
+}
+
 static void witnesses_at(World *w, Agent *perp, int *civ, int *pol) {
     int x = (int)perp->x, y = (int)perp->y; *civ = 0; *pol = 0;
+    int vis = get_vision();
     for (int i = 0; i < w->n_agents; i++) {
         Agent *o = &w->agents[i];
         if (!o->alive || o->id == perp->id) continue;
         if (abs((int)o->x - x) <= WITNESS_RADIUS && abs((int)o->y - y) <= WITNESS_RADIUS) {
+            if (vis && !agent_can_see(w, o, x, y)) continue;   /* only those who can see the act */
             if (o->is_police) (*pol)++; else (*civ)++;
         }
     }
@@ -517,7 +557,10 @@ void crime_tick(World *w) {
             Agent *p = &w->agents[j];
             if (!p->alive || !p->is_police || p->arrested_ticks > 0 || p->id == a->id) continue;
             if (abs((int)p->x - (int)a->x) <= POLICE_ARREST_RADIUS &&
-                abs((int)p->y - (int)a->y) <= POLICE_ARREST_RADIUS) { cop = p; break; }
+                abs((int)p->y - (int)a->y) <= POLICE_ARREST_RADIUS) {
+                if (get_vision() && !agent_can_see(w, p, (int)a->x, (int)a->y)) continue;  /* must spot them */
+                cop = p; break;
+            }
         }
         if (cop && rng_double(&w->rng) < POLICE_ARREST_CHANCE) {
             char kind[16]; strncpy(kind, a->wanted_for[0] ? a->wanted_for : "a crime", 15); kind[15] = '\0';

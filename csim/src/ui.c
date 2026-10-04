@@ -46,7 +46,7 @@ static GfxColor culture_col(unsigned char c){
                default:          return gfx_rgb(235,150,60); }   /* newcomers */
 }
 static const char *overlay_name(int o){
-    switch(o){ case 1:return "CRIME HEAT"; case 2:return "FACTION TURF"; case 3:return "CULTURE"; default:return "off"; }
+    switch(o){ case 1:return "CRIME HEAT"; case 2:return "FACTION TURF"; case 3:return "CULTURE"; case 4:return "VISION (selected)"; default:return "off"; }
 }
 
 static char building_glyph(TileType t){
@@ -157,7 +157,7 @@ int run_ui(World *w){
     int show_city=0, overlay=0;   /* city dashboard (E); map overlay cycle (O): heat/turf/culture */
     int show_tune=0;              /* live tuning panel (T): aging pace, pop target, family knobs */
     int show_family=0;           /* family/genealogy panel (K) for the selected citizen */
-    { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%4; } }
+    { const char *e=getenv("CSIM_OVERLAY"); if(e){ overlay=atoi(e)%5; } }
     if(getenv("CSIM_CITY")) show_city=1;
     if(getenv("CSIM_TUNE")) show_tune=1;
     if(getenv("CSIM_KIN")) show_family=1;
@@ -269,7 +269,7 @@ int run_ui(World *w){
         if(G->key_pressed(GFX_KEY_L)) show_legend=!show_legend;
         if(G->key_pressed(GFX_KEY_A)) ascii=!ascii;
         if(G->key_pressed(GFX_KEY_E)) show_city=!show_city;
-        if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%4;
+        if(G->key_pressed(GFX_KEY_O)) overlay=(overlay+1)%5;
         if(G->key_pressed(GFX_KEY_T)) show_tune=!show_tune;
         if(G->key_pressed(GFX_KEY_K)) show_family=!show_family;
         for(int k=0;k<9;k++) if(G->key_pressed(GFX_KEY_1+k)){
@@ -313,7 +313,7 @@ int run_ui(World *w){
             cam.tx-=(mx-pmx)/cam.zoom; cam.ty-=(my-pmy)/cam.zoom; pmx=mx; pmy=my;
         }
         /* live tuning panel geometry (shared by click-handling + draw) */
-        int tuneRows=8, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
+        int tuneRows=10, tunePW=US(330), tunePH=US(60)+tuneRows*US(30);
         int tunePX=W/2-tunePW/2, tunePY=hudH+US(30);
         int tuneBW=US(26), tuneBH=US(24);
         int tuneMinusX=tunePX+tunePW-US(122), tunePlusX=tunePX+tunePW-US(40);
@@ -334,6 +334,8 @@ int run_ui(World *w){
                     case 5: set_fixed_step(!get_fixed_step()); break;   /* toggle */
                     case 6:{ double v=get_research_rate()+dir*0.01; if(v<0)v=0; set_research_rate(v);} break;
                     case 7:{ double v=get_craft_bonus()+dir*0.25; if(v<0)v=0; set_craft_bonus(v);} break;
+                    case 8: set_vision(!get_vision()); break;   /* toggle */
+                    case 9: set_vision_radius(get_vision_radius()+dir); break;
                 } }
                 break;
             }
@@ -548,8 +550,17 @@ int run_ui(World *w){
                 float rr=ts*0.34f; if(rr<1.8f)rr=1.8f;
                 G->circle((int)sx,(int)sy,rr,culture_col(a->culture));
             }
+        } else if(overlay==4 && selected>=0){             /* the selected agent's field of view */
+            Agent *sa=world_agent_by_id(w,selected);
+            if(sa&&sa->alive)
+                for(int x=x0;x<=x1;x++) for(int y=y0;y<=y1;y++)
+                    if(agent_can_see(w,sa,x,y)){
+                        float sx,sy; w2s(&cam,x*TILE_PX,y*TILE_PX,&sx,&sy);
+                        G->fill_rect((int)sx,(int)sy,iw,iw,gfx_rgba(120,200,255,55));
+                    }
         }
-        if(overlay){ snprintf(buf,sizeof(buf),"OVERLAY [O]: %s",overlay_name(overlay));
+        if(overlay){ snprintf(buf,sizeof(buf),"OVERLAY [O]: %s%s",overlay_name(overlay),
+                             (overlay==4&&selected<0)?"  (select a citizen)":(!get_vision()&&overlay==4)?"  (vision off)":"");
             G->text(buf,US(8),hudH+US(6),US(13),gfx_rgb(255,220,120)); }
 
         /* ── selection marker: a pulsing yellow reticle on the selected citizen ── */
@@ -703,8 +714,8 @@ int run_ui(World *w){
             G->fill_rect(tunePX,tunePY,tunePW,tunePH,gfx_rgba(18,20,26,243));
             G->rect_lines(tunePX,tunePY,tunePW,tunePH,gfx_rgb(120,170,120));
             G->text("LIVE TUNING  [T]",tunePX+US(12),tunePY+US(10),US(14),gfx_rgb(150,215,150));
-            const char *tlab[8]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate","Production"};
-            char tv[8][24];
+            const char *tlab[10]={"Aging yr/day","Pop target","Family share","Kids min","Kids max","Timestep","Research rate","Production","Vision","Vision range"};
+            char tv[10][24];
             snprintf(tv[0],24,"%.1f",get_years_per_day());
             snprintf(tv[1],24,"%d",get_pop_target());
             snprintf(tv[2],24,"%.0f%%",get_family_share()*100);
@@ -713,6 +724,8 @@ int run_ui(World *w){
             snprintf(tv[5],24,"%s",get_fixed_step()?"Fixed":"Variable");
             snprintf(tv[6],24,"%.2f",get_research_rate());
             snprintf(tv[7],24,"%.2f",get_craft_bonus());
+            snprintf(tv[8],24,"%s",get_vision()?"On":"Off");
+            snprintf(tv[9],24,"%d",get_vision_radius());
             for(int i=0;i<tuneRows;i++){ int ry=tunePY+US(50)+i*US(30);
                 G->text(tlab[i],tunePX+US(14),ry+US(3),US(12),gfx_rgb(214,210,200));
                 G->fill_rect(tuneMinusX,ry,tuneBW,tuneBH,gfx_rgb(58,62,70));

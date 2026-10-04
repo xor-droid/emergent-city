@@ -155,6 +155,10 @@ enum { LS_CHILD, LS_YOUTH, LS_ADULT, LS_ELDER };
 /* ── Factions ────────────────────────────────────────────────────────────── */
 #define FACTION_RADIUS 8
 
+/* ── Agent field of view (perception) ──────────────────────────────────────── */
+#define VISION_RADIUS  8    /* how far an agent sees down their line of sight (tiles) */
+#define VISION_NEAR    2    /* 360-degree close-range awareness radius (tiles) */
+
 /* ── Combat, faction warfare & law (governance) ────────────────────────────── */
 #define COMBAT_INJURY       0.5    /* base injury a won fight inflicts */
 #define WAR_DECLARE_CHANCE  0.06   /* daily per-faction chance to start a war */
@@ -428,6 +432,13 @@ int  combat_attack(World *w, Agent *att, Agent *def, const char *context, double
 void warfare_tick(World *w);         /* warring factions' soldiers fight nearby enemies (per tick) */
 void law_daily(World *w);            /* crackdowns when crime surges, on day change */
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
+
+/* ── Field of view ─────────────────────────────────────────────────────────── */
+void set_vision(int on);                 /* --vision / CSIM_VISION: directional sight + line-of-sight */
+int  get_vision(void);
+void set_vision_radius(int r);
+int  get_vision_radius(void);
+int  agent_can_see(const World *w, const Agent *viewer, int tx, int ty);  /* FOV + LOS */
 const char *status_title(const Agent *a);   /* honorific from status/role/reputation */
 void kinship_daily(World *w);               /* courtship -> marriage, pregnancy -> birth */
 void lifecycle_daily(World *w);             /* old-age mortality, on day change */

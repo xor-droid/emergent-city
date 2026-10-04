@@ -145,6 +145,13 @@ static double g_research_rate = RESEARCH_RATE;
 void   set_research_rate(double r) { if (r >= 0.0) g_research_rate = r; }
 double get_research_rate(void) { return g_research_rate; }
 
+static int g_vision = 0;               /* 0 = omniscient (default), 1 = FOV + line-of-sight */
+static int g_vision_radius = VISION_RADIUS;
+void set_vision(int on) { g_vision = on ? 1 : 0; }
+int  get_vision(void) { return g_vision; }
+void set_vision_radius(int r) { if (r >= 1) g_vision_radius = r; }
+int  get_vision_radius(void) { return g_vision_radius; }
+
 static double g_craft_bonus = CRAFT_BONUS;
 void   set_craft_bonus(double b) { if (b >= 0.0) g_craft_bonus = b; }
 double get_craft_bonus(void) { return g_craft_bonus; }

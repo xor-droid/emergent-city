@@ -29,6 +29,9 @@ static void usage(const char *argv0) {
     printf("  --research-rate R     pace of knowledge/technology discovery (default 0.05).\n");
     printf("  --production F        how much craft skill + schooling lift a worker's pay\n");
     printf("                        (default 1.0; 0 = flat wages, higher = skill matters more).\n");
+    printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
+    printf("                        (default off = omniscient): crimes are only witnessed, and\n");
+    printf("                        fugitives only spotted, by those who can actually see them.\n");
     printf("\n");
     printf("Timing / determinism:\n");
     printf("  --fixed-step          GUI steps a fixed timestep (deterministic, frame-rate-\n");
@@ -61,6 +64,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_FAMILY_KIDS_MIN  CSIM_FAMILY_KIDS_MAX  CSIM_FIXED_STEP=1  CSIM_FIXED_DT=N\n");
     printf("    CSIM_RESEARCH_RATE  knowledge/tech discovery pace (same as --research-rate).\n");
     printf("    CSIM_PRODUCTION     craft/output pay weight (same as --production).\n");
+    printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("  startup state:\n");
     printf("    CSIM_WARMDAYS=N     pre-roll the sim N game-days before the window opens.\n");
     printf("    CSIM_DEMO=1         open with god mode + a criminal selected/followed.\n");
@@ -100,6 +104,7 @@ int main(int argc, char **argv) {
     double fixeddt = -1.0;         /* fixed step size; <0 = unset */
     double rrate = -1.0;           /* research rate; <0 = unset */
     double craftb = -1.0;          /* production/craft bonus; <0 = unset */
+    int vision = -1, visradius = -1;   /* field of view; <0 = unset */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (!strcmp(argv[i], "--years-per-day") && i + 1 < argc) { ypd = atof(argv[++i]); }
@@ -120,6 +125,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--research-rate=", 16)) { rrate = atof(argv[i] + 16); }
         else if (!strcmp(argv[i], "--production") && i + 1 < argc) { craftb = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--production=", 13)) { craftb = atof(argv[i] + 13); }
+        else if (!strcmp(argv[i], "--vision")) { vision = 1; }
+        else if (!strcmp(argv[i], "--no-vision")) { vision = 0; }
+        else if (!strcmp(argv[i], "--vision-radius") && i + 1 < argc) { visradius = atoi(argv[++i]); vision = (vision < 0) ? 1 : vision; }
+        else if (!strncmp(argv[i], "--vision-radius=", 16)) { visradius = atoi(argv[i] + 16); vision = (vision < 0) ? 1 : vision; }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
             if (strcmp(argv[++i], "raylib")) { fprintf(stderr, "only the raylib backend is available\n"); return 2; }
         } else if (!strncmp(argv[i], "--backend=", 10)) {
@@ -150,6 +159,10 @@ int main(int argc, char **argv) {
     if (rrate >= 0.0) set_research_rate(rrate);
     if (craftb < 0.0) { const char *e = getenv("CSIM_PRODUCTION"); if (e) craftb = atof(e); }
     if (craftb >= 0.0) set_craft_bonus(craftb);
+    if (visradius < 0) { const char *e = getenv("CSIM_VISION_RADIUS"); if (e) visradius = atoi(e); }
+    if (visradius > 0) set_vision_radius(visradius);
+    if (vision < 0) { const char *e = getenv("CSIM_VISION"); if (e) vision = atoi(e); }
+    if (vision >= 0) set_vision(vision);
 
     G = gfx_raylib();
 
