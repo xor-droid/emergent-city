@@ -138,6 +138,7 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "tax_brackets"))    set_tax_brackets(iv);
         else if (!strcmp(key, "source_caps"))     set_source_caps(iv);
         else if (!strcmp(key, "rent_cap"))        set_rent_cap(d);
+        else if (!strcmp(key, "debt_rate"))       set_debt_rate(d);
         else if (!strcmp(key, "stabilizers"))     set_stabilizers(iv);
         else if (!strcmp(key, "benefit"))         set_benefit(d);
         else if (!strcmp(key, "justice"))         set_justice(iv);
@@ -242,6 +243,7 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_TAX_BRACKETS"); if (e) set_tax_brackets(atoi(e)); }
     { const char *e = getenv("CSIM_SOURCE_CAPS"); if (e) set_source_caps(atoi(e)); }
     { const char *e = getenv("CSIM_RENT_CAP"); if (e) set_rent_cap(atof(e)); }
+    { const char *e = getenv("CSIM_DEBT_RATE"); if (e) set_debt_rate(atof(e)); }
     { const char *e = getenv("CSIM_STABILIZERS"); if (e) set_stabilizers(atoi(e)); }
     { const char *e = getenv("CSIM_BENEFIT"); if (e) set_benefit(atof(e)); }
     { const char *e = getenv("CSIM_JUSTICE"); if (e) set_justice(atoi(e)); }

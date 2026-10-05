@@ -504,6 +504,8 @@ void   set_source_caps(int on);       /* --source-caps / CSIM_SOURCE_CAPS: cap r
 int    get_source_caps(void);
 void   set_rent_cap(double f);        /* --rent-cap / CSIM_RENT_CAP: max rent as fraction of tenant's daily income */
 double get_rent_cap(void);
+void   set_debt_rate(double r);       /* --debt-rate / CSIM_DEBT_RATE: cap on daily interest charged on debt (debt-trap relief) */
+double get_debt_rate(void);
 
 /* ── Economic stabilizers: benefits + interest/price dampers (--stabilizers) ──── */
 void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */

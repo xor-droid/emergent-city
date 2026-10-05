@@ -55,6 +55,7 @@ static double gf_wtaxt(void){return get_wealth_tax_threshold();}  static void sf
 static double gf_taxbr(void){return get_tax_brackets();}          static void sf_taxbr(double v){set_tax_brackets((int)v);}
 static double gf_srccap(void){return get_source_caps();}          static void sf_srccap(double v){set_source_caps((int)v);}
 static double gf_rentcap(void){return get_rent_cap();}            static void sf_rentcap(double v){set_rent_cap(v);}
+static double gf_debtr(void){return get_debt_rate();}             static void sf_debtr(double v){set_debt_rate(v);}
 static double gf_stab(void){return get_stabilizers();}            static void sf_stab(double v){set_stabilizers((int)v);}
 static double gf_benefit(void){return get_benefit();}             static void sf_benefit(double v){set_benefit(v);}
 static double gf_just(void){return get_justice();}                static void sf_just(double v){set_justice((int)v);}
@@ -76,7 +77,7 @@ static const Knob KNOBS[] = {
     {"taxation",gf_tax,sf_tax}, {"tax_rate",gf_taxr,sf_taxr}, {"welfare",gf_welf,sf_welf},
     {"wealth_tax_rate",gf_wtaxr,sf_wtaxr}, {"wealth_tax_threshold",gf_wtaxt,sf_wtaxt},
     {"tax_brackets",gf_taxbr,sf_taxbr},
-    {"source_caps",gf_srccap,sf_srccap}, {"rent_cap",gf_rentcap,sf_rentcap},
+    {"source_caps",gf_srccap,sf_srccap}, {"rent_cap",gf_rentcap,sf_rentcap}, {"debt_rate",gf_debtr,sf_debtr},
     {"stabilizers",gf_stab,sf_stab}, {"benefit",gf_benefit,sf_benefit},
     {"justice",gf_just,sf_just}, {"corruption",gf_corr,sf_corr}, {"oversight",gf_overs,sf_overs},
 };

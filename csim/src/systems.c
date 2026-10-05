@@ -1150,6 +1150,12 @@ void economy_daily(World *w) {
             interest *= 1.0 - 0.4 * clampd(w->stab.destitute_pct / 50.0, 0, 1);
             w->eff_interest = (float)interest;
         }
+        /* source cap: cap the daily debt interest so a bad patch can't compound into
+           a permanent debt trap — relief at the source for the indebted poor. */
+        if (get_source_caps() && interest > get_debt_rate()) {
+            interest = get_debt_rate();
+            w->eff_interest = (float)interest;
+        }
         if (a->debt > 0.0) {
             a->day_income -= a->debt * interest;            /* interest expense (net income) */
             a->debt *= (1.0 + interest);
