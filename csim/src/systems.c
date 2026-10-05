@@ -1131,25 +1131,33 @@ void economy_daily(World *w) {
         }
     }
 
-    /* ── public spending: the treasury funds welfare relief, policing and schools.
-       Welfare tops the destitute toward subsistence; police/school budgets are read by
-       police_pressure() and culture_daily(). Capped by the balance (no deficit). ── */
+    /* ── public spending. A small slice funds police + schools; the bulk is PROGRESSIVE
+       redistribution — everyone below a median-based target is lifted toward it in
+       proportion to their shortfall, which compresses the bottom of the distribution and
+       lowers Gini (not just the destitute, so the spread actually narrows). Capped by the
+       balance (no deficit); --welfare sets how high the target reaches. ── */
     w->police_funding = 0; w->school_funding = 0;
     if (get_taxation() && w->econ.treasury > 0.0) {
-        /* welfare: lift destitute adults toward a subsistence floor */
-        double floor = MEAL_PRICE * 3.0 * get_welfare();
-        for (int i = 0; i < w->n_agents && w->econ.treasury > 0.0; i++) {
-            Agent *a = &w->agents[i];
-            if (!a->alive || a->age < AGE_WORK || a->needs.money >= floor) continue;
-            double relief = floor - a->needs.money;
-            if (relief > w->econ.treasury) relief = w->econ.treasury;
-            a->needs.money += relief; a->day_income += relief;
-            w->econ.treasury -= relief; w->welfare_paid += relief;
-        }
-        /* police + schools: spend a slice of the remaining balance this day */
-        double pf = w->econ.treasury * 0.15, sf = w->econ.treasury * 0.15;
+        /* police + schools: a modest slice (fund them without hoarding the treasury) */
+        double pf = w->econ.treasury * 0.08, sf = w->econ.treasury * 0.08;
         w->econ.treasury -= pf + sf;
         w->police_funding = pf; w->school_funding = sf;
+        /* progressive welfare: redistribute the rest toward a target = welfare * median */
+        double med = w->median_wealth > 0.0 ? w->median_wealth : LOW_MONEY;
+        double target = med * get_welfare();
+        double total_gap = 0.0;
+        for (int i = 0; i < w->n_agents; i++) { Agent *a = &w->agents[i];
+            if (a->alive && a->age >= AGE_WORK && a->needs.money < target) total_gap += target - a->needs.money;
+        }
+        double budget = w->econ.treasury; if (budget > total_gap) budget = total_gap;
+        if (total_gap > 0.0 && budget > 0.0) {
+            for (int i = 0; i < w->n_agents; i++) { Agent *a = &w->agents[i];
+                if (!a->alive || a->age < AGE_WORK || a->needs.money >= target) continue;
+                double give = budget * ((target - a->needs.money) / total_gap);
+                a->needs.money += give; a->day_income += give;
+                w->econ.treasury -= give; w->welfare_paid += give;
+            }
+        }
     }
 
     /* ── child-rearing: dependent children cost their parents daily upkeep, which is
