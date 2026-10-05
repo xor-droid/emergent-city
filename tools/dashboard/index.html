@@ -358,6 +358,31 @@ let lastRowCount = -1, idleTicks = 0;
 // creation-time (fixed at world_init) vs live-tunable (changeable at runtime via T-panel/god)
 const CREATE_KEYS = new Set(["seed","days","years_per_day","family_share","kids_min","kids_max",
   "pop_target","neighborhoods","biomes","noise_worldgen","metrics_every"]);
+// human label for each manifest key (so the panel reads at a glance, not as raw keys)
+const PLABEL = {
+  seed:"Seed", days:"Days simulated", years_per_day:"Years per day",
+  family_share:"Family share", kids_min:"Kids (min)", kids_max:"Kids (max)",
+  pop_target:"Population target", neighborhoods:"Neighborhoods (wealth sorting)",
+  biomes:"Biomes (terrain)", noise_worldgen:"Noise worldgen", metrics_every:"Sample cadence (h)",
+  research_rate:"Research rate", production:"Production", child_cost:"Child cost",
+  occ_pay_spread:"Occupation pay spread", crime_wealth:"Crime loot scales w/ wealth",
+  police_bias:"Police bias", weather:"Weather", weather_period:"Weather period (days)",
+  heat_cost:"Heating cost", biome_value_weight:"Biome value weight",
+  taxation:"Taxation (fiscal)", tax_rate:"Tax rate", welfare:"Welfare level",
+  stabilizers:"Economic stabilizers", benefit:"Safety-net benefit",
+  justice:"Justice (trials)", corruption:"Police corruption", oversight:"Oversight",
+  vision:"Vision overlay", vision_radius:"Vision radius", hearing:"Hearing overlay",
+  hearing_radius:"Hearing radius",
+};
+// keys that are on/off gates — render "on"/"off" and colour them
+const FLAG_KEYS = new Set(["neighborhoods","biomes","noise_worldgen","weather","taxation",
+  "stabilizers","justice","crime_wealth","vision","hearing"]);
+const BIAS_NAMES = {0:"balanced",1:"crime",2:"money"};
+function pval(k,v){
+  if(k==="police_bias") return BIAS_NAMES[v] ?? v;
+  if(FLAG_KEYS.has(k)) return (v==="1"||v==="on"||v==="true") ? "on" : "off";
+  return v;
+}
 let paramsDone = false;
 async function loadParams(){
   if(paramsDone) return;
@@ -372,7 +397,11 @@ async function loadParams(){
       pairs.push([s.slice(0,i).trim(), s.slice(i+1).trim()]);
     }
     if(!pairs.length) return;
-    const row = (k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+    const row = (k,v)=>{
+      const disp = pval(k,v);
+      const cls = FLAG_KEYS.has(k) ? (disp==="on" ? " on" : " off") : "";
+      return `<div class="kv${cls}"><span class="k">${PLABEL[k]||k}</span><span class="v">${disp}</span></div>`;
+    };
     const create = pairs.filter(p=>CREATE_KEYS.has(p[0]));
     const live   = pairs.filter(p=>!CREATE_KEYS.has(p[0]));
     document.getElementById("p-create").innerHTML = create.map(p=>row(p[0],p[1])).join("");
