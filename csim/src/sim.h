@@ -405,6 +405,8 @@ typedef struct {
     int    n_moves;             /* cumulative household relocations (residential mobility) */
     double tax_collected, welfare_paid;  /* cumulative fiscal (--taxation) */
     double police_funding, school_funding;/* this-day public spend (read by police/schooling) */
+    double benefits_paid;                /* cumulative safety-net benefit (--stabilizers) */
+    float  eff_interest, price_volatility;/* this-day stabilizer readouts */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
     /* sim-stability guardrails: read-only daily indicators + warning flags (detect only) */
@@ -487,6 +489,12 @@ void   set_tax_rate(double r);        /* --tax-rate / CSIM_TAX_RATE (fraction of
 double get_tax_rate(void);
 void   set_welfare(double w);         /* --welfare / CSIM_WELFARE (relief generosity scale) */
 double get_welfare(void);
+
+/* ── Economic stabilizers: benefits + interest/price dampers (--stabilizers) ──── */
+void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */
+int    get_stabilizers(void);
+void   set_benefit(double b);         /* --benefit / CSIM_BENEFIT (safety-net generosity scale) */
+double get_benefit(void);
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 
 /* ── Field of view ─────────────────────────────────────────────────────────── */

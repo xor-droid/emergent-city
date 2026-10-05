@@ -1416,6 +1416,7 @@ void metrics_open(const char *path) {
     fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich,temp,rain,fog");
     fprintf(g_metrics, ",destitute_pct,poor_pct,pop_trend,crime_rate,crime_accel,price_trend,money_trend,stab_flags");
     fprintf(g_metrics, ",treasury,tax_collected,welfare_paid,police_funding,school_funding");
+    fprintf(g_metrics, ",benefits_paid,eff_interest,price_volatility");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1508,6 +1509,7 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
             w->stab.crime_accel, w->stab.price_trend, w->stab.money_trend, w->stab.flags);
     fprintf(g_metrics, ",%.0f,%.0f,%.0f,%.0f,%.0f", w->econ.treasury, w->tax_collected,
             w->welfare_paid, w->police_funding, w->school_funding);
+    fprintf(g_metrics, ",%.0f,%.4f,%.4f", w->benefits_paid, w->eff_interest, w->price_volatility);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1572,6 +1574,8 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "taxation=%d\n", get_taxation());
     fprintf(f, "tax_rate=%g\n", get_tax_rate());
     fprintf(f, "welfare=%g\n", get_welfare());
+    fprintf(f, "stabilizers=%d\n", get_stabilizers());
+    fprintf(f, "benefit=%g\n", get_benefit());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

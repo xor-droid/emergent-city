@@ -234,6 +234,13 @@ double get_tax_rate(void) { return g_tax_rate; }
 void   set_welfare(double w) { if (w >= 0.0) g_welfare = w; }
 double get_welfare(void) { return g_welfare; }
 
+static int    g_stabilizers = 0;     /* benefits + interest/price dampers */
+static double g_benefit = 1.0;       /* safety-net generosity scale */
+void   set_stabilizers(int on) { g_stabilizers = on ? 1 : 0; }
+int    get_stabilizers(void) { return g_stabilizers; }
+void   set_benefit(double b) { if (b >= 0.0) g_benefit = b; }
+double get_benefit(void) { return g_benefit; }
+
 /* perception multipliers: fog blinds, rain muffles. 1.0 = clear. Only meaningful when
  * weather is on (callers gate on get_weather via these returning 1.0 otherwise). */
 double weather_vision_mult(const World *w) {

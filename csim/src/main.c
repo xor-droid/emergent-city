@@ -58,6 +58,9 @@ static void usage(const char *argv0) {
     printf("  --taxation [--tax-rate R] [--welfare W]  tax daily income into a public treasury that\n");
     printf("                        funds welfare relief for the destitute, policing, and schools —\n");
     printf("                        a counterweight to inequality. R=0..1 (default .15). Default off.\n");
+    printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
+    printf("                        floor for the destitute, eased interest when destitution is high,\n");
+    printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -119,6 +122,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_WEATHER=1  CSIM_WEATHER_PERIOD=D  CSIM_HEAT_COST=F   weather (as --weather).\n");
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_TAXATION=1  CSIM_TAX_RATE=R  CSIM_WELFARE=W   fiscal (as --taxation).\n");
+    printf("    CSIM_STABILIZERS=1  CSIM_BENEFIT=B   economic stabilizers (as --stabilizers).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=0   legacy sine/gradient worldgen (noise is the default now).\n");
@@ -196,6 +200,8 @@ int main(int argc, char **argv) {
     double biomeweight = -1.0;         /* biome value weight; <0 = unset */
     int taxation = -1;                 /* fiscal; <0 = unset */
     double taxrate = -1.0, welfare = -1.0;
+    int stabilizers = -1;              /* economic stabilizers; <0 = unset */
+    double benefit = -1.0;
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -262,6 +268,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--tax-rate=", 11)) { taxrate = atof(argv[i] + 11); taxation = (taxation<0)?1:taxation; }
         else if (!strcmp(argv[i], "--welfare") && i + 1 < argc) { welfare = atof(argv[++i]); taxation = (taxation<0)?1:taxation; }
         else if (!strncmp(argv[i], "--welfare=", 10)) { welfare = atof(argv[i] + 10); taxation = (taxation<0)?1:taxation; }
+        else if (!strcmp(argv[i], "--stabilizers")) { stabilizers = 1; }
+        else if (!strcmp(argv[i], "--no-stabilizers")) { stabilizers = 0; }
+        else if (!strcmp(argv[i], "--benefit") && i + 1 < argc) { benefit = atof(argv[++i]); stabilizers = (stabilizers<0)?1:stabilizers; }
+        else if (!strncmp(argv[i], "--benefit=", 10)) { benefit = atof(argv[i] + 10); stabilizers = (stabilizers<0)?1:stabilizers; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -333,6 +343,10 @@ int main(int argc, char **argv) {
     if (taxrate >= 0) set_tax_rate(taxrate);
     if (welfare < 0) { const char *e = getenv("CSIM_WELFARE"); if (e) welfare = atof(e); }
     if (welfare >= 0) set_welfare(welfare);
+    if (stabilizers < 0) { const char *e = getenv("CSIM_STABILIZERS"); if (e) stabilizers = atoi(e); }
+    if (stabilizers >= 0) set_stabilizers(stabilizers);
+    if (benefit < 0) { const char *e = getenv("CSIM_BENEFIT"); if (e) benefit = atof(e); }
+    if (benefit >= 0) set_benefit(benefit);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

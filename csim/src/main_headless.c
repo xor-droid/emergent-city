@@ -133,6 +133,8 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "taxation"))        set_taxation(iv);
         else if (!strcmp(key, "tax_rate"))        set_tax_rate(d);
         else if (!strcmp(key, "welfare"))         set_welfare(d);
+        else if (!strcmp(key, "stabilizers"))     set_stabilizers(iv);
+        else if (!strcmp(key, "benefit"))         set_benefit(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -227,6 +229,8 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_TAXATION"); if (e) set_taxation(atoi(e)); }
     { const char *e = getenv("CSIM_TAX_RATE"); if (e) set_tax_rate(atof(e)); }
     { const char *e = getenv("CSIM_WELFARE"); if (e) set_welfare(atof(e)); }
+    { const char *e = getenv("CSIM_STABILIZERS"); if (e) set_stabilizers(atoi(e)); }
+    { const char *e = getenv("CSIM_BENEFIT"); if (e) set_benefit(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;

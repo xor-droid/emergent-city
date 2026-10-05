@@ -1031,6 +1031,10 @@ void economy_daily(World *w) {
         /* ── credit: interest accrues; repay when flush, borrow when destitute ── */
         /* Banking (tech) lowers the rate as it spreads */
         double interest = DAILY_INTEREST * (1.0 - 0.5 * w->sci.adoption[TECH_BANKING]);
+        if (get_stabilizers()) {   /* counter-cyclical: ease rates when destitution is high */
+            interest *= 1.0 - 0.4 * clampd(w->stab.destitute_pct / 50.0, 0, 1);
+            w->eff_interest = (float)interest;
+        }
         if (a->debt > 0.0) {
             a->day_income -= a->debt * interest;            /* interest expense (net income) */
             a->debt *= (1.0 + interest);
@@ -1039,6 +1043,15 @@ void economy_daily(World *w) {
                 if (repay > a->debt) repay = a->debt;
                 a->needs.money -= repay; a->debt -= repay;
                 if (a->debt < 0.5) a->debt = 0.0;
+            }
+        }
+        /* ── safety-net benefit: a grant (not debt) lifting the destitute toward
+           subsistence, so a bad patch doesn't spiral into starvation ── */
+        if (get_stabilizers() && a->age >= AGE_WORK) {
+            double floor = MEAL_PRICE * 2.0 * get_benefit();
+            if (a->needs.money < floor) {
+                double b = floor - a->needs.money;
+                a->needs.money += b; a->day_income += b; w->benefits_paid += b;
             }
         }
         if (a->needs.money < MEAL_PRICE && a->debt < DEBT_CEILING) {
@@ -1132,7 +1145,15 @@ void economy_daily(World *w) {
 
     /* ── markets settle for the day ── */
     double avg_money = alive ? money_sum / alive : 0.0;
-    e->goods_price = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);   /* a richer city is a pricier one */
+    double prev_gp = e->goods_price;
+    double gp = clampd(0.6 + avg_money / 700.0, 0.6, 3.0);        /* a richer city is a pricier one */
+    if (get_stabilizers()) {                                      /* price damper: cap day-over-day swing */
+        double maxd = 0.08;
+        if (gp > prev_gp + maxd) gp = prev_gp + maxd;
+        else if (gp < prev_gp - maxd) gp = prev_gp - maxd;
+    }
+    w->price_volatility = (float)fabs(gp - prev_gp);
+    e->goods_price = gp;
     e->wage_mult   = clampd(0.6 + e->goods_price * 0.5, 0.6, 1.6); /* wages chase the cost of living */
     e->wage_mult  *= (1.0 + 0.2 * w->sci.adoption[TECH_TOOLING]);   /* better tools raise output/pay */
 }

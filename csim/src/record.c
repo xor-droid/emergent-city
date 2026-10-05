@@ -50,6 +50,8 @@ static double gf_bweight(void){return get_biome_value_weight();}  static void sf
 static double gf_tax(void){return get_taxation();}                static void sf_tax(double v){set_taxation((int)v);}
 static double gf_taxr(void){return get_tax_rate();}               static void sf_taxr(double v){set_tax_rate(v);}
 static double gf_welf(void){return get_welfare();}                static void sf_welf(double v){set_welfare(v);}
+static double gf_stab(void){return get_stabilizers();}            static void sf_stab(double v){set_stabilizers((int)v);}
+static double gf_benefit(void){return get_benefit();}             static void sf_benefit(double v){set_benefit(v);}
 
 static const Knob KNOBS[] = {
     {"years_per_day",gf_ypd,sf_ypd}, {"family_share",gf_fshare,sf_fshare},
@@ -64,6 +66,7 @@ static const Knob KNOBS[] = {
     {"weather",gf_weather,sf_weather}, {"weather_period",gf_wperiod,sf_wperiod}, {"heat_cost",gf_heatc,sf_heatc},
     {"biomes",gf_biomes,sf_biomes}, {"biome_value_weight",gf_bweight,sf_bweight},
     {"taxation",gf_tax,sf_tax}, {"tax_rate",gf_taxr,sf_taxr}, {"welfare",gf_welf,sf_welf},
+    {"stabilizers",gf_stab,sf_stab}, {"benefit",gf_benefit,sf_benefit},
 };
 static const int N_KNOBS = (int)(sizeof(KNOBS)/sizeof(KNOBS[0]));
 static int knob_index(const char *name) {
@@ -81,7 +84,7 @@ static struct {
     char parent_id[64];         /* set for a fork; "" otherwise */
     uint64_t fork_tick;         /* tick the fork diverged from the parent */
     uint64_t seed; int pop;
-    double cfg[32];              /* startup snapshot, parallel to KNOBS */
+    double cfg[48];              /* startup snapshot, parallel to KNOBS */
     RecEvent *ev; int n, cap;
     uint64_t end_tick; uint64_t checksum;
 } S;
@@ -180,7 +183,7 @@ int rec_save_file(const char *path) {
 /* ── replay (reader) ─────────────────────────────────────────────────────── */
 typedef struct { uint64_t tick; int is_tune; char knob[24]; double value; int tool, tx, ty; } PlayEvent;
 typedef struct { char sid[64]; uint64_t seed; int pop; uint64_t end_tick, checksum;
-                 double cfg[32]; PlayEvent *ev; int n; } Loaded;
+                 double cfg[48]; PlayEvent *ev; int n; } Loaded;
 
 /* parse a session file and APPLY its startup config (so seed+config are set for replay). */
 static int load_session(const char *path, Loaded *L) {
@@ -244,7 +247,7 @@ int replay_session_file(const char *path, int verbose) {
 
 /* ── interactive player (GUI): step a recorded session, allow a fork on edit ─── */
 static struct { int loaded, forked; char sid[64]; uint64_t seed; int pop, idx, n;
-                uint64_t end_tick; double cfg[32]; PlayEvent *ev; } Pl;
+                uint64_t end_tick; double cfg[48]; PlayEvent *ev; } Pl;
 
 int replay_load(const char *path, uint64_t *seed_out, int *pop_out) {
     Loaded L; if (load_session(path, &L) != 0) return -1;
