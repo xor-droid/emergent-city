@@ -1579,6 +1579,7 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "welfare=%g\n", get_welfare());
     fprintf(f, "wealth_tax_rate=%g\n", get_wealth_tax_rate());
     fprintf(f, "wealth_tax_threshold=%g\n", get_wealth_tax_threshold());
+    fprintf(f, "tax_brackets=%d\n", get_tax_brackets());
     fprintf(f, "stabilizers=%d\n", get_stabilizers());
     fprintf(f, "benefit=%g\n", get_benefit());
     fprintf(f, "justice=%d\n", get_justice());

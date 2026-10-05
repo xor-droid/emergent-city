@@ -1008,6 +1008,25 @@ static double agent_pcwealth(const World *w, const Agent *a) {
     return a->needs.money;
 }
 
+/* Progressive marginal income tax. Brackets are multiples of the median earned
+ * income (ref); each tier's rate applies only to the income falling within it —
+ * real-world marginal brackets. The lowest tier is exempt, so low earners pay
+ * nothing and the top bracket (open-ended) carries the heaviest rate. */
+static double progressive_income_tax(double income, double ref) {
+    /* {upper edge in × ref, marginal rate}; last edge is open-ended (INFINITY). */
+    static const double EDGE[] = { 1.0, 2.0, 4.0, 1e18 };  /* last tier open-ended */
+    static const double RATE[] = { 0.00, 0.10, 0.25, 0.45 };
+    double tax = 0.0, lo = 0.0;
+    for (int b = 0; b < 4; b++) {
+        double hi = EDGE[b] * ref;                 /* bracket ceiling in currency */
+        if (income <= lo) break;
+        double in_band = (income < hi ? income : hi) - lo;
+        if (in_band > 0.0) tax += in_band * RATE[b];
+        lo = hi;
+    }
+    return tax;
+}
+
 void economy_daily(World *w) {
     Economy *e = &w->econ;
     int alive = 0; double money_sum = 0;
@@ -1022,14 +1041,30 @@ void economy_daily(World *w) {
     if (wref < 1.0) wref = 1.0;   /* guard against an all-broke city */
     w->median_wealth = wref;      /* published for crime wealth-tier classification */
 
+    /* median earned income among working earners — the reference the progressive
+     * tax brackets scale to, so the tiers track the economy as wages drift. */
+    double iref = 0.0;
+    { static double tmp[MAX_AGENTS]; int n = 0;
+      for (int i = 0; i < w->n_agents; i++) {
+          Agent *a = &w->agents[i];
+          if (a->alive && a->age >= AGE_WORK && a->day_income > 0.0) tmp[n++] = a->day_income;
+      }
+      if (n) { qsort(tmp, n, sizeof(double), cmp_dbl_asc); iref = tmp[n/2]; } }
+    if (iref < 1.0) iref = 1.0;   /* guard against an all-idle city */
+
     for (int i = 0; i < w->n_agents; i++) {
         Agent *a = &w->agents[i];
         if (!a->alive) continue;
         alive++;
 
-        /* ── income tax: a cut of the day's earnings goes to the public treasury ── */
+        /* ── income tax: a cut of the day's earnings goes to the public treasury.
+           Flat (tax_rate on every dollar) by default; with --tax-brackets it is
+           progressive — marginal rates rising by income tier, scaled to the median
+           earned income so the lowest earners pay nothing and the top pay most. ── */
         if (get_taxation() && a->age >= AGE_WORK && a->day_income > 0.0) {
-            double tax = get_tax_rate() * a->day_income;
+            double tax = get_tax_brackets()
+                       ? progressive_income_tax(a->day_income, iref)
+                       : get_tax_rate() * a->day_income;
             if (tax > a->needs.money) tax = a->needs.money;
             a->needs.money -= tax; a->day_income -= tax;
             w->econ.treasury += tax; w->tax_collected += tax;

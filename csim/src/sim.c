@@ -239,6 +239,9 @@ void   set_wealth_tax_rate(double r) { if (r >= 0.0 && r <= 1.0) g_wealth_tax_ra
 double get_wealth_tax_rate(void) { return g_wealth_tax_rate; }
 void   set_wealth_tax_threshold(double m) { if (m > 0.0) g_wealth_tax_threshold = m; }
 double get_wealth_tax_threshold(void) { return g_wealth_tax_threshold; }
+static int    g_tax_brackets = 0;           /* progressive marginal income tax (vs flat rate) */
+void   set_tax_brackets(int on) { g_tax_brackets = on ? 1 : 0; }
+int    get_tax_brackets(void) { return g_tax_brackets; }
 
 static int    g_stabilizers = 0;     /* benefits + interest/price dampers */
 static double g_benefit = 1.0;       /* safety-net generosity scale */

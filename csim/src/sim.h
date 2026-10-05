@@ -496,6 +496,8 @@ void   set_wealth_tax_rate(double r);      /* --wealth-tax-rate / CSIM_WEALTH_TA
 double get_wealth_tax_rate(void);
 void   set_wealth_tax_threshold(double m);  /* --wealth-tax-threshold / CSIM_WEALTH_TAX_THRESHOLD (× median wealth; top-tail cutoff) */
 double get_wealth_tax_threshold(void);
+void   set_tax_brackets(int on);      /* --tax-brackets / CSIM_TAX_BRACKETS: progressive marginal income tax (vs flat tax_rate) */
+int    get_tax_brackets(void);
 
 /* ── Economic stabilizers: benefits + interest/price dampers (--stabilizers) ──── */
 void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */
@@ -561,7 +563,7 @@ double get_child_cost(void);
 double worker_output(const Agent *a);       /* pay/output factor from craft + education */
 
 /* ── Socioeconomics: occupation pay tiers + households (dashboard diversity) ──── */
-#define OCC_PAY_SPREAD 0.0                   /* default: flat pay (legacy); 1.0 = full tier spread */
+#define OCC_PAY_SPREAD 1.0                   /* default: full occupation pay tiers (1.0); 0.0 = flat (legacy) */
 double occ_base_wage(unsigned char occ);     /* occupation pay multiplier, scaled by the spread knob */
 void   set_occ_pay_spread(double s);         /* --occ-pay-spread / CSIM_OCC_PAY_SPREAD */
 double get_occ_pay_spread(void);

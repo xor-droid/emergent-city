@@ -61,6 +61,9 @@ static void usage(const char *argv0) {
     printf("  --wealth-tax-rate R [--wealth-tax-threshold M]  (needs --taxation) a daily levy of R\n");
     printf("                        (0..1) on money held above M× median wealth (default M=4). Taxes the\n");
     printf("                        accumulated STOCK, not just income — the lever that holds Gini flat.\n");
+    printf("  --tax-brackets        (needs --taxation) progressive marginal income tax instead of the\n");
+    printf("                        flat --tax-rate: tiers at 1/2/4× median income taxed 0/10/25/45%%,\n");
+    printf("                        so low earners pay nothing and top earners pay most. Default off.\n");
     printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
     printf("                        floor for the destitute, eased interest when destitution is high,\n");
     printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
@@ -129,6 +132,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_TAXATION=1  CSIM_TAX_RATE=R  CSIM_WELFARE=W   fiscal (as --taxation).\n");
     printf("    CSIM_WEALTH_TAX_RATE=R  CSIM_WEALTH_TAX_THRESHOLD=M   top-tail wealth (stock) tax.\n");
+    printf("    CSIM_TAX_BRACKETS=1   progressive marginal income tax (as --tax-brackets).\n");
     printf("    CSIM_STABILIZERS=1  CSIM_BENEFIT=B   economic stabilizers (as --stabilizers).\n");
     printf("    CSIM_JUSTICE=1  CSIM_CORRUPTION=C  CSIM_OVERSIGHT=O   justice checks (as --justice).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
@@ -209,6 +213,7 @@ int main(int argc, char **argv) {
     int taxation = -1;                 /* fiscal; <0 = unset */
     double taxrate = -1.0, welfare = -1.0;
     double wtaxr = -1.0, wtaxt = -1.0;
+    int taxbr = -1;
     int stabilizers = -1;              /* economic stabilizers; <0 = unset */
     double benefit = -1.0;
     int justice = -1;                  /* justice checks; <0 = unset */
@@ -283,6 +288,8 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--wealth-tax-rate=", 18)) { wtaxr = atof(argv[i] + 18); taxation = (taxation<0)?1:taxation; }
         else if (!strcmp(argv[i], "--wealth-tax-threshold") && i + 1 < argc) { wtaxt = atof(argv[++i]); }
         else if (!strncmp(argv[i], "--wealth-tax-threshold=", 23)) { wtaxt = atof(argv[i] + 23); }
+        else if (!strcmp(argv[i], "--tax-brackets")) { taxbr = 1; taxation = (taxation<0)?1:taxation; }
+        else if (!strcmp(argv[i], "--no-tax-brackets")) { taxbr = 0; }
         else if (!strcmp(argv[i], "--stabilizers")) { stabilizers = 1; }
         else if (!strcmp(argv[i], "--no-stabilizers")) { stabilizers = 0; }
         else if (!strcmp(argv[i], "--benefit") && i + 1 < argc) { benefit = atof(argv[++i]); stabilizers = (stabilizers<0)?1:stabilizers; }
@@ -368,6 +375,8 @@ int main(int argc, char **argv) {
     if (wtaxr >= 0) set_wealth_tax_rate(wtaxr);
     if (wtaxt < 0) { const char *e = getenv("CSIM_WEALTH_TAX_THRESHOLD"); if (e) wtaxt = atof(e); }
     if (wtaxt >= 0) set_wealth_tax_threshold(wtaxt);
+    if (taxbr < 0) { const char *e = getenv("CSIM_TAX_BRACKETS"); if (e) taxbr = atoi(e); }
+    if (taxbr >= 0) set_tax_brackets(taxbr);
     if (stabilizers < 0) { const char *e = getenv("CSIM_STABILIZERS"); if (e) stabilizers = atoi(e); }
     if (stabilizers >= 0) set_stabilizers(stabilizers);
     if (benefit < 0) { const char *e = getenv("CSIM_BENEFIT"); if (e) benefit = atof(e); }

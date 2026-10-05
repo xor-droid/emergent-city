@@ -52,6 +52,7 @@ static double gf_taxr(void){return get_tax_rate();}               static void sf
 static double gf_welf(void){return get_welfare();}                static void sf_welf(double v){set_welfare(v);}
 static double gf_wtaxr(void){return get_wealth_tax_rate();}       static void sf_wtaxr(double v){set_wealth_tax_rate(v);}
 static double gf_wtaxt(void){return get_wealth_tax_threshold();}  static void sf_wtaxt(double v){set_wealth_tax_threshold(v);}
+static double gf_taxbr(void){return get_tax_brackets();}          static void sf_taxbr(double v){set_tax_brackets((int)v);}
 static double gf_stab(void){return get_stabilizers();}            static void sf_stab(double v){set_stabilizers((int)v);}
 static double gf_benefit(void){return get_benefit();}             static void sf_benefit(double v){set_benefit(v);}
 static double gf_just(void){return get_justice();}                static void sf_just(double v){set_justice((int)v);}
@@ -72,6 +73,7 @@ static const Knob KNOBS[] = {
     {"biomes",gf_biomes,sf_biomes}, {"biome_value_weight",gf_bweight,sf_bweight},
     {"taxation",gf_tax,sf_tax}, {"tax_rate",gf_taxr,sf_taxr}, {"welfare",gf_welf,sf_welf},
     {"wealth_tax_rate",gf_wtaxr,sf_wtaxr}, {"wealth_tax_threshold",gf_wtaxt,sf_wtaxt},
+    {"tax_brackets",gf_taxbr,sf_taxbr},
     {"stabilizers",gf_stab,sf_stab}, {"benefit",gf_benefit,sf_benefit},
     {"justice",gf_just,sf_just}, {"corruption",gf_corr,sf_corr}, {"oversight",gf_overs,sf_overs},
 };
