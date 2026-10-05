@@ -159,7 +159,7 @@ int  get_hearing(void) { return g_hearing; }
 void set_hearing_radius(int r) { if (r >= 1) g_hearing_radius = r; }
 int  get_hearing_radius(void) { return g_hearing_radius; }
 
-static int g_noise_worldgen = 0;       /* 0 = sine/gradient worldgen (default), 1 = FastNoiseLite */
+static int g_noise_worldgen = 1;       /* 1 = FastNoiseLite organic worldgen (default), 0 = legacy sine/gradient */
 void set_noise_worldgen(int on) { g_noise_worldgen = on ? 1 : 0; }
 int  get_noise_worldgen(void) { return g_noise_worldgen; }
 

@@ -61,8 +61,8 @@ static void usage(const char *argv0) {
     printf("  --hearing [--hearing-radius N]  loud acts (murder/assault/arson/riot) carry around\n");
     printf("                        corners and get noticed even out of sight; quiet crimes stay\n");
     printf("                        stealthy, serial killers quieter still. Rebalances --vision.\n");
-    printf("  --noise-worldgen      generate the city with coherent (FastNoiseLite) noise for\n");
-    printf("                        organic rivers/districts instead of the default sine/gradient.\n");
+    printf("  --noise-worldgen      coherent (FastNoiseLite) organic rivers/districts — now the\n");
+    printf("                        DEFAULT. Use --no-noise-worldgen for the legacy sine/gradient map.\n");
     printf("  --seed N              worldgen seed (default 1337); same seed+config = same run.\n");
     printf("\n");
     printf("Balance metrics (feeds the live web dashboard in tools/dashboard/):\n");
@@ -117,7 +117,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
-    printf("    CSIM_NOISE_WORLDGEN=1   noise-based worldgen (as --noise-worldgen).\n");
+    printf("    CSIM_NOISE_WORLDGEN=0   legacy sine/gradient worldgen (noise is the default now).\n");
     printf("    CSIM_SEED=N         worldgen seed (as --seed).\n");
     printf("    CSIM_METRICS=PATH   live balance CSV export (as --metrics).\n");
     printf("    CSIM_METRICS_EVERY=H  sample cadence in game-hours (as --metrics-every).\n");
