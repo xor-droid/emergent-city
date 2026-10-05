@@ -224,22 +224,22 @@ const char *biome_name(int b) {
                  case B_WATERFRONT: return "waterfront"; case B_PARKLAND: return "parkland"; default: return "plain"; }
 }
 
-static int    g_taxation = 0;        /* fiscal: tax + public spending */
+static int    g_taxation = 1;        /* fiscal: tax + public spending (ON by default — balanced city) */
 static double g_tax_rate = 0.15;     /* fraction of daily income taxed */
-static double g_welfare  = 1.0;      /* relief generosity scale */
+static double g_welfare  = 0.3;      /* relief generosity scale: 0.3 = subsistence floor (keeps a poor class, no destitution) */
 void   set_taxation(int on) { g_taxation = on ? 1 : 0; }
 int    get_taxation(void) { return g_taxation; }
 void   set_tax_rate(double r) { if (r >= 0.0 && r <= 1.0) g_tax_rate = r; }
 double get_tax_rate(void) { return g_tax_rate; }
 void   set_welfare(double w) { if (w >= 0.0) g_welfare = w; }
 double get_welfare(void) { return g_welfare; }
-static double g_wealth_tax_rate = 0.0;      /* daily levy on stock above threshold (0 = off) */
-static double g_wealth_tax_threshold = 4.0; /* top-tail cutoff, × median wealth */
+static double g_wealth_tax_rate = 0.08;     /* daily levy on stock above threshold (progressive-tiered; trims the top) */
+static double g_wealth_tax_threshold = 2.0; /* top-tail cutoff, × median wealth */
 void   set_wealth_tax_rate(double r) { if (r >= 0.0 && r <= 1.0) g_wealth_tax_rate = r; }
 double get_wealth_tax_rate(void) { return g_wealth_tax_rate; }
 void   set_wealth_tax_threshold(double m) { if (m > 0.0) g_wealth_tax_threshold = m; }
 double get_wealth_tax_threshold(void) { return g_wealth_tax_threshold; }
-static int    g_tax_brackets = 0;           /* progressive marginal income tax (vs flat rate) */
+static int    g_tax_brackets = 1;           /* progressive marginal income tax (vs flat rate) — ON by default */
 void   set_tax_brackets(int on) { g_tax_brackets = on ? 1 : 0; }
 int    get_tax_brackets(void) { return g_tax_brackets; }
 
