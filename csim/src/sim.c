@@ -253,7 +253,7 @@ static double g_debt_rate = 0.01;           /* capped daily debt interest under 
 void   set_debt_rate(double r) { if (r >= 0.0 && r <= 1.0) g_debt_rate = r; }
 double get_debt_rate(void) { return g_debt_rate; }
 
-static int    g_stabilizers = 0;     /* benefits + interest/price dampers */
+static int    g_stabilizers = 1;     /* benefits + interest/price dampers — ON by default */
 static double g_benefit = 1.0;       /* safety-net generosity scale */
 void   set_stabilizers(int on) { g_stabilizers = on ? 1 : 0; }
 int    get_stabilizers(void) { return g_stabilizers; }

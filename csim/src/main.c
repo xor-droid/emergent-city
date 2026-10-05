@@ -74,7 +74,8 @@ static void usage(const char *argv0) {
     printf("                        poor. ON by default; --no-source-caps disables.\n");
     printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
     printf("                        floor for the destitute, eased interest when destitution is high,\n");
-    printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
+    printf("                        and a goods-price damper. Softens boom/bust. ON by default;\n");
+    printf("                        --no-stabilizers disables.\n");
     printf("  --justice [--corruption C] [--oversight O]  arrests go through trials (convict/acquit),\n");
     printf("                        the wealthy can bribe a corrupt force, innocents are sometimes\n");
     printf("                        wrongfully convicted; oversight (0..1) curbs it. ON by default;\n");
