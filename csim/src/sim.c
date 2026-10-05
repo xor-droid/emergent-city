@@ -254,7 +254,7 @@ void   set_debt_rate(double r) { if (r >= 0.0 && r <= 1.0) g_debt_rate = r; }
 double get_debt_rate(void) { return g_debt_rate; }
 
 static int    g_stabilizers = 1;     /* benefits + interest/price dampers — ON by default */
-static double g_benefit = 1.0;       /* safety-net generosity scale */
+static double g_benefit = 0.0;       /* safety-net grant scale: 0 = off (relief is tax-funded welfare only) */
 void   set_stabilizers(int on) { g_stabilizers = on ? 1 : 0; }
 int    get_stabilizers(void) { return g_stabilizers; }
 void   set_benefit(double b) { if (b >= 0.0) g_benefit = b; }
