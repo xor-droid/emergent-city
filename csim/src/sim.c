@@ -243,6 +243,13 @@ static int    g_tax_brackets = 1;           /* progressive marginal income tax (
 void   set_tax_brackets(int on) { g_tax_brackets = on ? 1 : 0; }
 int    get_tax_brackets(void) { return g_tax_brackets; }
 
+static int    g_source_caps = 0;            /* moderate the top's income sources (rent, ...) */
+static double g_rent_cap = 0.30;            /* max rent as fraction of tenant's daily income */
+void   set_source_caps(int on) { g_source_caps = on ? 1 : 0; }
+int    get_source_caps(void) { return g_source_caps; }
+void   set_rent_cap(double f) { if (f >= 0.0) g_rent_cap = f; }
+double get_rent_cap(void) { return g_rent_cap; }
+
 static int    g_stabilizers = 0;     /* benefits + interest/price dampers */
 static double g_benefit = 1.0;       /* safety-net generosity scale */
 void   set_stabilizers(int on) { g_stabilizers = on ? 1 : 0; }

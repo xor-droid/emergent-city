@@ -499,6 +499,12 @@ double get_wealth_tax_threshold(void);
 void   set_tax_brackets(int on);      /* --tax-brackets / CSIM_TAX_BRACKETS: progressive marginal income tax (vs flat tax_rate) */
 int    get_tax_brackets(void);
 
+/* ── Source caps: moderate the top's income sources at the source (--source-caps) ── */
+void   set_source_caps(int on);       /* --source-caps / CSIM_SOURCE_CAPS: cap rent (and later interest/crime) */
+int    get_source_caps(void);
+void   set_rent_cap(double f);        /* --rent-cap / CSIM_RENT_CAP: max rent as fraction of tenant's daily income */
+double get_rent_cap(void);
+
 /* ── Economic stabilizers: benefits + interest/price dampers (--stabilizers) ──── */
 void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */
 int    get_stabilizers(void);

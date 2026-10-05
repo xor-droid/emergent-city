@@ -1109,6 +1109,13 @@ void economy_daily(World *w) {
             Building *hb = &w->buildings[a->home_id];
             if (hb->owner_id >= 0 && hb->owner_id != a->id) {
                 double rent = RENT_TO_LANDLORD * e->goods_price;
+                /* source cap: nobody pays rent they can't afford — cap it to a share
+                   of the tenant's (post-tax) daily income. Chokes the single biggest
+                   channel that concentrates wealth into landlords, from the source. */
+                if (get_source_caps()) {
+                    double max_rent = a->day_income > 0.0 ? get_rent_cap() * a->day_income : 0.0;
+                    if (rent > max_rent) rent = max_rent;
+                }
                 if (rent > a->needs.money) rent = a->needs.money;
                 a->needs.money -= rent;
                 a->day_income -= rent;                      /* rent paid (net income) */

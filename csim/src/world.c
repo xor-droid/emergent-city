@@ -1580,6 +1580,8 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "wealth_tax_rate=%g\n", get_wealth_tax_rate());
     fprintf(f, "wealth_tax_threshold=%g\n", get_wealth_tax_threshold());
     fprintf(f, "tax_brackets=%d\n", get_tax_brackets());
+    fprintf(f, "source_caps=%d\n", get_source_caps());
+    fprintf(f, "rent_cap=%g\n", get_rent_cap());
     fprintf(f, "stabilizers=%d\n", get_stabilizers());
     fprintf(f, "benefit=%g\n", get_benefit());
     fprintf(f, "justice=%d\n", get_justice());
