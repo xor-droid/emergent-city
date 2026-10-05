@@ -691,6 +691,18 @@ int run_ui(World *w){
                 w->weather.temp*100,w->weather.rain*100,w->weather.fog*100);
             G->text(wx,W-US(300),US(5),US(13),gfx_rgb(170,200,235));
         }
+        if(w->stab.flags){   /* sim-stability warnings (detect-only) */
+            char sb[160]; sb[0]=0;
+            if(w->stab.flags&STAB_CRIME_SPIRAL) strncat(sb," crime-spiral",sizeof sb-strlen(sb)-1);
+            if(w->stab.flags&STAB_DEPOP)        strncat(sb," depopulating",sizeof sb-strlen(sb)-1);
+            if(w->stab.flags&STAB_DESTITUTE)    strncat(sb," destitution",sizeof sb-strlen(sb)-1);
+            if(w->stab.flags&STAB_INFLATION)    strncat(sb," inflation",sizeof sb-strlen(sb)-1);
+            if(w->stab.flags&STAB_BUST)         strncat(sb," bust",sizeof sb-strlen(sb)-1);
+            char banner[192]; snprintf(banner,sizeof banner,"\xe2\x9a\xa0 UNSTABLE:%s",sb);
+            int bw=US(10)+(int)strlen(banner)*US(7);
+            G->fill_rect(W/2-bw/2, hudH+US(2), bw, US(20), gfx_rgba(120,20,20,200));
+            G->text(banner, W/2-bw/2+US(6), hudH+US(5), US(13), gfx_rgb(255,210,180));
+        }
         if(replay_is_loaded()){
             char rb[160]; unsigned long long et=(unsigned long long)replay_end_tick();
             if(replay_in_progress())

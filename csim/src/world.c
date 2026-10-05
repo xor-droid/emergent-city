@@ -1193,7 +1193,7 @@ void world_tick(World *w, double dt_seconds) {
     crime_tick(w);
     warfare_tick(w);
 
-    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); households_daily(w); }
+    if (new_day) { economy_daily(w); factions_daily(w); crime_daily(w); jail_tick(w); kinship_daily(w); law_daily(w); culture_daily(w); knowledge_daily(w); lifecycle_daily(w); danger_decay(w); households_daily(w); stability_daily(w); }
     metrics_sample_maybe(w);   /* samples on the configured cadence (default once/day) */
 }
 
@@ -1254,6 +1254,44 @@ static void residential_move(World *w) {
  * A household = living agents sharing a home_id. hh_wealth = Σ residents' money;
  * hh_income = Σ residents' net legitimate cash flow for the day (day_income), which
  * is then reset for the next day. Pure accounting over existing state. */
+/* ── Sim-stability guardrails: read-only daily indicators (detect only; no correction).
+ * Writes only w->stab, so it never changes the simulation — deterministic + always on. */
+void stability_daily(World *w) {
+    int alive = 0, adult = 0, destitute = 0, poor = 0; double money_sum = 0;
+    for (int i = 0; i < w->n_agents; i++) { Agent *a = &w->agents[i]; if (!a->alive) continue;
+        alive++; money_sum += a->needs.money;
+        if (a->age >= AGE_WORK) { adult++;
+            if (a->needs.money < MEAL_PRICE) destitute++;
+            if (a->needs.money < LOW_MONEY) poor++; }   /* poor is the superset */
+    }
+    double avg_money   = alive ? money_sum / alive : 0.0;
+    double crime_today = (double)(w->crimes - w->stab.prev_crimes);
+    double pop_trend   = (double)(alive - w->stab.prev_alive);
+    double price_trend = w->econ.goods_price - w->stab.prev_price;
+    double money_trend = avg_money - w->stab.prev_money;
+    double crime_accel = crime_today - w->stab.crime_rate;   /* vs yesterday's rate */
+
+    w->stab.destitute_pct = adult ? 100.0f * destitute / adult : 0.0f;
+    w->stab.poor_pct      = adult ? 100.0f * poor / adult : 0.0f;
+    w->stab.pop_trend     = (float)pop_trend;
+    w->stab.crime_accel   = (float)crime_accel;
+    w->stab.price_trend   = (float)price_trend;
+    w->stab.money_trend   = (float)money_trend;
+
+    unsigned f = 0;
+    int target = get_pop_target(); if (target < 1) target = 1;
+    if (w->stab.destitute_pct > 25.0f) f |= STAB_DESTITUTE;
+    if (pop_trend < -2.0 || alive < target * 0.6) f |= STAB_DEPOP;
+    if (crime_today > 60.0 && crime_accel > 0.0) f |= STAB_CRIME_SPIRAL;
+    if (w->econ.goods_price > 2.5 && price_trend > 0.05) f |= STAB_INFLATION;
+    if (money_trend < -150.0) f |= STAB_BUST;
+    w->stab.flags = f;
+
+    w->stab.crime_rate = (float)crime_today;          /* store AFTER accel uses the old value */
+    w->stab.prev_crimes = w->crimes; w->stab.prev_alive = alive;
+    w->stab.prev_price = w->econ.goods_price; w->stab.prev_money = avg_money;
+}
+
 void households_daily(World *w) {
     for (int b = 0; b < w->n_buildings; b++)
         if (w->buildings[b].type == T_HOME) {
@@ -1374,6 +1412,7 @@ void metrics_open(const char *path) {
     fprintf(g_metrics, ",gini,hh_income_p25,hh_income_med,hh_income_p75,hh_income_mean");
     fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich,moves,segregation,cr_poor,cr_mid,cr_rich");
     fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich,temp,rain,fog");
+    fprintf(g_metrics, ",destitute_pct,poor_pct,pop_trend,crime_rate,crime_accel,price_trend,money_trend,stab_flags");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1461,6 +1500,9 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%d,%.4f,%d,%d,%d", w->n_moves, seg, w->crimes_tier[0], w->crimes_tier[1], w->crimes_tier[2]);
     fprintf(g_metrics, ",%d,%d,%d", w->crimes_loc_tier[0], w->crimes_loc_tier[1], w->crimes_loc_tier[2]);
     fprintf(g_metrics, ",%.3f,%.3f,%.3f", w->weather.temp, w->weather.rain, w->weather.fog);
+    fprintf(g_metrics, ",%.1f,%.1f,%.1f,%.1f,%.1f,%.3f,%.1f,%u",
+            w->stab.destitute_pct, w->stab.poor_pct, w->stab.pop_trend, w->stab.crime_rate,
+            w->stab.crime_accel, w->stab.price_trend, w->stab.money_trend, w->stab.flags);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1472,11 +1514,13 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
             "[{\"doc_type\":\"metric\",\"session_id\":\"%s\",\"tick\":%llu,\"t\":%.4f,\"day\":%d,"
             "\"alive\":%d,\"deaths\":%d,\"crimes\":%d,\"avg_money\":%.0f,\"gini\":%.4f,"
             "\"hh_income_med\":%.0f,\"theories\":%d,\"techs\":%d,\"factions\":%d,\"wars\":%d,"
-            "\"temp\":%.3f,\"rain\":%.3f,\"fog\":%.3f}]",
+            "\"temp\":%.3f,\"rain\":%.3f,\"fog\":%.3f,"
+            "\"destitute_pct\":%.1f,\"poor_pct\":%.1f,\"crime_rate\":%.1f,\"stab_flags\":%u}]",
             rec_session_id(), (unsigned long long)w->tick, w->day + w->hour/24.0, w->day,
             alive, w->deaths, w->crimes, alive?money/alive:0.0, gini, hmed,
             w->sci.theories, techs, factions, wars,
-            w->weather.temp, w->weather.rain, w->weather.fog);
+            w->weather.temp, w->weather.rain, w->weather.fog,
+            w->stab.destitute_pct, w->stab.poor_pct, w->stab.crime_rate, w->stab.flags);
         os_ingest(d);
     }
 }

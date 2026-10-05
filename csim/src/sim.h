@@ -404,6 +404,16 @@ typedef struct {
     int    n_moves;             /* cumulative household relocations (residential mobility) */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
+    /* sim-stability guardrails: read-only daily indicators + warning flags (detect only) */
+    struct {
+        float destitute_pct, poor_pct;   /* % of adults below meal / low-money */
+        float pop_trend;                 /* day-over-day living-population change */
+        float crime_rate, crime_accel;   /* crimes/day and its day-over-day change */
+        float price_trend, money_trend;  /* goods_price / avg-money day-over-day change */
+        unsigned flags;                  /* STAB_* bitmask */
+        int    prev_crimes, prev_alive;  /* trackers (own; separate from crimes_prev_day) */
+        double prev_price, prev_money;
+    } stab;
 
     Economy econ;               /* city-wide markets, wages */
     Science sci;                /* city-wide knowledge & technology */
@@ -463,6 +473,9 @@ const char *jail_gang_name(int g);
 int  combat_attack(World *w, Agent *att, Agent *def, const char *context, double base_injury);
 void warfare_tick(World *w);         /* warring factions' soldiers fight nearby enemies (per tick) */
 void law_daily(World *w);            /* crackdowns when crime surges, on day change */
+/* sim-stability guardrails (detect-only): recompute indicators + flags on day change */
+enum { STAB_DESTITUTE=1, STAB_DEPOP=2, STAB_CRIME_SPIRAL=4, STAB_INFLATION=8, STAB_BUST=16 };
+void stability_daily(World *w);
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 
 /* ── Field of view ─────────────────────────────────────────────────────────── */
