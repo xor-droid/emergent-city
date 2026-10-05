@@ -66,7 +66,9 @@
 #define ARREST_DURATION      600     /* jail sentence base (ticks) */
 #define WANTED_DURATION      2400    /* lie-low window (ticks) */
 #define POLICE_ARREST_RADIUS 2
-#define POLICE_ARREST_CHANCE 0.12
+#define POLICE_ARREST_CHANCE 0.12    /* base tracked-down arrest chance (before funding bonus) */
+#define POLICE_FUND_PER_OFFICER 400.0 /* public police spend that buys one extra officer */
+#define POLICE_STAFF_STEP    1       /* max officers hired per day (gradual ramp) */
 #define WANTED_CRIME_SUPPRESSION 0.25
 
 /* ── Crime roles & the drug trade ────────────────────────────────────────── */
@@ -482,6 +484,7 @@ const char *jail_gang_name(int g);
 int  combat_attack(World *w, Agent *att, Agent *def, const char *context, double base_injury);
 void warfare_tick(World *w);         /* warring factions' soldiers fight nearby enemies (per tick) */
 void law_daily(World *w);            /* crackdowns when crime surges, on day change */
+void police_staffing_daily(World *w);/* hire officers toward a funding-driven force size */
 /* sim-stability guardrails (detect-only): recompute indicators + flags on day change */
 enum { STAB_DESTITUTE=1, STAB_DEPOP=2, STAB_CRIME_SPIRAL=4, STAB_INFLATION=8, STAB_BUST=16 };
 void stability_daily(World *w);

@@ -606,6 +606,26 @@ void assign_crime_roles(World *w) {
             nc,nd,nk,nkill,nu,police);
 }
 
+/* Daily police staffing: the force size tracks a funding-driven target (base plus one
+ * officer per POLICE_FUND_PER_OFFICER of public police spending), hired gradually. Public
+ * police funding (--taxation) literally buys officers; when unfunded it's just the base,
+ * and attrition shrinks the force naturally. Deterministic (no rng, index-ordered). */
+void police_staffing_daily(World *w) {
+    int police = 0;
+    for (int i = 0; i < w->n_agents; i++) if (w->agents[i].alive && w->agents[i].is_police) police++;
+    int base = 3 + w->n_agents / 40;
+    int target = base + (int)(w->police_funding / POLICE_FUND_PER_OFFICER);
+    int cap = w->n_agents / 5; if (target > cap) target = cap;   /* sane ceiling */
+    if (target < base) target = base;
+    if (police >= target) return;
+    int hires = target - police; if (hires > POLICE_STAFF_STEP) hires = POLICE_STAFF_STEP;
+    for (int i = 0; i < w->n_agents && hires > 0; i++) {
+        Agent *a = &w->agents[i];
+        if (!a->alive || a->is_police || a->age < AGE_WORK || a->crime_role != CR_CITIZEN) continue;
+        a->is_police = 1; a->occupation = OCC_OFFICER; hires--;   /* a citizen joins the force */
+    }
+}
+
 /* Enlist members into the seeded factions so gangs/cults are real actors (and can
    wage war). Crime-prone citizens gravitate to gangs; the devout to cults. */
 void factions_populate(World *w) {
@@ -713,7 +733,7 @@ void crime_tick(World *w) {
                 cop = p; break;
             }
         }
-        if (cop && rng_double(&w->rng) < POLICE_ARREST_CHANCE) {
+        if (cop && rng_double(&w->rng) < clampd(POLICE_ARREST_CHANCE + police_pressure(w), 0.0, 0.75)) {
             char kind[16]; strncpy(kind, a->wanted_for[0] ? a->wanted_for : "a crime", 15); kind[15] = '\0';
             try_case(w, a, kind);
             char t[96];
