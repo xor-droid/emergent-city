@@ -69,7 +69,7 @@ static void usage(const char *argv0) {
     printf("  --source-caps [--rent-cap F]  moderate the top's income AT THE SOURCE. v1 caps rent to\n");
     printf("                        F (fraction, default 0.30) of the tenant's daily income — nobody\n");
     printf("                        pays rent they can't afford, which chokes landlord wealth buildup.\n");
-    printf("                        Default off.\n");
+    printf("                        ON by default; --no-source-caps disables.\n");
     printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
     printf("                        floor for the destitute, eased interest when destitution is high,\n");
     printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
