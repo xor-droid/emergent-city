@@ -404,6 +404,7 @@ typedef struct {
     int    crimes_loc_tier[3];  /* count of money crimes in poor/mid/rich NEIGHBOURHOODS (by location affluence) */
     int    n_moves;             /* cumulative household relocations (residential mobility) */
     double tax_collected, welfare_paid;  /* cumulative fiscal (--taxation) */
+    double wealth_tax_collected;         /* cumulative top-tail wealth (stock) tax */
     double police_funding, school_funding;/* this-day public spend (read by police/schooling) */
     double benefits_paid;                /* cumulative safety-net benefit (--stabilizers) */
     float  eff_interest, price_volatility;/* this-day stabilizer readouts */
@@ -491,6 +492,10 @@ void   set_tax_rate(double r);        /* --tax-rate / CSIM_TAX_RATE (fraction of
 double get_tax_rate(void);
 void   set_welfare(double w);         /* --welfare / CSIM_WELFARE (relief generosity scale) */
 double get_welfare(void);
+void   set_wealth_tax_rate(double r);      /* --wealth-tax-rate / CSIM_WEALTH_TAX_RATE (daily levy on stock above threshold) */
+double get_wealth_tax_rate(void);
+void   set_wealth_tax_threshold(double m);  /* --wealth-tax-threshold / CSIM_WEALTH_TAX_THRESHOLD (× median wealth; top-tail cutoff) */
+double get_wealth_tax_threshold(void);
 
 /* ── Economic stabilizers: benefits + interest/price dampers (--stabilizers) ──── */
 void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */

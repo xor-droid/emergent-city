@@ -133,6 +133,8 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "taxation"))        set_taxation(iv);
         else if (!strcmp(key, "tax_rate"))        set_tax_rate(d);
         else if (!strcmp(key, "welfare"))         set_welfare(d);
+        else if (!strcmp(key, "wealth_tax_rate")) set_wealth_tax_rate(d);
+        else if (!strcmp(key, "wealth_tax_threshold")) set_wealth_tax_threshold(d);
         else if (!strcmp(key, "stabilizers"))     set_stabilizers(iv);
         else if (!strcmp(key, "benefit"))         set_benefit(d);
         else if (!strcmp(key, "justice"))         set_justice(iv);
@@ -232,6 +234,8 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_TAXATION"); if (e) set_taxation(atoi(e)); }
     { const char *e = getenv("CSIM_TAX_RATE"); if (e) set_tax_rate(atof(e)); }
     { const char *e = getenv("CSIM_WELFARE"); if (e) set_welfare(atof(e)); }
+    { const char *e = getenv("CSIM_WEALTH_TAX_RATE"); if (e) set_wealth_tax_rate(atof(e)); }
+    { const char *e = getenv("CSIM_WEALTH_TAX_THRESHOLD"); if (e) set_wealth_tax_threshold(atof(e)); }
     { const char *e = getenv("CSIM_STABILIZERS"); if (e) set_stabilizers(atoi(e)); }
     { const char *e = getenv("CSIM_BENEFIT"); if (e) set_benefit(atof(e)); }
     { const char *e = getenv("CSIM_JUSTICE"); if (e) set_justice(atoi(e)); }

@@ -58,6 +58,9 @@ static void usage(const char *argv0) {
     printf("  --taxation [--tax-rate R] [--welfare W]  tax daily income into a public treasury that\n");
     printf("                        funds welfare relief for the destitute, policing, and schools —\n");
     printf("                        a counterweight to inequality. R=0..1 (default .15). Default off.\n");
+    printf("  --wealth-tax-rate R [--wealth-tax-threshold M]  (needs --taxation) a daily levy of R\n");
+    printf("                        (0..1) on money held above M× median wealth (default M=4). Taxes the\n");
+    printf("                        accumulated STOCK, not just income — the lever that holds Gini flat.\n");
     printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
     printf("                        floor for the destitute, eased interest when destitution is high,\n");
     printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
@@ -125,6 +128,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_WEATHER=1  CSIM_WEATHER_PERIOD=D  CSIM_HEAT_COST=F   weather (as --weather).\n");
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_TAXATION=1  CSIM_TAX_RATE=R  CSIM_WELFARE=W   fiscal (as --taxation).\n");
+    printf("    CSIM_WEALTH_TAX_RATE=R  CSIM_WEALTH_TAX_THRESHOLD=M   top-tail wealth (stock) tax.\n");
     printf("    CSIM_STABILIZERS=1  CSIM_BENEFIT=B   economic stabilizers (as --stabilizers).\n");
     printf("    CSIM_JUSTICE=1  CSIM_CORRUPTION=C  CSIM_OVERSIGHT=O   justice checks (as --justice).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
@@ -204,6 +208,7 @@ int main(int argc, char **argv) {
     double biomeweight = -1.0;         /* biome value weight; <0 = unset */
     int taxation = -1;                 /* fiscal; <0 = unset */
     double taxrate = -1.0, welfare = -1.0;
+    double wtaxr = -1.0, wtaxt = -1.0;
     int stabilizers = -1;              /* economic stabilizers; <0 = unset */
     double benefit = -1.0;
     int justice = -1;                  /* justice checks; <0 = unset */
@@ -274,6 +279,10 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[i], "--tax-rate=", 11)) { taxrate = atof(argv[i] + 11); taxation = (taxation<0)?1:taxation; }
         else if (!strcmp(argv[i], "--welfare") && i + 1 < argc) { welfare = atof(argv[++i]); taxation = (taxation<0)?1:taxation; }
         else if (!strncmp(argv[i], "--welfare=", 10)) { welfare = atof(argv[i] + 10); taxation = (taxation<0)?1:taxation; }
+        else if (!strcmp(argv[i], "--wealth-tax-rate") && i + 1 < argc) { wtaxr = atof(argv[++i]); taxation = (taxation<0)?1:taxation; }
+        else if (!strncmp(argv[i], "--wealth-tax-rate=", 18)) { wtaxr = atof(argv[i] + 18); taxation = (taxation<0)?1:taxation; }
+        else if (!strcmp(argv[i], "--wealth-tax-threshold") && i + 1 < argc) { wtaxt = atof(argv[++i]); }
+        else if (!strncmp(argv[i], "--wealth-tax-threshold=", 23)) { wtaxt = atof(argv[i] + 23); }
         else if (!strcmp(argv[i], "--stabilizers")) { stabilizers = 1; }
         else if (!strcmp(argv[i], "--no-stabilizers")) { stabilizers = 0; }
         else if (!strcmp(argv[i], "--benefit") && i + 1 < argc) { benefit = atof(argv[++i]); stabilizers = (stabilizers<0)?1:stabilizers; }
@@ -355,6 +364,10 @@ int main(int argc, char **argv) {
     if (taxrate >= 0) set_tax_rate(taxrate);
     if (welfare < 0) { const char *e = getenv("CSIM_WELFARE"); if (e) welfare = atof(e); }
     if (welfare >= 0) set_welfare(welfare);
+    if (wtaxr < 0) { const char *e = getenv("CSIM_WEALTH_TAX_RATE"); if (e) wtaxr = atof(e); }
+    if (wtaxr >= 0) set_wealth_tax_rate(wtaxr);
+    if (wtaxt < 0) { const char *e = getenv("CSIM_WEALTH_TAX_THRESHOLD"); if (e) wtaxt = atof(e); }
+    if (wtaxt >= 0) set_wealth_tax_threshold(wtaxt);
     if (stabilizers < 0) { const char *e = getenv("CSIM_STABILIZERS"); if (e) stabilizers = atoi(e); }
     if (stabilizers >= 0) set_stabilizers(stabilizers);
     if (benefit < 0) { const char *e = getenv("CSIM_BENEFIT"); if (e) benefit = atof(e); }

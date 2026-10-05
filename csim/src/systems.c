@@ -1035,6 +1035,20 @@ void economy_daily(World *w) {
             w->econ.treasury += tax; w->tax_collected += tax;
         }
 
+        /* ── wealth (stock) tax: a small daily levy on money held above a top-tail
+           cutoff (× median). Income tax only touches the day's flow; the stock is
+           what drives Gini up over the long run, so this bites the richest directly
+           and is self-scaling (hardest exactly when the top tail runs away). ── */
+        if (get_taxation() && get_wealth_tax_rate() > 0.0) {
+            double thresh = get_wealth_tax_threshold() * w->median_wealth;
+            if (a->needs.money > thresh) {
+                double wtax = get_wealth_tax_rate() * (a->needs.money - thresh);
+                if (wtax > a->needs.money) wtax = a->needs.money;
+                a->needs.money -= wtax;
+                w->econ.treasury += wtax; w->wealth_tax_collected += wtax;
+            }
+        }
+
         /* ── rent: a tenant pays their landlord; the rent is transferred, not burned ── */
         if (a->home_id >= 0) {
             Building *hb = &w->buildings[a->home_id];
