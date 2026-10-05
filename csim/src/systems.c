@@ -73,6 +73,23 @@ static void jail(Agent *a, const char *kind) {
     clear_wanted(a);
 }
 
+/* An arrest resolves here. Without --justice it's an instant conviction (legacy). With it,
+ * the accused faces a trial: the wealthy may bribe a corrupt force to walk, otherwise a
+ * conviction roll (skilled/reputable offenders beat the rap more often) decides jail vs
+ * acquittal. Oversight curbs corruption. Returns 1 if jailed. Draws w->rng only with justice. */
+static int try_case(World *w, Agent *a, const char *kind) {
+    if (!get_justice()) { jail(a, kind); return 1; }
+    w->trials++;
+    double corr = get_corruption() * (1.0 - get_oversight());
+    if (a->needs.money > 300.0 && rng_double(&w->rng) < corr * 0.5) {   /* bribe a corrupt cop */
+        double bribe = a->needs.money * 0.2; a->needs.money -= bribe; w->bribes_paid += bribe;
+        w->acquittals++; clear_wanted(a); return 0;
+    }
+    double pconv = clampd(0.75 - a->crime_skill*0.3 - a->reputation*0.1 + get_oversight()*0.1, 0.2, 0.95);
+    if (rng_double(&w->rng) < pconv) { jail(a, kind); w->convictions++; return 1; }
+    w->acquittals++; clear_wanted(a); return 0;   /* acquitted — walks free */
+}
+
 /* extra police effectiveness while a crackdown is in force (law responding to disorder) */
 double police_pressure(const World *w) {
     double fund = w->police_funding / 400.0; if (fund > 0.15) fund = 0.15;  /* public police budget */
@@ -249,7 +266,7 @@ static void do_deal(World *w, Agent *d) {
     if (!cust) return;
     int civ, pol; witnesses_at(w, d, crime_loudness(d, "dealing"), &civ, &pol);
     if (pol && rng_double(&w->rng) < 0.5 - d->crime_skill * 0.3 + police_pressure(w)) {
-        jail(d, "dealing");
+        try_case(w, d, "dealing");
         char t[96]; snprintf(t, sizeof(t), "%s was busted dealing", d->name);
         events_post(w, EV_ARREST, d->id, cust->id, (int)d->x, (int)d->y, 0.8, t);
         return;
@@ -276,7 +293,7 @@ static void do_traffic(World *w, Agent *p) {
         if (p->drug_stock >= DRUG_BATCH) return;   /* only import when the stash runs low */
         int civ, pol; witnesses_at(w, p, crime_loudness(p, "trafficking"), &civ, &pol); (void)civ;
         if (pol && rng_double(&w->rng) < 0.35 - p->crime_skill * 0.25 + police_pressure(w)) {
-            jail(p, "trafficking");
+            try_case(w, p, "trafficking");
             snprintf(t, sizeof(t), "%s was caught trafficking a shipment", p->name);
             events_post(w, EV_ARREST, p->id, -1, (int)p->x, (int)p->y, 0.9, t);
             return;
@@ -304,7 +321,7 @@ static void do_murder(World *w, Agent *k, Agent *victim) {
     double chance = clampd(0.6 + k->crime_skill * 0.3 - civ * 0.15 - (pol ? 0.5 + police_pressure(w) : 0), 0.03, 0.97);
     char t[96];
     if (pol && rng_double(&w->rng) > chance) {
-        jail(k, "murder");
+        try_case(w, k, "murder");
         snprintf(t, sizeof(t), "%s was caught attempting murder and arrested", k->name);
         events_post(w, EV_ARREST, k->id, victim->id, (int)k->x, (int)k->y, 1.0, t);
         return;
@@ -529,7 +546,7 @@ void crime_attempt(World *w, Agent *perp, Agent *target, const char *kind) {
         if (civ) mark_wanted(w, perp, kind);
     } else if (pol) {
         perp->needs.safety = clampd(perp->needs.safety - 0.3, 0, 1);
-        jail(perp, kind);
+        try_case(w, perp, kind);
         snprintf(t, sizeof(t), "%s was caught and arrested for %s%s", perp->name, kind, vs);
         events_post(w, EV_ARREST, perp->id, target ? target->id : -1, x, y, importance + 0.15, t);
     } else {
@@ -696,7 +713,7 @@ void crime_tick(World *w) {
         }
         if (cop && rng_double(&w->rng) < POLICE_ARREST_CHANCE) {
             char kind[16]; strncpy(kind, a->wanted_for[0] ? a->wanted_for : "a crime", 15); kind[15] = '\0';
-            jail(a, kind);
+            try_case(w, a, kind);
             char t[96];
             snprintf(t, sizeof(t), "%s was tracked down and arrested by %s (wanted for %s)",
                      a->name, cop->name, kind);
@@ -872,6 +889,28 @@ void law_daily(World *w) {
         char t[96]; snprintf(t, sizeof(t), "Police declare a crackdown after %d crimes in a day", today);
         events_post(w, EV_ARREST, -1, -1, WORLD_W/2, WORLD_H/2, 0.7, t);
         fprintf(stderr, "[law] day %d: crackdown (%d crimes)\n", w->day, today);
+    }
+
+    /* ── wrongful arrests: with justice on, a flawed force sometimes hauls in an innocent;
+       oversight makes it rarer and convictions of the innocent less likely ── */
+    if (get_justice() && w->n_agents > 0) {
+        double fp = 0.15 * (1.0 - get_oversight());
+        if (rng_double(&w->rng) < fp) {
+            int start = rng_int(&w->rng, w->n_agents);
+            for (int k = 0; k < w->n_agents; k++) {
+                Agent *a = &w->agents[(start + k) % w->n_agents];
+                if (!a->alive || a->age < AGE_WORK || a->arrested_ticks > 0 || a->wanted) continue;
+                if (a->crime_role != CR_CITIZEN) continue;          /* a truly innocent civilian */
+                w->trials++;
+                double pconv = clampd(0.5 - get_oversight() * 0.3, 0.1, 0.8);
+                if (rng_double(&w->rng) < pconv) {
+                    jail(a, "wrongful"); w->convictions++; w->wrongful_convictions++;
+                    char t[96]; snprintf(t, sizeof t, "%s was wrongfully convicted", a->name);
+                    events_post(w, EV_ARREST, a->id, -1, (int)a->x, (int)a->y, 0.55, t);
+                } else w->acquittals++;
+                break;
+            }
+        }
     }
 }
 

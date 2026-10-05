@@ -52,6 +52,9 @@ static double gf_taxr(void){return get_tax_rate();}               static void sf
 static double gf_welf(void){return get_welfare();}                static void sf_welf(double v){set_welfare(v);}
 static double gf_stab(void){return get_stabilizers();}            static void sf_stab(double v){set_stabilizers((int)v);}
 static double gf_benefit(void){return get_benefit();}             static void sf_benefit(double v){set_benefit(v);}
+static double gf_just(void){return get_justice();}                static void sf_just(double v){set_justice((int)v);}
+static double gf_corr(void){return get_corruption();}             static void sf_corr(double v){set_corruption(v);}
+static double gf_overs(void){return get_oversight();}             static void sf_overs(double v){set_oversight(v);}
 
 static const Knob KNOBS[] = {
     {"years_per_day",gf_ypd,sf_ypd}, {"family_share",gf_fshare,sf_fshare},
@@ -67,6 +70,7 @@ static const Knob KNOBS[] = {
     {"biomes",gf_biomes,sf_biomes}, {"biome_value_weight",gf_bweight,sf_bweight},
     {"taxation",gf_tax,sf_tax}, {"tax_rate",gf_taxr,sf_taxr}, {"welfare",gf_welf,sf_welf},
     {"stabilizers",gf_stab,sf_stab}, {"benefit",gf_benefit,sf_benefit},
+    {"justice",gf_just,sf_just}, {"corruption",gf_corr,sf_corr}, {"oversight",gf_overs,sf_overs},
 };
 static const int N_KNOBS = (int)(sizeof(KNOBS)/sizeof(KNOBS[0]));
 static int knob_index(const char *name) {

@@ -407,6 +407,8 @@ typedef struct {
     double police_funding, school_funding;/* this-day public spend (read by police/schooling) */
     double benefits_paid;                /* cumulative safety-net benefit (--stabilizers) */
     float  eff_interest, price_volatility;/* this-day stabilizer readouts */
+    int    trials, convictions, acquittals, wrongful_convictions;  /* justice (--justice) */
+    double bribes_paid;                  /* cumulative bribes that bought escapes */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
     /* sim-stability guardrails: read-only daily indicators + warning flags (detect only) */
@@ -495,6 +497,14 @@ void   set_stabilizers(int on);       /* --stabilizers / CSIM_STABILIZERS */
 int    get_stabilizers(void);
 void   set_benefit(double b);         /* --benefit / CSIM_BENEFIT (safety-net generosity scale) */
 double get_benefit(void);
+
+/* ── Justice: courts/trials, wrongful arrests, corruption + oversight (--justice) ─ */
+void   set_justice(int on);           /* --justice / CSIM_JUSTICE */
+int    get_justice(void);
+void   set_corruption(double c);      /* --corruption / CSIM_CORRUPTION (0..1) */
+double get_corruption(void);
+void   set_oversight(double o);       /* --oversight / CSIM_OVERSIGHT (0..1) */
+double get_oversight(void);
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 
 /* ── Field of view ─────────────────────────────────────────────────────────── */

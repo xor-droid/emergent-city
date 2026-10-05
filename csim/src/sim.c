@@ -241,6 +241,16 @@ int    get_stabilizers(void) { return g_stabilizers; }
 void   set_benefit(double b) { if (b >= 0.0) g_benefit = b; }
 double get_benefit(void) { return g_benefit; }
 
+static int    g_justice = 0;         /* courts/trials, corruption, oversight */
+static double g_corruption = 0.3;    /* 0..1 baseline police corruption */
+static double g_oversight = 0.3;     /* 0..1 oversight that curbs corruption + wrongful convictions */
+void   set_justice(int on) { g_justice = on ? 1 : 0; }
+int    get_justice(void) { return g_justice; }
+void   set_corruption(double c) { if (c >= 0.0 && c <= 1.0) g_corruption = c; }
+double get_corruption(void) { return g_corruption; }
+void   set_oversight(double o) { if (o >= 0.0 && o <= 1.0) g_oversight = o; }
+double get_oversight(void) { return g_oversight; }
+
 /* perception multipliers: fog blinds, rain muffles. 1.0 = clear. Only meaningful when
  * weather is on (callers gate on get_weather via these returning 1.0 otherwise). */
 double weather_vision_mult(const World *w) {

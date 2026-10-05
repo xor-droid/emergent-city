@@ -61,6 +61,9 @@ static void usage(const char *argv0) {
     printf("  --stabilizers [--benefit B]  counter-cyclical shock absorbers: a safety-net benefit\n");
     printf("                        floor for the destitute, eased interest when destitution is high,\n");
     printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
+    printf("  --justice [--corruption C] [--oversight O]  arrests go through trials (convict/acquit),\n");
+    printf("                        the wealthy can bribe a corrupt force, innocents are sometimes\n");
+    printf("                        wrongfully convicted; oversight (0..1) curbs it. Default off.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -123,6 +126,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
     printf("    CSIM_TAXATION=1  CSIM_TAX_RATE=R  CSIM_WELFARE=W   fiscal (as --taxation).\n");
     printf("    CSIM_STABILIZERS=1  CSIM_BENEFIT=B   economic stabilizers (as --stabilizers).\n");
+    printf("    CSIM_JUSTICE=1  CSIM_CORRUPTION=C  CSIM_OVERSIGHT=O   justice checks (as --justice).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=0   legacy sine/gradient worldgen (noise is the default now).\n");
@@ -202,6 +206,8 @@ int main(int argc, char **argv) {
     double taxrate = -1.0, welfare = -1.0;
     int stabilizers = -1;              /* economic stabilizers; <0 = unset */
     double benefit = -1.0;
+    int justice = -1;                  /* justice checks; <0 = unset */
+    double corruption = -1.0, oversight = -1.0;
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -272,6 +278,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-stabilizers")) { stabilizers = 0; }
         else if (!strcmp(argv[i], "--benefit") && i + 1 < argc) { benefit = atof(argv[++i]); stabilizers = (stabilizers<0)?1:stabilizers; }
         else if (!strncmp(argv[i], "--benefit=", 10)) { benefit = atof(argv[i] + 10); stabilizers = (stabilizers<0)?1:stabilizers; }
+        else if (!strcmp(argv[i], "--justice")) { justice = 1; }
+        else if (!strcmp(argv[i], "--no-justice")) { justice = 0; }
+        else if (!strcmp(argv[i], "--corruption") && i + 1 < argc) { corruption = atof(argv[++i]); justice = (justice<0)?1:justice; }
+        else if (!strncmp(argv[i], "--corruption=", 13)) { corruption = atof(argv[i] + 13); justice = (justice<0)?1:justice; }
+        else if (!strcmp(argv[i], "--oversight") && i + 1 < argc) { oversight = atof(argv[++i]); justice = (justice<0)?1:justice; }
+        else if (!strncmp(argv[i], "--oversight=", 12)) { oversight = atof(argv[i] + 12); justice = (justice<0)?1:justice; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -347,6 +359,12 @@ int main(int argc, char **argv) {
     if (stabilizers >= 0) set_stabilizers(stabilizers);
     if (benefit < 0) { const char *e = getenv("CSIM_BENEFIT"); if (e) benefit = atof(e); }
     if (benefit >= 0) set_benefit(benefit);
+    if (justice < 0) { const char *e = getenv("CSIM_JUSTICE"); if (e) justice = atoi(e); }
+    if (justice >= 0) set_justice(justice);
+    if (corruption < 0) { const char *e = getenv("CSIM_CORRUPTION"); if (e) corruption = atof(e); }
+    if (corruption >= 0) set_corruption(corruption);
+    if (oversight < 0) { const char *e = getenv("CSIM_OVERSIGHT"); if (e) oversight = atof(e); }
+    if (oversight >= 0) set_oversight(oversight);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

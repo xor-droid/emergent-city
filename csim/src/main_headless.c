@@ -135,6 +135,9 @@ static int load_manifest(const char *path, long *seed, int *days) {
         else if (!strcmp(key, "welfare"))         set_welfare(d);
         else if (!strcmp(key, "stabilizers"))     set_stabilizers(iv);
         else if (!strcmp(key, "benefit"))         set_benefit(d);
+        else if (!strcmp(key, "justice"))         set_justice(iv);
+        else if (!strcmp(key, "corruption"))      set_corruption(d);
+        else if (!strcmp(key, "oversight"))       set_oversight(d);
         else if (!strcmp(key, "vision"))          set_vision(iv);
         else if (!strcmp(key, "vision_radius"))   set_vision_radius(iv);
         else if (!strcmp(key, "hearing"))         set_hearing(iv);
@@ -231,6 +234,9 @@ int main(int argc, char **argv) {
     { const char *e = getenv("CSIM_WELFARE"); if (e) set_welfare(atof(e)); }
     { const char *e = getenv("CSIM_STABILIZERS"); if (e) set_stabilizers(atoi(e)); }
     { const char *e = getenv("CSIM_BENEFIT"); if (e) set_benefit(atof(e)); }
+    { const char *e = getenv("CSIM_JUSTICE"); if (e) set_justice(atoi(e)); }
+    { const char *e = getenv("CSIM_CORRUPTION"); if (e) set_corruption(atof(e)); }
+    { const char *e = getenv("CSIM_OVERSIGHT"); if (e) set_oversight(atof(e)); }
 
     if (rerun_in) {
         long mseed = -1; int mdays = -1;
