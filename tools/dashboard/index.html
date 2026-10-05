@@ -113,6 +113,10 @@ const CHARTS = [
   {title:"Population by life stage", s:[
     {col:"alive",color:C.blue},{col:"children",color:C.lime},{col:"youths",color:C.teal},
     {col:"adults",color:C.amber},{col:"elders",color:C.slate}]},
+  {title:"Life stage vs deaths/day", s:[
+    {col:"children",color:C.lime},{col:"youths",color:C.teal},
+    {col:"adults",color:C.amber},{col:"elders",color:C.slate},
+    {col:"deaths",label:"deaths/day",color:C.red,delta:true,axis:"y1"}]},
   {title:"Average age (years)", s:[{col:"avg_age",label:"avg age",color:C.gold}]},
   {title:"Vital events per day", s:[
     {col:"born_alive",label:"births/day",color:C.green,delta:true},
