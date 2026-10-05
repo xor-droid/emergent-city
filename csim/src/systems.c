@@ -75,8 +75,10 @@ static void jail(Agent *a, const char *kind) {
 
 /* extra police effectiveness while a crackdown is in force (law responding to disorder) */
 double police_pressure(const World *w) {
+    double fund = w->police_funding / 400.0; if (fund > 0.15) fund = 0.15;  /* public police budget */
     return (w->crackdown_days > 0 ? CRACKDOWN_BONUS : 0.0)
-         + 0.1 * w->sci.adoption[TECH_CIVICS];   /* Civics (tech) = better law enforcement */
+         + 0.1 * w->sci.adoption[TECH_CIVICS]   /* Civics (tech) = better law enforcement */
+         + fund;
 }
 
 /* Bresenham line of sight; buildings between the two points block it. */
@@ -986,6 +988,14 @@ void economy_daily(World *w) {
         if (!a->alive) continue;
         alive++;
 
+        /* ── income tax: a cut of the day's earnings goes to the public treasury ── */
+        if (get_taxation() && a->age >= AGE_WORK && a->day_income > 0.0) {
+            double tax = get_tax_rate() * a->day_income;
+            if (tax > a->needs.money) tax = a->needs.money;
+            a->needs.money -= tax; a->day_income -= tax;
+            w->econ.treasury += tax; w->tax_collected += tax;
+        }
+
         /* ── rent: a tenant pays their landlord; the rent is transferred, not burned ── */
         if (a->home_id >= 0) {
             Building *hb = &w->buildings[a->home_id];
@@ -1067,6 +1077,27 @@ void economy_daily(World *w) {
         } else if (a->needs.money >= LOW_MONEY) {
             a->broke_flagged = 0;
         }
+    }
+
+    /* ── public spending: the treasury funds welfare relief, policing and schools.
+       Welfare tops the destitute toward subsistence; police/school budgets are read by
+       police_pressure() and culture_daily(). Capped by the balance (no deficit). ── */
+    w->police_funding = 0; w->school_funding = 0;
+    if (get_taxation() && w->econ.treasury > 0.0) {
+        /* welfare: lift destitute adults toward a subsistence floor */
+        double floor = MEAL_PRICE * 3.0 * get_welfare();
+        for (int i = 0; i < w->n_agents && w->econ.treasury > 0.0; i++) {
+            Agent *a = &w->agents[i];
+            if (!a->alive || a->age < AGE_WORK || a->needs.money >= floor) continue;
+            double relief = floor - a->needs.money;
+            if (relief > w->econ.treasury) relief = w->econ.treasury;
+            a->needs.money += relief; a->day_income += relief;
+            w->econ.treasury -= relief; w->welfare_paid += relief;
+        }
+        /* police + schools: spend a slice of the remaining balance this day */
+        double pf = w->econ.treasury * 0.15, sf = w->econ.treasury * 0.15;
+        w->econ.treasury -= pf + sf;
+        w->police_funding = pf; w->school_funding = sf;
     }
 
     /* ── child-rearing: dependent children cost their parents daily upkeep, which is

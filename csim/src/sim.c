@@ -224,6 +224,16 @@ const char *biome_name(int b) {
                  case B_WATERFRONT: return "waterfront"; case B_PARKLAND: return "parkland"; default: return "plain"; }
 }
 
+static int    g_taxation = 0;        /* fiscal: tax + public spending */
+static double g_tax_rate = 0.15;     /* fraction of daily income taxed */
+static double g_welfare  = 1.0;      /* relief generosity scale */
+void   set_taxation(int on) { g_taxation = on ? 1 : 0; }
+int    get_taxation(void) { return g_taxation; }
+void   set_tax_rate(double r) { if (r >= 0.0 && r <= 1.0) g_tax_rate = r; }
+double get_tax_rate(void) { return g_tax_rate; }
+void   set_welfare(double w) { if (w >= 0.0) g_welfare = w; }
+double get_welfare(void) { return g_welfare; }
+
 /* perception multipliers: fog blinds, rain muffles. 1.0 = clear. Only meaningful when
  * weather is on (callers gate on get_weather via these returning 1.0 otherwise). */
 double weather_vision_mult(const World *w) {

@@ -728,9 +728,11 @@ void culture_daily(World *w) {
         if (!a->alive) continue;
 
         /* schooling: the young grow literate (per childhood-year, so the pace is
-           independent of years-per-day; faster where there's writing) */
+           independent of years-per-day; faster where there's writing, and where public
+           school funding is flowing) */
+        double school = 1.0 + writing + (w->school_funding > 0 ? 0.5 : 0.0);  /* funded schools teach faster */
         if (a->age < EDU_ADULT_AGE && a->education < 1.0f)
-            a->education = (float)clampd(a->education + EDU_PER_YEAR * get_years_per_day() * (1.0 + writing), 0, 1);
+            a->education = (float)clampd(a->education + EDU_PER_YEAR * get_years_per_day() * school, 0, 1);
         /* apprenticeship: adults learn on the job toward the city's educated norm */
         else if (a->age >= EDU_ADULT_AGE && a->education < avgedu)
             a->education = (float)clampd(a->education + 0.03 * (avgedu - a->education) * a->intellect * (0.6 + writing), 0, 1);
@@ -1413,6 +1415,7 @@ void metrics_open(const char *path) {
     fprintf(g_metrics, ",loot_poor,loot_mid,loot_rich,moves,segregation,cr_poor,cr_mid,cr_rich");
     fprintf(g_metrics, ",loc_poor,loc_mid,loc_rich,temp,rain,fog");
     fprintf(g_metrics, ",destitute_pct,poor_pct,pop_trend,crime_rate,crime_accel,price_trend,money_trend,stab_flags");
+    fprintf(g_metrics, ",treasury,tax_collected,welfare_paid,police_funding,school_funding");
     for (int i = 0; i < 5; i++) fprintf(g_metrics, ",class%d", i);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1503,6 +1506,8 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%.1f,%.1f,%.1f,%.1f,%.1f,%.3f,%.1f,%u",
             w->stab.destitute_pct, w->stab.poor_pct, w->stab.pop_trend, w->stab.crime_rate,
             w->stab.crime_accel, w->stab.price_trend, w->stab.money_trend, w->stab.flags);
+    fprintf(g_metrics, ",%.0f,%.0f,%.0f,%.0f,%.0f", w->econ.treasury, w->tax_collected,
+            w->welfare_paid, w->police_funding, w->school_funding);
     for (int i=0;i<5;i++) fprintf(g_metrics, ",%d", cls[i]);
     fprintf(g_metrics, "\n");
     fflush(g_metrics);
@@ -1564,6 +1569,9 @@ void metrics_write_manifest(const char *csv_path, unsigned int seed, int days) {
     fprintf(f, "heat_cost=%g\n", get_heat_cost());
     fprintf(f, "biomes=%d\n", get_biomes());
     fprintf(f, "biome_value_weight=%g\n", get_biome_value_weight());
+    fprintf(f, "taxation=%d\n", get_taxation());
+    fprintf(f, "tax_rate=%g\n", get_tax_rate());
+    fprintf(f, "welfare=%g\n", get_welfare());
     fprintf(f, "vision=%d\n", get_vision());
     fprintf(f, "vision_radius=%d\n", get_vision_radius());
     fprintf(f, "hearing=%d\n", get_hearing());

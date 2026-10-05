@@ -330,10 +330,11 @@ typedef struct {
     float  value;           /* 0..1 home desirability (centrality/parks − crime); homes only */
 } Building;
 
-/* City-wide economy: markets, prevailing wages. */
+/* City-wide economy: markets, prevailing wages, public treasury. */
 typedef struct {
     double goods_price;     /* luxury/drink price multiplier */
     double wage_mult;       /* prevailing wage multiplier */
+    double treasury;        /* public funds from taxation (--taxation) */
 } Economy;
 
 /* City-wide knowledge & technology: research accrues from educated scholars into
@@ -402,6 +403,8 @@ typedef struct {
     int    crimes_tier[3];      /* count of money crimes against poor/mid/rich targets (by victim wealth) */
     int    crimes_loc_tier[3];  /* count of money crimes in poor/mid/rich NEIGHBOURHOODS (by location affluence) */
     int    n_moves;             /* cumulative household relocations (residential mobility) */
+    double tax_collected, welfare_paid;  /* cumulative fiscal (--taxation) */
+    double police_funding, school_funding;/* this-day public spend (read by police/schooling) */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */
     /* sim-stability guardrails: read-only daily indicators + warning flags (detect only) */
@@ -476,6 +479,14 @@ void law_daily(World *w);            /* crackdowns when crime surges, on day cha
 /* sim-stability guardrails (detect-only): recompute indicators + flags on day change */
 enum { STAB_DESTITUTE=1, STAB_DEPOP=2, STAB_CRIME_SPIRAL=4, STAB_INFLATION=8, STAB_BUST=16 };
 void stability_daily(World *w);
+
+/* ── Fiscal: taxation + public spending (--taxation) ────────────────────────── */
+void   set_taxation(int on);          /* --taxation / CSIM_TAXATION */
+int    get_taxation(void);
+void   set_tax_rate(double r);        /* --tax-rate / CSIM_TAX_RATE (fraction of daily income) */
+double get_tax_rate(void);
+void   set_welfare(double w);         /* --welfare / CSIM_WELFARE (relief generosity scale) */
+double get_welfare(void);
 double police_pressure(const World *w);  /* extra police catch chance (0, or CRACKDOWN_BONUS) */
 
 /* ── Field of view ─────────────────────────────────────────────────────────── */

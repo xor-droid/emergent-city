@@ -55,6 +55,9 @@ static void usage(const char *argv0) {
     printf("                        with --neighborhoods (value) + --noise-worldgen (organic terrain).\n");
     printf("                        BIOMES map overlay (O). Startup-only; default off.\n");
     printf("  --biome-value-weight W  how strongly terrain shapes value (default 1; live in T-panel).\n");
+    printf("  --taxation [--tax-rate R] [--welfare W]  tax daily income into a public treasury that\n");
+    printf("                        funds welfare relief for the destitute, policing, and schools —\n");
+    printf("                        a counterweight to inequality. R=0..1 (default .15). Default off.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");
@@ -115,6 +118,7 @@ static void usage(const char *argv0) {
     printf("    CSIM_POLICE_BIAS=MODE crime|money|balanced patrol bias (same as --police-bias).\n");
     printf("    CSIM_WEATHER=1  CSIM_WEATHER_PERIOD=D  CSIM_HEAT_COST=F   weather (as --weather).\n");
     printf("    CSIM_BIOMES=1  CSIM_BIOME_VALUE_WEIGHT=W   terrain biomes (as --biomes).\n");
+    printf("    CSIM_TAXATION=1  CSIM_TAX_RATE=R  CSIM_WELFARE=W   fiscal (as --taxation).\n");
     printf("    CSIM_VISION=1  CSIM_VISION_RADIUS=N   field-of-view perception (as --vision).\n");
     printf("    CSIM_HEARING=1  CSIM_HEARING_RADIUS=N  auditory perception (as --hearing).\n");
     printf("    CSIM_NOISE_WORLDGEN=0   legacy sine/gradient worldgen (noise is the default now).\n");
@@ -190,6 +194,8 @@ int main(int argc, char **argv) {
     double heatcost = -1.0;            /* heating-cost scale; <0 = unset */
     int biomes = -1;                   /* terrain biomes; <0 = unset */
     double biomeweight = -1.0;         /* biome value weight; <0 = unset */
+    int taxation = -1;                 /* fiscal; <0 = unset */
+    double taxrate = -1.0, welfare = -1.0;
     long seed = -1;                    /* worldgen seed; <0 = unset (default 1337) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
@@ -250,6 +256,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-biomes")) { biomes = 0; }
         else if (!strcmp(argv[i], "--biome-value-weight") && i + 1 < argc) { biomeweight = atof(argv[++i]); biomes = (biomes<0)?1:biomes; }
         else if (!strncmp(argv[i], "--biome-value-weight=", 21)) { biomeweight = atof(argv[i] + 21); biomes = (biomes<0)?1:biomes; }
+        else if (!strcmp(argv[i], "--taxation")) { taxation = 1; }
+        else if (!strcmp(argv[i], "--no-taxation")) { taxation = 0; }
+        else if (!strcmp(argv[i], "--tax-rate") && i + 1 < argc) { taxrate = atof(argv[++i]); taxation = (taxation<0)?1:taxation; }
+        else if (!strncmp(argv[i], "--tax-rate=", 11)) { taxrate = atof(argv[i] + 11); taxation = (taxation<0)?1:taxation; }
+        else if (!strcmp(argv[i], "--welfare") && i + 1 < argc) { welfare = atof(argv[++i]); taxation = (taxation<0)?1:taxation; }
+        else if (!strncmp(argv[i], "--welfare=", 10)) { welfare = atof(argv[i] + 10); taxation = (taxation<0)?1:taxation; }
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) { seed = atol(argv[++i]); }
         else if (!strncmp(argv[i], "--seed=", 7)) { seed = atol(argv[i] + 7); }
         else if ((!strcmp(argv[i], "--backend") || !strcmp(argv[i], "-b")) && i + 1 < argc) {
@@ -315,6 +327,12 @@ int main(int argc, char **argv) {
     if (biomes >= 0) set_biomes(biomes);         /* must precede world_init */
     if (biomeweight < 0) { const char *e = getenv("CSIM_BIOME_VALUE_WEIGHT"); if (e) biomeweight = atof(e); }
     if (biomeweight >= 0) set_biome_value_weight(biomeweight);
+    if (taxation < 0) { const char *e = getenv("CSIM_TAXATION"); if (e) taxation = atoi(e); }
+    if (taxation >= 0) set_taxation(taxation);
+    if (taxrate < 0) { const char *e = getenv("CSIM_TAX_RATE"); if (e) taxrate = atof(e); }
+    if (taxrate >= 0) set_tax_rate(taxrate);
+    if (welfare < 0) { const char *e = getenv("CSIM_WELFARE"); if (e) welfare = atof(e); }
+    if (welfare >= 0) set_welfare(welfare);
     if (seed < 0) { const char *e = getenv("CSIM_SEED"); if (e) seed = atol(e); }
     if (seed < 0) seed = 1337;
 

@@ -47,6 +47,9 @@ static double gf_wperiod(void){return get_weather_period();}      static void sf
 static double gf_heatc(void){return get_heat_cost();}             static void sf_heatc(double v){set_heat_cost(v);}
 static double gf_biomes(void){return get_biomes();}               static void sf_biomes(double v){set_biomes((int)v);}
 static double gf_bweight(void){return get_biome_value_weight();}  static void sf_bweight(double v){set_biome_value_weight(v);}
+static double gf_tax(void){return get_taxation();}                static void sf_tax(double v){set_taxation((int)v);}
+static double gf_taxr(void){return get_tax_rate();}               static void sf_taxr(double v){set_tax_rate(v);}
+static double gf_welf(void){return get_welfare();}                static void sf_welf(double v){set_welfare(v);}
 
 static const Knob KNOBS[] = {
     {"years_per_day",gf_ypd,sf_ypd}, {"family_share",gf_fshare,sf_fshare},
@@ -60,6 +63,7 @@ static const Knob KNOBS[] = {
     {"fixed_step",gf_fstep,sf_fstep}, {"fixed_dt",gf_fdt,sf_fdt},
     {"weather",gf_weather,sf_weather}, {"weather_period",gf_wperiod,sf_wperiod}, {"heat_cost",gf_heatc,sf_heatc},
     {"biomes",gf_biomes,sf_biomes}, {"biome_value_weight",gf_bweight,sf_bweight},
+    {"taxation",gf_tax,sf_tax}, {"tax_rate",gf_taxr,sf_taxr}, {"welfare",gf_welf,sf_welf},
 };
 static const int N_KNOBS = (int)(sizeof(KNOBS)/sizeof(KNOBS[0]));
 static int knob_index(const char *name) {
