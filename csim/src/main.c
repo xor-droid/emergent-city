@@ -41,7 +41,7 @@ static void usage(const char *argv0) {
     printf("                        map overlay (O). Default off = random residency.\n");
     printf("  --crime-wealth        loot scales with the target's wealth (rob a mansion for a\n");
     printf("                        real score, a tenement for pennies) and offenders pick\n");
-    printf("                        targets by expected value. Default off = flat loot.\n");
+    printf("                        targets by expected value. ON by default; --no-crime-wealth = flat loot.\n");
     printf("  --police-bias MODE    where police concentrate: crime (default, toward crime heat),\n");
     printf("                        money (protect wealthy blocks; crime displaces to poor areas),\n");
     printf("                        or balanced. With --neighborhoods, two very different cities.\n");

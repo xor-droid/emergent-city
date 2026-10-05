@@ -759,6 +759,39 @@ void culture_daily(World *w) {
 
 /* Old-age mortality (on day change): death risk climbs from AGE_MORTALITY, is
    near-certain by AGE_MAXLIFE. Scaled so most die in their 70s-80s. */
+/* On death, pass rental property to an heir — a living child, else the (living)
+ * spouse, else the wealthiest living adult (a rich agent snaps up the estate).
+ * This keeps property with a LIVING owner across generations, so the landlord
+ * class persists instead of draining to zero, and closes the rent-into-the-void
+ * leak (a dead owner never collects). Property stays concentrated in the wealthy
+ * when there's no family heir — which the wealth tax then counterweights. Called
+ * before the spouse link is cleared, so the spouse is still reachable as an heir. */
+static void transfer_estate(World *w, Agent *dead) {
+    if (count_properties(w, dead->id) == 0) return;   /* not a landlord */
+    int heir = -1;
+    for (int i = 0; i < w->n_agents; i++) {           /* prefer a living child */
+        Agent *c = &w->agents[i];
+        if (c->alive && c->id != dead->id &&
+            (c->mother_id == dead->id || c->father_id == dead->id)) { heir = c->id; break; }
+    }
+    if (heir < 0 && dead->spouse_id >= 0) {           /* else the spouse */
+        Agent *sp = world_agent_by_id(w, dead->spouse_id);
+        if (sp && sp->alive) heir = sp->id;
+    }
+    if (heir < 0) {                                   /* else the wealthiest living adult */
+        double best = -1.0;
+        for (int i = 0; i < w->n_agents; i++) {
+            Agent *a = &w->agents[i];
+            if (a->alive && a->id != dead->id && a->age >= AGE_WORK && a->needs.money > best) {
+                best = a->needs.money; heir = a->id;
+            }
+        }
+    }
+    for (int b = 0; b < w->n_buildings; b++)
+        if (w->buildings[b].type == T_HOME && w->buildings[b].owner_id == dead->id)
+            w->buildings[b].owner_id = heir;          /* a living owner (or -1 only if none) */
+}
+
 void lifecycle_daily(World *w) {
     double ypd = get_years_per_day();
     for (int i = 0; i < w->n_agents; i++) {
@@ -771,6 +804,7 @@ void lifecycle_daily(World *w) {
         if (p_day > 0.9) p_day = 0.9;
         if (a->age >= AGE_MAXLIFE || rng_double(&w->rng) < p_day) {
             a->alive = 0; w->deaths++;
+            transfer_estate(w, a);   /* pass rental property to an heir (or release it) */
             if (a->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, a->spouse_id);
                 if (sp) sp->spouse_id = -1; a->spouse_id = -1; a->pregnant_ticks = 0; }
             char t[96]; snprintf(t, sizeof(t), "%.30s died of old age (%d)", a->name, a->age);
@@ -1167,6 +1201,7 @@ void world_tick(World *w, double dt_seconds) {
 
         if (needs_is_dying(&a->needs)) {
             a->alive = 0; w->deaths++;
+            transfer_estate(w, a);   /* pass rental property to an heir (or release it) */
             if (a->spouse_id >= 0) { Agent *sp = world_agent_by_id(w, a->spouse_id);
                 if (sp) sp->spouse_id = -1; a->spouse_id = -1; a->pregnant_ticks = 0; }
             char t[96];
