@@ -152,9 +152,12 @@ const CHARTS = [
     {col:"class0",label:"destitute",color:C.red},{col:"class1",label:"struggling",color:C.orange},
     {col:"class2",label:"citizen",color:C.slate},{col:"class3",label:"comfortable",color:C.teal},
     {col:"class4",label:"elite",color:C.gold}]},
-  {title:"Crime totals", s:[
+  {title:"Crime totals (cumulative) + current wanted/jailed", s:[
     {col:"crimes",label:"crimes (cum)",color:C.red},
-    {col:"wanted",color:C.amber},{col:"jailed",color:C.blue}]},
+    {col:"arrests_total",label:"arrests (cum)",color:C.amber},
+    {col:"jailed_total",label:"jailed (cum)",color:C.blue},
+    {col:"wanted",label:"wanted (current)",color:C.pink,axis:"y1"},
+    {col:"jailed",label:"in jail (current)",color:C.teal,axis:"y1"}]},
   {title:"Crime by kind (cumulative)", s:[
     {col:"crime_theft",label:"theft",color:C.slate},{col:"crime_burglary",label:"burglary",color:C.teal},
     {col:"crime_robbery",label:"robbery",color:C.amber},{col:"crime_extortion",label:"extortion",color:C.gold},

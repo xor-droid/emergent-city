@@ -63,7 +63,7 @@ double crime_cooldown_frac(const Agent *a) {
     double full = WANTED_DURATION * crime_severity(a->wanted_for[0] ? a->wanted_for : "theft");
     return full > 0 ? (double)a->wanted_ticks / full : 0;
 }
-static void jail(Agent *a, const char *kind) {
+static void jail(World *w, Agent *a, const char *kind) {
     /* sentencing tiers: base scales with the offence; repeat offenders serve longer
        (habitual-offender law), capped at roughly triple for a hardened rap sheet */
     double repeat = 1.0 + (a->crimes_committed < 20 ? a->crimes_committed : 20) * 0.1;
@@ -71,6 +71,7 @@ static void jail(Agent *a, const char *kind) {
     a->arrested_ticks = sentence; a->sentence_total = sentence;
     strncpy(a->jailed_for, kind, 15); a->jailed_for[15] = '\0';
     clear_wanted(a);
+    w->jailed_total++;   /* cumulative: every actual jailing, all paths */
 }
 
 /* An arrest resolves here. Without --justice it's an instant conviction (legacy). With it,
@@ -78,7 +79,8 @@ static void jail(Agent *a, const char *kind) {
  * conviction roll (skilled/reputable offenders beat the rap more often) decides jail vs
  * acquittal. Oversight curbs corruption. Returns 1 if jailed. Draws w->rng only with justice. */
 static int try_case(World *w, Agent *a, const char *kind) {
-    if (!get_justice()) { jail(a, kind); return 1; }
+    w->arrests_total++;   /* cumulative: every apprehension, justice on or off */
+    if (!get_justice()) { jail(w, a, kind); return 1; }
     w->trials++;
     double corr = get_corruption() * (1.0 - get_oversight());
     if (a->needs.money > 300.0 && rng_double(&w->rng) < corr * 0.5) {   /* bribe a corrupt cop */
@@ -86,7 +88,7 @@ static int try_case(World *w, Agent *a, const char *kind) {
         w->acquittals++; clear_wanted(a); return 0;
     }
     double pconv = clampd(0.75 - a->crime_skill*0.3 - a->reputation*0.1 + get_oversight()*0.1, 0.2, 0.95);
-    if (rng_double(&w->rng) < pconv) { jail(a, kind); w->convictions++; return 1; }
+    if (rng_double(&w->rng) < pconv) { jail(w, a, kind); w->convictions++; return 1; }
     w->acquittals++; clear_wanted(a); return 0;   /* acquitted — walks free */
 }
 
@@ -901,10 +903,10 @@ void law_daily(World *w) {
                 Agent *a = &w->agents[(start + k) % w->n_agents];
                 if (!a->alive || a->age < AGE_WORK || a->arrested_ticks > 0 || a->wanted) continue;
                 if (a->crime_role != CR_CITIZEN) continue;          /* a truly innocent civilian */
-                w->trials++;
+                w->trials++; w->arrests_total++;   /* a wrongful apprehension still counts as an arrest */
                 double pconv = clampd(0.5 - get_oversight() * 0.3, 0.1, 0.8);
                 if (rng_double(&w->rng) < pconv) {
-                    jail(a, "wrongful"); w->convictions++; w->wrongful_convictions++;
+                    jail(w, a, "wrongful"); w->convictions++; w->wrongful_convictions++;
                     char t[96]; snprintf(t, sizeof t, "%s was wrongfully convicted", a->name);
                     events_post(w, EV_ARREST, a->id, -1, (int)a->x, (int)a->y, 0.55, t);
                 } else w->acquittals++;

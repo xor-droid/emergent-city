@@ -1397,7 +1397,7 @@ void metrics_open(const char *path) {
         "couples,married,pregnant,born_alive,deaths,in_faction,avg_friends,max_friends,"
         "avg_money,goods_price,wage,indebted,total_debt,landlords,"
         "wages_earned,crime_income,"
-        "crimes,wanted,jailed");
+        "crimes,wanted,jailed,arrests_total,jailed_total");
     /* per-crime-kind columns: count, then cumulative $ proceeds */
     for (int i = 0; i < CK_COUNT; i++) fput_slug(g_metrics, "crime_", crime_kind_name(i));
     for (int i = 0; i < CK_COUNT; i++) fput_slug(g_metrics, "take_", crime_kind_name(i));
@@ -1489,7 +1489,8 @@ void metrics_tick(World *w) {     /* called on day change; no-op unless a file i
     fprintf(g_metrics, ",%.0f,%.2f,%.2f,%d,%.0f,%d",
         alive?money/alive:0.0, w->econ.goods_price, w->econ.wage_mult, indebt, debt, landlords);
     fprintf(g_metrics, ",%.0f,%.0f", w->wages_earned, crime_income);
-    fprintf(g_metrics, ",%d,%d,%d", w->crimes, crime_wanted_count(w), crime_jailed_count(w));
+    fprintf(g_metrics, ",%d,%d,%d,%d,%d", w->crimes, crime_wanted_count(w), crime_jailed_count(w),
+            w->arrests_total, w->jailed_total);
     for (int i=0;i<CK_COUNT;i++) fprintf(g_metrics, ",%d", w->crime_kind[i]);
     for (int i=0;i<CK_COUNT;i++) fprintf(g_metrics, ",%.0f", w->crime_take[i]);
     fprintf(g_metrics, ",%.0f,%d,%d,%.1f,%.1f,%.1f",

@@ -409,6 +409,7 @@ typedef struct {
     double benefits_paid;                /* cumulative safety-net benefit (--stabilizers) */
     float  eff_interest, price_volatility;/* this-day stabilizer readouts */
     int    trials, convictions, acquittals, wrongful_convictions;  /* justice (--justice) */
+    int    arrests_total, jailed_total;  /* cumulative enforcement (works with justice on OR off) */
     double bribes_paid;                  /* cumulative bribes that bought escapes */
     int crimes_prev_day;        /* w->crimes snapshot at last day change (for crackdowns) */
     int crackdown_days;         /* police crackdown time remaining (law response) */

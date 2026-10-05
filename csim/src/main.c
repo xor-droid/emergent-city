@@ -77,7 +77,8 @@ static void usage(const char *argv0) {
     printf("                        and a goods-price damper. Softens boom/bust. Default off.\n");
     printf("  --justice [--corruption C] [--oversight O]  arrests go through trials (convict/acquit),\n");
     printf("                        the wealthy can bribe a corrupt force, innocents are sometimes\n");
-    printf("                        wrongfully convicted; oversight (0..1) curbs it. Default off.\n");
+    printf("                        wrongfully convicted; oversight (0..1) curbs it. ON by default;\n");
+    printf("                        --no-justice reverts to instant conviction on arrest.\n");
     printf("  --vision [--vision-radius N]  agents perceive via field-of-view + line-of-sight\n");
     printf("                        (default off = omniscient): crimes are only witnessed, and\n");
     printf("                        fugitives only spotted, by those who can actually see them.\n");

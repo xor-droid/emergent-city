@@ -260,7 +260,7 @@ int    get_stabilizers(void) { return g_stabilizers; }
 void   set_benefit(double b) { if (b >= 0.0) g_benefit = b; }
 double get_benefit(void) { return g_benefit; }
 
-static int    g_justice = 0;         /* courts/trials, corruption, oversight */
+static int    g_justice = 1;         /* courts/trials, corruption, oversight — ON by default */
 static double g_corruption = 0.3;    /* 0..1 baseline police corruption */
 static double g_oversight = 0.3;     /* 0..1 oversight that curbs corruption + wrongful convictions */
 void   set_justice(int on) { g_justice = on ? 1 : 0; }
