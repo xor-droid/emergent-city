@@ -17,9 +17,11 @@ tools/dashboard/
 Both the GUI and the headless binary emit the same CSV — one row per game-day, every
 aggregate the city tracks (population by life stage, births/deaths, economy, every crime
 kind, knowledge/tech adoption, culture, factions/wars, socioeconomics — Gini, income
-distribution, segregation, mobility, loot & crime by wealth — and **weather** temp/rain/fog
-when `--weather` is on). Point the output at this directory so the web server serves the
-same file the sim writes:
+distribution, segregation, mobility, loot & crime by wealth), the **governance** stack
+(treasury, income + wealth tax collected, welfare paid, police funding & **force size**,
+cumulative **arrests/jailed** vs current wanted/jailed, trials/convictions/acquittals), and
+**weather** temp/rain/fog when `--weather` is on. Point the output at this directory so the
+web server serves the same file the sim writes:
 
 > The same per-day metrics also stream to **OpenSearch** (via Data Prepper) when a session
 > is recorded with `CSIM_OS_INGEST_URL` set — see the "Record, replay & archive" section of
@@ -104,6 +106,11 @@ the file stops growing. Load a different file with `?src=other.csv`.
 
 **Click any chart to enlarge** it in a modal (it keeps updating live while open; close
 with ×, the backdrop, or Esc).
+
+A **parameters panel** at the top of the page reads the run's `*.meta` manifest and lists
+the settings behind the currently displayed data — split into *World — set at creation*
+(seed, days, worldgen, demographics) and *Tunable — live* (taxation, welfare, wealth-tax,
+rent-cap, justice, …) — so the config that produced the graphs is always visible at a glance.
 
 ## 3b. Sampling resolution (finer than per-day)
 

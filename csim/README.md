@@ -9,8 +9,13 @@ the full tour):
 - **Crime underworld** — career escalation, a wholesale→dealer→user **drug trade** with
   turf/customer retaliation, extortion, serial killers, wanted/jail (severity-scaled
   hunts + sentences), jail gangs, injuries/treatment.
-- **Factions & warfare**, **law** (crackdowns, sentencing), a deeper **economy**
-  (occupations, wages, landlords/rent, credit/debt, craft skill).
+- **Factions & warfare**, **law & justice** (crackdowns, trials/acquittals, corruption +
+  oversight, funding-scaled police force & catch rate), a deeper **economy** (occupations,
+  wages, landlords/rent, credit/debt, craft skill).
+- **Governance & balance (default on)** — progressive income + wealth (stock) taxes, a
+  subsistence welfare floor, source caps (rent cap + debt-interest cap), optional
+  stabilizers, and always-on stability guardrails: a city that counterweights its own
+  inequality while keeping a real poor class.
 - **Knowledge/tech**, **culture** (faith/language/education), a full **life cycle**
   (marriage→birth→aging→death, family tree).
 - **Perception** (field-of-view + hearing), **A\*+JPS pathfinding** + flow fields,
@@ -23,8 +28,12 @@ the full tour):
 
 Deterministic PCG32 RNG (bit-reproducible from the seed), binary save/load, a raylib
 GPU-window renderer, and optional **LLM-driven decisions** (libcurl + cJSON on a
-background thread so the sim never blocks). Almost all the newer systems are **opt-in
-flags, default off**, so the baseline stays simple and byte-identical.
+background thread so the sim never blocks). The **governance/balance stack** (progressive
+taxation, welfare, source caps, justice, funding-scaled policing) and organic noise worldgen
+are **on by default** — the baseline is a governed, balanced city; everything is a tunable
+knob and disable-able (`--no-taxation`, `--no-source-caps`, `--no-justice`, …). The remaining
+newer systems (perception, weather, biomes, neighbourhoods, …) are **opt-in, default off**.
+Every configuration is recorded in the manifest, so any run stays **byte-identical** on replay.
 
 ## LLM decisions
 Set `OPENROUTER_API_KEY` (any value locally) to enable Qwen consults; the client
