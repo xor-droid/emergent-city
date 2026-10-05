@@ -1013,15 +1013,35 @@ static double agent_pcwealth(const World *w, const Agent *a) {
  * real-world marginal brackets. The lowest tier is exempt, so low earners pay
  * nothing and the top bracket (open-ended) carries the heaviest rate. */
 static double progressive_income_tax(double income, double ref) {
-    /* {upper edge in × ref, marginal rate}; last edge is open-ended (INFINITY). */
+    /* {upper edge in × ref, marginal rate}; last edge is open-ended.
+     * Below median (1×) is exempt; rates climb steeply so top earners pay most. */
     static const double EDGE[] = { 1.0, 2.0, 4.0, 1e18 };  /* last tier open-ended */
-    static const double RATE[] = { 0.00, 0.10, 0.25, 0.45 };
+    static const double RATE[] = { 0.00, 0.20, 0.45, 0.70 };
     double tax = 0.0, lo = 0.0;
     for (int b = 0; b < 4; b++) {
         double hi = EDGE[b] * ref;                 /* bracket ceiling in currency */
         if (income <= lo) break;
         double in_band = (income < hi ? income : hi) - lo;
         if (in_band > 0.0) tax += in_band * RATE[b];
+        lo = hi;
+    }
+    return tax;
+}
+
+/* Progressive wealth (stock) tax: marginal tiers on money held above the top-tail
+ * cutoff T (= threshold × median wealth). base is --wealth-tax-rate; each higher
+ * tier pays a multiple, so the genuinely rich (where inequality actually lives) pay
+ * sharply more. Tiers: [T,2T) base, [2T,4T) 2×, [4T,∞) 4×. */
+static double progressive_wealth_tax(double money, double T, double base) {
+    static const double EDGE[] = { 2.0, 4.0, 1e18 };   /* × T; last open-ended */
+    static const double MULT[] = { 1.0, 2.0, 4.0 };
+    double tax = 0.0, lo = T;
+    if (money <= T) return 0.0;
+    for (int b = 0; b < 3; b++) {
+        double hi = EDGE[b] * T;
+        if (money <= lo) break;
+        double in_band = (money < hi ? money : hi) - lo;
+        if (in_band > 0.0) tax += in_band * base * MULT[b];
         lo = hi;
     }
     return tax;
@@ -1077,7 +1097,7 @@ void economy_daily(World *w) {
         if (get_taxation() && get_wealth_tax_rate() > 0.0) {
             double thresh = get_wealth_tax_threshold() * w->median_wealth;
             if (a->needs.money > thresh) {
-                double wtax = get_wealth_tax_rate() * (a->needs.money - thresh);
+                double wtax = progressive_wealth_tax(a->needs.money, thresh, get_wealth_tax_rate());
                 if (wtax > a->needs.money) wtax = a->needs.money;
                 a->needs.money -= wtax;
                 w->econ.treasury += wtax; w->wealth_tax_collected += wtax;
