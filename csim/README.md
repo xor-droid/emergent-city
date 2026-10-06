@@ -11,11 +11,13 @@ the full tour):
   hunts + sentences), jail gangs, injuries/treatment.
 - **Factions & warfare**, **law & justice** (crackdowns, trials/acquittals, corruption +
   oversight, funding-scaled police force & catch rate), a deeper **economy** (occupations,
-  wages, landlords/rent, credit/debt, craft skill).
+  wages, landlords/rent with **inheritance on death**, credit/debt, craft skill).
 - **Governance & balance (default on)** — progressive income + wealth (stock) taxes, a
-  subsistence welfare floor, source caps (rent cap + debt-interest cap), optional
-  stabilizers, and always-on stability guardrails: a city that counterweights its own
-  inequality while keeping a real poor class.
+  subsistence welfare floor, source caps (rent cap + debt-interest cap), economic
+  stabilizers (interest/price dampers; survival-benefit grant off by default), and
+  always-on stability guardrails: a city that counterweights its own inequality while
+  keeping a real poor class. Disable any piece with `--no-taxation` / `--no-source-caps`
+  / `--no-justice` / `--no-stabilizers`.
 - **Knowledge/tech**, **culture** (faith/language/education), a full **life cycle**
   (marriage→birth→aging→death, family tree).
 - **Perception** (field-of-view + hearing), **A\*+JPS pathfinding** + flow fields,
